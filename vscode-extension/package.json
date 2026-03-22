@@ -1,0 +1,82 @@
+{
+  "name": "outlook-mcp-migration",
+  "displayName": "Outlook MCP Server (Migration)",
+  "description": "Outlook-first migration target for AI assistants. This extension area is still transitioning from the inherited PowerPoint implementation and will be rebuilt around email, calendar, folder, and attachment workflows.",
+  "version": "1.6.9",
+  "publisher": "trsdn",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trsdn/mcp-server-outlook"
+  },
+  "bugs": {
+    "url": "https://github.com/trsdn/mcp-server-outlook/issues"
+  },
+  "homepage": "https://github.com/trsdn/mcp-server-outlook",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "categories": [
+    "AI",
+    "Chat",
+    "Data Science"
+  ],
+  "keywords": [
+    "mcp",
+    "model context protocol",
+    "outlook",
+    "email",
+    "calendar",
+    "mailbox",
+    "microsoft",
+    "office",
+    "automation",
+    "copilot",
+    "ai",
+    "github copilot"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "outlook-mcp",
+        "label": "Outlook MCP Server (Migration)"
+      }
+    ],
+    "chatSkills": [
+      {
+        "path": "./skills/outlook-mcp/SKILL.md"
+      },
+      {
+        "path": "./skills/outlook-cli/SKILL.md"
+      }
+    ]
+  },
+  "scripts": {
+    "clean": "cd .. && dotnet build-server shutdown && dotnet clean src/PptMcp.McpServer/PptMcp.McpServer.csproj -c Release -nodeReuse:false",
+    "clean:bin": "node -e \"const fs=require('fs'); try{fs.rmSync('bin',{recursive:true,force:true})}catch{}\"",
+    "copy:skills:mcp": "xcopy /E /I /Y ..\\skills\\outlook-mcp skills\\outlook-mcp",
+    "copy:skills:cli": "xcopy /E /I /Y ..\\skills\\outlook-cli skills\\outlook-cli",
+    "copy:skills": "npm run copy:skills:mcp && npm run copy:skills:cli",
+    "build:mcp-server": "npm run clean && npm run clean:bin && cd .. && dotnet publish src/PptMcp.McpServer/PptMcp.McpServer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:PublishReadyToRun=false -p:NuGetAudit=false -nodeReuse:false -o vscode-extension/bin --verbosity minimal",
+    "copy:changelog": "node -e \"const fs=require('fs'); fs.copyFileSync('../CHANGELOG.md','CHANGELOG.md');\"",
+    "vscode:prepublish": "npm run build:mcp-server && npm run copy:skills && npm run copy:changelog && npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.11",
+    "@types/vscode": "^1.109.0",
+    "@vscode/vsce": "^3.7.1",
+    "typescript": "^5.9.3"
+  }
+}

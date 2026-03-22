@@ -1,0 +1,52 @@
+{
+  "manifest_version": "0.3",
+  "name": "ppt-mcp",
+  "display_name": "PowerPoint (Windows)",
+  "version": "1.7.0",
+  "description": "Manage Slides, Shapes, Text, Charts, Layouts, Transitions, Animations, Formatting & more - requires PowerPoint to be installed",
+  "long_description": "Enterprise-grade MCP server for Microsoft PowerPoint automation. 23 specialized tools with 214 operations for Slides, Shapes, Charts, Layouts, Transitions, and more. Windows-only, requires Microsoft PowerPoint desktop application (2016 or later).",
+  "author": {
+    "name": "TOrsten Mahr",
+    "url": "https://github.com/trsdn"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trsdn/mcp-server-ppt"
+  },
+  "homepage": "https://PptMcpserver.dev/",
+  "documentation": "https://PptMcpserver.dev/",
+  "support": "https://github.com/trsdn/mcp-server-ppt/issues",
+  "icon": "icon-512.png",
+  "license": "MIT",
+  "privacy_policies": ["https://PptMcpserver.dev/privacy/"],
+  "keywords": [
+    "powerpoint",
+    "office",
+    "presentation",
+    "automation",
+    "vba",
+    "macro",
+    "table",
+    "slides",
+    "shapes",
+    "animations",
+    "transitions",
+    "smartart",
+    "presentations"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/ppt-mcp-server",
+    "mcp_config": {
+      "command": "${__dirname}/server/ppt-mcp-server",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true,
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["win32"]
+  }
+}

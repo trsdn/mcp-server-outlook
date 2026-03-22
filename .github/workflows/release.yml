@@ -1,0 +1,839 @@
+name: Release All Components
+
+# Unified release workflow for all PptMcp components:
+# - MCP Server (NuGet + ZIP) - includes CLI as bundled dependency
+# - CLI (NuGet) - standalone dotnet tool for coding agents
+# - VS Code Extension (VSIX + Marketplace)
+# - MCPB (Claude Desktop bundle)
+# - Agent Skills (ZIP package)
+#
+# All components are released with the same version.
+# Trigger: workflow_dispatch with version bump (major/minor/patch) or custom version.
+# The workflow auto-calculates the next version from the latest git tag,
+# creates the git tag after successful builds, then creates the GitHub release.
+#
+# Required GitHub Secrets:
+# - NUGET_USER: Your NuGet.org username (profile name, NOT email)
+# - VSCE_TOKEN: VS Code Marketplace PAT
+#
+# npm publishing uses Trusted Publishing (OIDC) — no token needed.
+# Configure at npmjs.com → Package Settings → Trusted Publisher.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        default: 'patch'
+        options:
+          - major
+          - minor
+          - patch
+      custom_version:
+        description: 'Custom version (e.g., 1.2.3, overrides version_bump)'
+        required: false
+        type: string
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  NODE_VERSION: '22'
+
+jobs:
+  # =============================================================================
+  # Job 0: Calculate Version and Create Tag
+  # =============================================================================
+  version:
+    name: Calculate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calculate_version.outputs.version }}
+      tag: ${{ steps.calculate_version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history and tags
+
+      - name: Calculate version
+        id: calculate_version
+        run: |
+          # If custom version is provided, use it
+          if [ -n "${{ inputs.custom_version }}" ]; then
+            VERSION="${{ inputs.custom_version }}"
+            echo "Using custom version: ${VERSION}"
+          else
+            # Get the latest tag
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            echo "Latest tag: ${LATEST_TAG}"
+
+            # Remove 'v' prefix if present
+            CURRENT_VERSION="${LATEST_TAG#v}"
+            echo "Current version: ${CURRENT_VERSION}"
+
+            # Parse version components
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+            # Increment based on bump type
+            case "${{ inputs.version_bump }}" in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "New version: ${VERSION}"
+          fi
+
+          TAG="v${VERSION}"
+
+          # Check if tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  # =============================================================================
+  # Job 1: Build CLI (dependency for MCP Server)
+  # =============================================================================
+  build-cli:
+    name: CLI (Dependency)
+    needs: [version]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Restore
+      run: dotnet restore src/PptMcp.CLI/PptMcp.CLI.csproj
+
+    - name: Build CLI
+      run: dotnet build src/PptMcp.CLI/PptMcp.CLI.csproj --configuration Release --no-restore -p:Version=${{ env.VERSION }} -p:AssemblyVersion=${{ env.VERSION }}.0 -p:FileVersion=${{ env.VERSION }}.0
+
+    - name: Pack CLI NuGet
+      run: dotnet pack src/PptMcp.CLI/PptMcp.CLI.csproj --configuration Release --no-build --output ./cli-nupkg -p:Version=${{ env.VERSION }}
+
+    - name: Upload CLI Build Output
+      uses: actions/upload-artifact@v4
+      with:
+        name: cli-build
+        path: src/PptMcp.CLI/bin/Release/net9.0-windows/
+
+    - name: Upload CLI NuGet Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cli-nupkg
+        path: cli-nupkg/*.nupkg
+
+  # =============================================================================
+  # Job 2: Build MCP Server (includes CLI bundle for service)
+  # =============================================================================
+  build-mcp-server:
+    name: MCP Server
+    needs: [version, build-cli]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Download CLI Build
+      uses: actions/download-artifact@v4
+      with:
+        name: cli-build
+        path: src/PptMcp.CLI/bin/Release/net9.0-windows/
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+        Write-Output "Version: $version"
+      shell: pwsh
+
+    - name: Update Project Versions
+      run: |
+        $version = $env:VERSION
+
+        # Update MCP Registry server.json
+        $serverJsonPath = "src/PptMcp.McpServer/.mcp/server.json"
+        $serverContent = Get-Content $serverJsonPath -Raw
+        $serverContent = $serverContent -replace '("version":\s*)"[\d\.]+"(\s*,\s*\n\s*"packages")' , "`$1`"$version`"`$2"
+        $serverContent = $serverContent -replace '("identifier":\s*"Trsdn\.PptMcp\.McpServer",\s*\n\s*"version":\s*)"[\d\.]+"', "`$1`"$version`""
+        Set-Content $serverJsonPath $serverContent
+      shell: pwsh
+
+    - name: Restore
+      run: dotnet restore src/PptMcp.McpServer/PptMcp.McpServer.csproj
+
+    - name: Build
+      run: dotnet build src/PptMcp.McpServer/PptMcp.McpServer.csproj --configuration Release --no-restore -p:Version=${{ env.VERSION }} -p:AssemblyVersion=${{ env.VERSION }}.0 -p:FileVersion=${{ env.VERSION }}.0
+
+    - name: Pack NuGet
+      run: dotnet pack src/PptMcp.McpServer/PptMcp.McpServer.csproj --configuration Release --no-build --output ./nupkg -p:Version=${{ env.VERSION }}
+
+    - name: Create Release Package
+      run: |
+        $version = $env:VERSION
+        New-Item -ItemType Directory -Path "release/PptMcp-MCP-Server-$version" -Force
+        Copy-Item "src/PptMcp.McpServer/bin/Release/net9.0-windows/*" "release/PptMcp-MCP-Server-$version/" -Recurse
+        Copy-Item "README.md" "release/PptMcp-MCP-Server-$version/"
+        Copy-Item "LICENSE" "release/PptMcp-MCP-Server-$version/"
+        Compress-Archive -Path "release/PptMcp-MCP-Server-$version/*" -DestinationPath "PptMcp-MCP-Server-$version-windows.zip"
+      shell: pwsh
+
+    - name: Upload ZIP Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: mcp-server-zip
+        path: PptMcp-MCP-Server-*-windows.zip
+
+    - name: Upload NuGet Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: mcp-server-nupkg
+        path: nupkg/*.nupkg
+
+  # =============================================================================
+  # Job 3: Build and Publish VS Code Extension
+  # =============================================================================
+  build-vscode:
+    name: VS Code Extension
+    needs: [version]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Update Project Versions
+      run: |
+        $version = $env:VERSION
+
+        # Update Directory.Build.props (single source of truth for all project versions)
+        $propsPath = "Directory.Build.props"
+        $content = Get-Content $propsPath -Raw
+        $content = $content -replace '<Version>[\d\.]+</Version>', "<Version>$version</Version>"
+        $content = $content -replace '<AssemblyVersion>[\d\.]+\.[\d\.]+</AssemblyVersion>', "<AssemblyVersion>$version.0</AssemblyVersion>"
+        $content = $content -replace '<FileVersion>[\d\.]+\.[\d\.]+</FileVersion>', "<FileVersion>$version.0</FileVersion>"
+        Set-Content $propsPath $content
+      shell: pwsh
+
+    - name: Update Extension Version
+      run: |
+        $version = $env:VERSION
+        cd vscode-extension
+        npm version "$version" --no-git-tag-version
+      shell: pwsh
+
+    - name: Sync Extension Changelog
+      run: |
+        Copy-Item "CHANGELOG.md" "vscode-extension/CHANGELOG.md" -Force
+      shell: pwsh
+
+    - name: Install Dependencies
+      run: |
+        cd vscode-extension
+        npm install
+
+    - name: Build and Package
+      run: |
+        cd vscode-extension
+        npm run package
+
+    - name: Rename VSIX
+      run: |
+        $version = $env:VERSION
+        cd vscode-extension
+        $vsix = Get-ChildItem -Filter "*.vsix" | Select-Object -First 1
+        $targetName = "PptMcp-$version.vsix"
+        if ($vsix.Name -ne $targetName) {
+          Rename-Item $vsix.FullName -NewName $targetName
+        }
+      shell: pwsh
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: vscode-vsix
+        path: vscode-extension/PptMcp-*.vsix
+
+  # =============================================================================
+  # Job 4: Build MCPB (Claude Desktop Bundle)
+  # =============================================================================
+  build-mcpb:
+    name: MCPB Bundle
+    needs: [version]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Build MCPB Bundle
+      run: |
+        cd mcpb
+        .\Build-McpBundle.ps1 -Version $env:VERSION
+      shell: pwsh
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: mcpb-bundle
+        path: mcpb/artifacts/ppt-mcp-*.mcpb
+
+  # =============================================================================
+  # Job 5: Build Agent Skills Packages
+  # =============================================================================
+  build-agent-skills:
+    name: Agent Skills
+    needs: [version]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: global.json
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Build Solution (generates SKILL.md and copies references)
+      run: dotnet build -c Release
+      shell: pwsh
+
+    - name: Create Skills Package
+      run: |
+        $version = $env:VERSION
+        $outputDir = "artifacts/skills"
+        $skillsDir = "skills"
+
+        # Create output directory
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+
+        # Create staging directory
+        $stagingDir = Join-Path $env:TEMP "ppt-skills-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
+
+        try {
+          # Create skills/ subdirectory (the standard location for npx skills add)
+          $skillsStagingDir = Join-Path $stagingDir "skills"
+          New-Item -ItemType Directory -Path $skillsStagingDir -Force | Out-Null
+
+          # Copy ppt-mcp skill (SKILL.md and references already generated by build)
+          Copy-Item -Path "$skillsDir/ppt-mcp" -Destination "$skillsStagingDir/ppt-mcp" -Recurse
+
+          # Copy ppt-cli skill (SKILL.md and references already generated by build)
+          Copy-Item -Path "$skillsDir/ppt-cli" -Destination "$skillsStagingDir/ppt-cli" -Recurse
+
+          # Copy skills README to root of package
+          if (Test-Path "$skillsDir/README.md") {
+            Copy-Item -Path "$skillsDir/README.md" -Destination $stagingDir
+          }
+
+          # Create ZIP archive
+          $zipPath = Join-Path $outputDir "ppt-skills-v$version.zip"
+          Compress-Archive -Path "$stagingDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
+          Write-Host "Created: $zipPath"
+
+        } finally {
+          Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        # Copy platform-specific files
+        if (Test-Path "$skillsDir/CLAUDE.md") {
+          Copy-Item -Path "$skillsDir/CLAUDE.md" -Destination $outputDir
+        }
+        if (Test-Path "$skillsDir/.cursorrules") {
+          Copy-Item -Path "$skillsDir/.cursorrules" -Destination $outputDir
+        }
+
+        # Generate manifest.json
+        $manifest = @{
+          name = "ppt-skills"
+          version = $version
+          description = "PowerPoint MCP Server Agent Skills for AI coding assistants"
+          platforms = @("github-copilot", "claude-code", "cursor", "windsurf", "gemini-cli", "goose", "codex", "opencode", "amp", "kilo", "roo", "trae")
+          skills = @(
+            @{
+              name = "ppt-mcp"
+              path = "skills/ppt-mcp"
+              description = "MCP Server skill - for conversational AI (Claude Desktop, VS Code Chat)"
+              target = "MCP Server"
+            }
+            @{
+              name = "ppt-cli"
+              path = "skills/ppt-cli"
+              description = "CLI skill - for coding agents (Copilot, Cursor, Windsurf)"
+              target = "CLI Tool"
+            }
+          )
+          installation = @{
+            npx = "npx skills add trsdn/mcp-server-ppt"
+            selectSkill = "npx skills add trsdn/mcp-server-ppt --skill ppt-cli"
+            installBoth = "npx skills add trsdn/mcp-server-ppt --skill '*'"
+          }
+          files = @(
+            @{ name = "CLAUDE.md"; type = "config"; description = "Claude Code project instructions" }
+            @{ name = ".cursorrules"; type = "config"; description = "Cursor project rules" }
+          )
+          repository = "https://github.com/trsdn/mcp-server-ppt"
+          documentation = "https://PptMcpserver.dev/"
+          buildDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+        }
+        $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path "$outputDir/manifest.json" -Encoding UTF8
+        Write-Host "Created: manifest.json"
+      shell: pwsh
+
+    - name: Upload Skills Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: agent-skills
+        path: artifacts/skills/ppt-skills-*.zip
+
+    - name: Populate npm Skill Packages
+      run: |
+        $version = $env:VERSION
+
+        # Populate ppt-mcp-skill
+        $mcpTarget = "packages/ppt-mcp-skill/skills/ppt-mcp"
+        Get-ChildItem $mcpTarget -Exclude ".gitkeep" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+        Copy-Item "skills/ppt-mcp/SKILL.md" $mcpTarget
+        Copy-Item "skills/ppt-mcp/references" "$mcpTarget/references" -Recurse -ErrorAction SilentlyContinue
+
+        # Populate ppt-cli-skill
+        $cliTarget = "packages/ppt-cli-skill/skills/ppt-cli"
+        Get-ChildItem $cliTarget -Exclude ".gitkeep" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+        Copy-Item "skills/ppt-cli/SKILL.md" $cliTarget
+        Copy-Item "skills/ppt-cli/references" "$cliTarget/references" -Recurse -ErrorAction SilentlyContinue
+
+        # Update versions in package.json files
+        foreach ($pkg in @("packages/ppt-mcp-skill/package.json", "packages/ppt-cli-skill/package.json")) {
+          $content = Get-Content $pkg -Raw
+          $content = $content -replace '"version":\s*"[\d\.]+"', "`"version`": `"$version`""
+          Set-Content $pkg $content
+        }
+
+        Write-Host "Populated npm skill packages at v$version"
+      shell: pwsh
+
+    - name: Upload npm Skill Packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: npm-skill-packages
+        path: packages/
+
+  # =============================================================================
+  # Job 6: Wait for NuGet Propagation + MCP Registry
+  # =============================================================================
+  publish-mcp-registry:
+    name: MCP Registry
+    needs: [version, create-tag, build-mcp-server]
+    runs-on: windows-latest
+    permissions:
+      id-token: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Update server.json Version
+      run: |
+        $version = $env:VERSION
+        $serverJsonPath = "src/PptMcp.McpServer/.mcp/server.json"
+        $serverContent = Get-Content $serverJsonPath -Raw
+        $serverContent = $serverContent -replace '("version":\s*)"[\d\.]+"(\s*,\s*\n\s*"packages")' , "`$1`"$version`"`$2"
+        $serverContent = $serverContent -replace '("identifier":\s*"Trsdn\.PptMcp\.McpServer",\s*\n\s*"version":\s*)"[\d\.]+"', "`$1`"$version`""
+        Set-Content $serverJsonPath $serverContent
+      shell: pwsh
+
+    - name: Wait for NuGet Propagation
+      run: |
+        $version = $env:VERSION
+        $packageId = "PptMcp.mcpserver"
+        $readmeUrl = "https://api.nuget.org/v3-flatcontainer/$packageId/$version/readme"
+
+        Write-Output "Waiting for NuGet CDN propagation..."
+        $maxAttempts = 3
+        $pollInterval = 600  # 10 minutes
+
+        for ($i = 1; $i -le $maxAttempts; $i++) {
+          Write-Output "Attempt $i of $maxAttempts..."
+          try {
+            $response = Invoke-WebRequest -Uri $readmeUrl -UseBasicParsing -ErrorAction Stop
+            if ($response.StatusCode -eq 200) {
+              $content = [System.Text.Encoding]::UTF8.GetString($response.Content)
+              if ($content -match "mcp-name:\s+io\.github\.trsdn/mcp-server-ppt") {
+                Write-Output "README propagated successfully"
+                break
+              }
+            }
+          } catch {
+            Write-Output "README not yet available"
+          }
+          if ($i -lt $maxAttempts) {
+            Start-Sleep -Seconds $pollInterval
+          }
+        }
+      shell: pwsh
+
+    - name: Install MCP Publisher
+      run: |
+        $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
+        Invoke-WebRequest -Uri "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_windows_$arch.tar.gz" -OutFile "mcp-publisher.tar.gz"
+        tar xf mcp-publisher.tar.gz mcp-publisher.exe
+      shell: pwsh
+
+    - name: Publish to MCP Registry
+      run: |
+        ./mcp-publisher.exe login github-oidc
+        Set-Location src/PptMcp.McpServer/.mcp
+        ../../../mcp-publisher.exe publish --verbose
+      shell: pwsh
+      continue-on-error: true
+
+  # =============================================================================
+  # Job 7: Create Git Tag
+  # =============================================================================
+  create-tag:
+    name: Create Git Tag
+    needs: [version, build-mcp-server, build-vscode, build-mcpb, build-agent-skills]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        run: |
+          TAG="${{ needs.version.outputs.tag }}"
+          echo "Creating tag: $TAG"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+  # =============================================================================
+  # Job 8: Publish to External Registries (after all builds succeed)
+  # =============================================================================
+  publish:
+    name: Publish to Registries
+    needs: [version, create-tag]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for NuGet OIDC
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Set Version
+      run: |
+        $version = "${{ needs.version.outputs.version }}"
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Download NuGet Package
+      uses: actions/download-artifact@v4
+      with:
+        name: mcp-server-nupkg
+        path: nupkg
+
+    - name: Download CLI NuGet Package
+      uses: actions/download-artifact@v4
+      with:
+        name: cli-nupkg
+        path: cli-nupkg
+
+    - name: Download VS Code VSIX
+      uses: actions/download-artifact@v4
+      with:
+        name: vscode-vsix
+        path: vscode-vsix
+
+    - name: Download npm Skill Packages
+      uses: actions/download-artifact@v4
+      with:
+        name: npm-skill-packages
+        path: npm-packages
+
+    - name: NuGet Login (OIDC)
+      uses: NuGet/login@v1
+      id: nuget-login
+      with:
+        user: ${{ secrets.NUGET_USER }}
+
+    - name: Publish to NuGet.org
+      run: |
+        $version = $env:VERSION
+        dotnet nuget push "nupkg/PptMcp.McpServer.$version.nupkg" `
+          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} `
+          --source https://api.nuget.org/v3/index.json `
+          --skip-duplicate
+        Write-Output "Published PptMcp.McpServer.$version to NuGet.org"
+
+        dotnet nuget push "cli-nupkg/PptMcp.CLI.$version.nupkg" `
+          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} `
+          --source https://api.nuget.org/v3/index.json `
+          --skip-duplicate
+        Write-Output "Published PptMcp.CLI.$version to NuGet.org"
+      shell: pwsh
+
+    - name: Publish to VS Code Marketplace
+      uses: HaaLeo/publish-vscode-extension@v2
+      with:
+        pat: ${{ secrets.VSCE_TOKEN }}
+        registryUrl: https://marketplace.visualstudio.com
+        extensionFile: vscode-vsix/PptMcp-${{ env.VERSION }}.vsix
+      continue-on-error: true
+
+    - name: Setup npm registry
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        registry-url: https://registry.npmjs.org
+
+    - name: Publish ppt-mcp-skill to npm
+      run: |
+        cd npm-packages/ppt-mcp-skill
+        npm publish --provenance --access public
+      continue-on-error: true
+
+    - name: Publish ppt-cli-skill to npm
+      run: |
+        cd npm-packages/ppt-cli-skill
+        npm publish --provenance --access public
+      continue-on-error: true
+
+  # =============================================================================
+  # Job 9: Create Unified GitHub Release
+  # =============================================================================
+  create-release:
+    name: Create GitHub Release
+    needs: [version, create-tag, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set Version
+      run: |
+        echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
+
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List Artifacts
+      run: |
+        echo "Downloaded artifacts:"
+        find artifacts -type f -name "*" | head -20
+
+    - name: Extract Changelog from [Unreleased]
+      id: changelog
+      run: |
+        CHANGELOG_FILE="CHANGELOG.md"
+
+        if [ -f "$CHANGELOG_FILE" ]; then
+          # Extract content between ## [Unreleased] and the next ## [ section
+          CONTENT=$(awk '/^## \[Unreleased\]/,/^## \[/' "$CHANGELOG_FILE" | head -n -1 | tail -n +2)
+          if [ -n "$CONTENT" ]; then
+            echo "Found changelog under [Unreleased]"
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            echo "$CONTENT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "No content under [Unreleased]"
+            echo "CHANGELOG=See repository for details." >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "CHANGELOG=See repository for details." >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      run: |
+        VERSION=${{ env.VERSION }}
+        TAG=${{ needs.version.outputs.tag }}
+
+        # Build release notes
+        cat > release_notes.md << 'NOTES'
+        ## PptMcp ${{ env.VERSION }}
+
+        ### What's New
+        ${{ steps.changelog.outputs.CHANGELOG }}
+
+        ### Installation Options
+
+        **VS Code Extension** (Recommended)
+        - Search "PptMcp" in VS Code Marketplace and click Install
+        - Or download `PptMcp-${{ env.VERSION }}.vsix` below
+        - Self-contained: no .NET runtime or SDK required
+        - Includes both MCP Server and CLI (`pptcli`)
+        - Agent skills (ppt-mcp + ppt-cli) registered automatically via `chatSkills`
+
+        **Claude Desktop (MCPB)**
+        - Download `ppt-mcp-${{ env.VERSION }}.mcpb` and double-click to install
+
+        **NuGet (.NET Tool)**
+        ```powershell
+        # MCP Server (for AI assistants)
+        dotnet tool install --global PptMcp.McpServer
+        # CLI (for coding agents and scripting)
+        dotnet tool install --global PptMcp.CLI
+        ```
+
+        **Agent Skills** (for AI coding assistants)
+        - VS Code Extension includes both skills automatically (ppt-mcp + ppt-cli)
+        - Install via npm: `npx skillpm install ppt-mcp-skill` or `npx skillpm install ppt-cli-skill`
+        - Or download `ppt-skills-v${{ env.VERSION }}.zip` or install via `npx skills add trsdn/mcp-server-ppt`
+
+        ### Requirements
+        - Windows OS
+        - Microsoft PowerPoint 2016+
+        - .NET 10 Runtime or SDK (for NuGet installation only; VS Code and MCPB bundle it)
+
+        ### Documentation
+        - [Website](https://PptMcpserver.dev/)
+        - [GitHub Repository](https://github.com/trsdn/mcp-server-ppt)
+        - [Changelog](https://github.com/trsdn/mcp-server-ppt/blob/main/CHANGELOG.md)
+        NOTES
+
+        # Collect all artifacts
+        ARTIFACTS=""
+        for f in artifacts/mcp-server-zip/*.zip; do [ -f "$f" ] && ARTIFACTS="$ARTIFACTS $f"; done
+        for f in artifacts/cli-nupkg/*.nupkg; do [ -f "$f" ] && ARTIFACTS="$ARTIFACTS $f"; done
+        for f in artifacts/vscode-vsix/*.vsix; do [ -f "$f" ] && ARTIFACTS="$ARTIFACTS $f"; done
+        for f in artifacts/mcpb-bundle/*.mcpb; do [ -f "$f" ] && ARTIFACTS="$ARTIFACTS $f"; done
+        for f in artifacts/agent-skills/*.zip; do [ -f "$f" ] && ARTIFACTS="$ARTIFACTS $f"; done
+
+        echo "Creating release with artifacts:$ARTIFACTS"
+
+        gh release create "$TAG" $ARTIFACTS \
+          --title "PptMcp $VERSION" \
+          --notes-file release_notes.md
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Create a PR to update CHANGELOG.md since branch protection prevents direct push
+    - name: Update Changelog (rename Unreleased to version)
+      run: |
+        VERSION=${{ env.VERSION }}
+        DATE=$(date +%Y-%m-%d)
+        BRANCH="chore/changelog-v${VERSION}"
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Create branch from main
+        git checkout -b "$BRANCH"
+
+        # Replace [Unreleased] with [version] - date, add fresh [Unreleased]
+        sed -i "s/^## \[Unreleased\]/## [$VERSION] - $DATE/" CHANGELOG.md
+        sed -i "/^## \[$VERSION\] - $DATE/i ## [Unreleased]\n" CHANGELOG.md
+
+        git add CHANGELOG.md
+        git commit -m "chore: update CHANGELOG.md for v${VERSION} release [skip ci]"
+        git push origin "$BRANCH"
+
+        # Create PR
+        gh pr create \
+          --base main \
+          --head "$BRANCH" \
+          --title "chore: update CHANGELOG.md for v${VERSION} release" \
+          --body "Automated post-release changelog update: renames \`[Unreleased]\` to \`[$VERSION] - $DATE\` and adds a fresh \`[Unreleased]\` section." \
+          --label "documentation"
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ppt-mcp": {
+      "command": "mcp-ppt",
+      "args": [],
+      "env": {}
+    }
+  }
+}

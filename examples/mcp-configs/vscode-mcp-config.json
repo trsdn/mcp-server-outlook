@@ -1,0 +1,7 @@
+{
+  "servers": {
+    "ppt-mcp": {
+      "command": "mcp-ppt"
+    }
+  }
+}

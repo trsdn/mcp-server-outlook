@@ -50,15 +50,15 @@ jobs:
           # required dependency of @github/copilot-sdk, used by the source-side
           # agent in src/OutlookMcp.Agent, and is not redistributed by us.
           allow-dependencies-licenses: >-
-            npm/@github/copilot,
-            npm/@github/copilot-darwin-arm64,
-            npm/@github/copilot-darwin-x64,
-            npm/@github/copilot-linux-arm64,
-            npm/@github/copilot-linux-x64,
-            npm/@github/copilot-linuxmusl-arm64,
-            npm/@github/copilot-linuxmusl-x64,
-            npm/@github/copilot-win32-arm64,
-            npm/@github/copilot-win32-x64
+            pkg:npm/%40github/copilot,
+            pkg:npm/%40github/copilot-darwin-arm64,
+            pkg:npm/%40github/copilot-darwin-x64,
+            pkg:npm/%40github/copilot-linux-arm64,
+            pkg:npm/%40github/copilot-linux-x64,
+            pkg:npm/%40github/copilot-linuxmusl-arm64,
+            pkg:npm/%40github/copilot-linuxmusl-x64,
+            pkg:npm/%40github/copilot-win32-arm64,
+            pkg:npm/%40github/copilot-win32-x64
           
       - name: Dependency Review Summary
         if: always()

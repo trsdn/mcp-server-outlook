@@ -112,7 +112,7 @@ PowerPoint MCP Server runs **entirely on your computer**. Your PowerPoint data:
 ## Links
 
 - [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
-- [Feature Reference](https://github.com/trsdn/mcp-server-outlookfeatures/)
+- [Feature Reference](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md)
 - [Agent Skills](https://github.com/trsdn/mcp-server-outlook/blob/master/skills/README.md) - Cross-platform AI guidance
-- [Privacy Policy](https://github.com/trsdn/mcp-server-outlookprivacy/)
+- [Privacy Policy](https://github.com/trsdn/mcp-server-outlook/blob/master/SECURITY.md)
 - [License (MIT)](https://github.com/trsdn/mcp-server-outlook/blob/master/LICENSE)

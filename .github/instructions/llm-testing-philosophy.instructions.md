@@ -334,7 +334,7 @@ skills/shared/*.md (source of truth)
 | Wrong tool/command description | `I*Commands.cs` XML `/// <summary>` | `SKILL.md` |
 | Wrong parameter docs | `I*Commands.cs` XML `/// <param>` | `SKILL.md` |
 | Wrong skill prose/rules/workflows | `skills/templates/SKILL.cli.sbn` or `SKILL.mcp.sbn` | `SKILL.md` |
-| Wrong reference doc content | `skills/shared/*.md` | `skills/ppt-*/references/*.md` |
+| Wrong reference doc content | `skills/shared/*.md` | `skills/outlook-*/references/*.md` |
 | Wrong MCP prompt content | `skills/shared/*.md` | `Prompts/Content/Skills/` |
 | Wrong Tool Selection table (MCP) | `skills/templates/SKILL.mcp.sbn` | `SKILL.md` |
 | New skill reference needed | Add `.md` to `skills/shared/` + description in `.csproj` | Don't create separate prompt |

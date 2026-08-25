@@ -219,7 +219,7 @@ dotnet build -c Release  # Generates SKILL.md, copies references, and generates 
 
 **Guidance architecture (single source of truth):**
 - `skills/shared/*.md` → auto-copied to skill references AND auto-generated as MCP prompts
-- Skill-based clients (VS Code, Cursor) read `skills/ppt-*/references/`
+- Skill-based clients (VS Code, Cursor) read `skills/outlook-*/references/`
 - MCP-only clients (Claude Desktop) read auto-generated `[McpServerPrompt]` methods
 - NEVER create separate prompt files for content that belongs in `skills/shared/`
 

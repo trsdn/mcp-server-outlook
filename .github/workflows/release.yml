@@ -594,9 +594,16 @@ jobs:
   # =============================================================================
   # Job 8: Publish to External Registries (after all builds succeed)
   # =============================================================================
+  # SICHERHEITSSPERRE: Dieses Repo ist die Outlook-Migration, aber alle Projekte
+  # heissen noch PptMcp.*. Ohne Sperre wuerde dieser Job Outlook-Code unter den
+  # Paket-IDs des Repos mcp-server-ppt veroeffentlichen (NuGet PptMcp.McpServer/
+  # PptMcp.CLI, npm ppt-mcp-skill/ppt-cli-skill, VS Code Extension PptMcp) und
+  # damit fremde, bereits live veroeffentlichte Pakete ueberschreiben.
+  # Erst nach der Umbenennung auf OutlookMcp.* wieder aktivieren. Siehe Issue #5.
   publish:
     name: Publish to Registries
     needs: [version, create-tag]
+    if: false
     runs-on: windows-latest
     permissions:
       contents: read

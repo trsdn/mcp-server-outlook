@@ -7,9 +7,9 @@ export const RUNTIME_ROOT = __dirname;
 export const EVAL_ROOT = join(RUNTIME_ROOT, "..", "..");
 export const REPO_ROOT = join(EVAL_ROOT, "..");
 export const SKILLS_DIR = join(REPO_ROOT, "skills", "shared");
-export const ARCHETYPES_DIR = join(REPO_ROOT, "src", "PptMcp.Core", "Data", "archetypes");
-export const CLI_PATH = join(REPO_ROOT, "src", "PptMcp.CLI", "bin", "Release", "net9.0-windows", "pptcli.exe");
-export const EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE = "PPTMCP_EVAL_ASSET_REPO_ROOT";
+export const ARCHETYPES_DIR = join(REPO_ROOT, "src", "OutlookMcp.Core", "Data", "archetypes");
+export const CLI_PATH = join(REPO_ROOT, "src", "OutlookMcp.CLI", "bin", "Release", "net9.0-windows", "outlookcli.exe");
+export const EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE = "OUTLOOKMCP_EVAL_ASSET_REPO_ROOT";
 
 export function getEvalAssetRepoRoot() {
   const configuredRoot = process.env[EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE];
@@ -81,5 +81,5 @@ const ARCHETYPE_FAMILY_MAP = Object.freeze({
 export function resolveArchetypeFamily(archetypeId) {
   return ARCHETYPE_FAMILY_MAP[archetypeId] || archetypeId;
 }
-export const MCP_SERVER_PATH = join(REPO_ROOT, "src", "PptMcp.McpServer", "bin", "Release", "net9.0-windows", "PptMcp.McpServer.exe");
+export const MCP_SERVER_PATH = join(REPO_ROOT, "src", "OutlookMcp.McpServer", "bin", "Release", "net9.0-windows", "OutlookMcp.McpServer.exe");
 export const ISOLATED_WORKER_PATH = join(EVAL_ROOT, "copilot-isolated-worker.mjs");

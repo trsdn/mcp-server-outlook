@@ -1,5 +1,5 @@
 ---
-applyTo: "src/PptMcp.McpServer/Prompts/**/*.md"
+applyTo: "src/OutlookMcp.McpServer/Prompts/**/*.md"
 ---
 
 # MCP LLM Guidance Creation Guide
@@ -117,7 +117,7 @@ LLMs already know PowerPoint, JSON, and MCP protocol. They need server-specific 
 - Already reusable between CLI and MCP Server
 
 **Implementation**:
-- Location: `src/PptMcp.McpServer/Tools/*Tool.cs`
+- Location: `src/OutlookMcp.McpServer/Tools/*Tool.cs`
 - Pattern: Ad-hoc JSON properties in tool responses
 
 **When to Add:**

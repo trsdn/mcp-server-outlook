@@ -1,7 +1,7 @@
 {
   "servers": {
-    "ppt-mcp": {
-      "command": "mcp-ppt"
+    "outlook-mcp": {
+      "command": "mcp-outlook"
     }
   }
 }

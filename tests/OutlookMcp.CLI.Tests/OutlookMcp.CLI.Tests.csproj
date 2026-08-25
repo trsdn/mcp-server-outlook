@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <NoWarn>$(NoWarn);CS1591;CA1707</NoWarn>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- Assembly and Namespace Configuration -->
+    <AssemblyName>OutlookMcp.CLI.Tests</AssemblyName>
+    <RootNamespace>OutlookMcp.CLI.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OutlookMcp.CLI\OutlookMcp.CLI.csproj" />
+    <ProjectReference Include="..\..\src\OutlookMcp.Core\OutlookMcp.Core.csproj" />
+    <ProjectReference Include="..\..\src\OutlookMcp.Service\OutlookMcp.Service.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\OutlookMcp.Core.Tests\Helpers\TempDirectoryFixture.cs" Link="Helpers\TempDirectoryFixture.cs" />
+    <Compile Include="..\OutlookMcp.Core.Tests\Helpers\ReferenceCatalogFixture.cs" Link="Helpers\ReferenceCatalogFixture.cs" />
+  </ItemGroup>
+
+</Project>

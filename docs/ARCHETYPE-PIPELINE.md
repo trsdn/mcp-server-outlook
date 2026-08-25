@@ -4,13 +4,13 @@ This document explains how slide-design knowledge moves from curated or observed
 
 ## Two Knowledge Layers
 
-PptMcp now combines two complementary layers:
+OutlookMcp now combines two complementary layers:
 
 ### 1. Curated archetype guidance
 
 Human-authored layout guidance lives under:
 
-- `src\PptMcp.Core\Data\archetypes\`
+- `src\OutlookMcp.Core\Data\archetypes\`
 
 These files describe:
 
@@ -100,8 +100,8 @@ At a high level, that regeneration step produces:
 
 ### Public, committed guidance
 
-- `src\PptMcp.Core\Data\archetypes\*.md`
-- `src\PptMcp.Core\Data\archetypes\registry.md`
+- `src\OutlookMcp.Core\Data\archetypes\*.md`
+- `src\OutlookMcp.Core\Data\archetypes\registry.md`
 
 ### Private or large eval assets
 
@@ -114,11 +114,11 @@ Preferred asset roots live under:
 
 If you keep eval assets in a separate private repo clone, set:
 
-- `PPTMCP_EVAL_ASSET_REPO_ROOT`
+- `OUTLOOKMCP_EVAL_ASSET_REPO_ROOT`
 
 For a direct reference-catalog override, the runtime also supports:
 
-- `PPTMCP_REFERENCE_DATA_ROOT`
+- `OUTLOOKMCP_REFERENCE_DATA_ROOT`
 
 ## Runtime Surface
 
@@ -140,7 +140,7 @@ This means a family can appear in the runtime catalog even if it is learned-firs
 
 Today the pipeline distinguishes between:
 
-- **17 curated families** with authored layout files under `src\PptMcp.Core\Data\archetypes\`
+- **17 curated families** with authored layout files under `src\OutlookMcp.Core\Data\archetypes\`
 - additional **learned-only families** surfaced through the unified runtime catalog
 
 Examples of learned-only or learned-first coverage include:
@@ -165,5 +165,5 @@ When refreshing archetype/reference data:
 ## Relationship to Other Docs
 
 - [Eval Framework](../eval/README.md) explains how the harnesses, triage flows, and run artifacts work
-- [Archetype Registry](../src/PptMcp.Core/Data/archetypes/registry.md) explains the curated family selection layer
+- [Archetype Registry](../src/OutlookMcp.Core/Data/archetypes/registry.md) explains the curated family selection layer
 - [Agent Client Architecture](AGENT-CLIENT.md) explains how runtime deck-building consumes this design knowledge

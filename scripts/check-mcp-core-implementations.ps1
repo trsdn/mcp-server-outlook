@@ -53,34 +53,34 @@ $knownExceptions = @{
 
 # Define mappings: Enum -> Core Interface File(s)
 $mappings = @{
-    "FileAction" = @("src/PptMcp.Core/Commands/IFileCommands.cs")
-    "PowerQueryAction" = @("src/PptMcp.Core/Commands/PowerQuery/IPowerQueryCommands.cs")
-    "WorksheetAction" = @("src/PptMcp.Core/Commands/Sheet/ISheetCommands.cs")
-    "WorksheetStyleAction" = @("src/PptMcp.Core/Commands/Sheet/ISheetCommands.cs")
-    "RangeAction" = @("src/PptMcp.Core/Commands/Range/IRangeCommands.cs")
-    "RangeEditAction" = @("src/PptMcp.Core/Commands/Range/IRangeCommands.cs")
-    "RangeFormatAction" = @("src/PptMcp.Core/Commands/Range/IRangeCommands.cs")
-    "RangeLinkAction" = @("src/PptMcp.Core/Commands/Range/IRangeCommands.cs")
-    "TableAction" = @("src/PptMcp.Core/Commands/Table/ITableCommands.cs")
-    "TableColumnAction" = @("src/PptMcp.Core/Commands/Table/ITableCommands.cs")
-    "DataModelAction" = @("src/PptMcp.Core/Commands/DataModel/IDataModelCommands.cs")
-    "DataModelRelAction" = @("src/PptMcp.Core/Commands/DataModel/IDataModelCommands.cs")
-    "VbaAction" = @("src/PptMcp.Core/Commands/Vba/IVbaCommands.cs")
-    "ConnectionAction" = @("src/PptMcp.Core/Commands/Connection/IConnectionCommands.cs")
-    "NamedRangeAction" = @("src/PptMcp.Core/Commands/NamedRange/INamedRangeCommands.cs")
-    "PivotTableAction" = @("src/PptMcp.Core/Commands/PivotTable/IPivotTableCommands.cs")
-    "PivotTableFieldAction" = @("src/PptMcp.Core/Commands/PivotTable/IPivotTableCommands.cs")
-    "PivotTableCalcAction" = @("src/PptMcp.Core/Commands/PivotTable/IPivotTableCommands.cs")
-    "ChartAction" = @("src/PptMcp.Core/Commands/Chart/IChartCommands.cs")
-    "ChartConfigAction" = @("src/PptMcp.Core/Commands/Chart/IChartCommands.cs")
+    "FileAction" = @("src/OutlookMcp.Core/Commands/IFileCommands.cs")
+    "PowerQueryAction" = @("src/OutlookMcp.Core/Commands/PowerQuery/IPowerQueryCommands.cs")
+    "WorksheetAction" = @("src/OutlookMcp.Core/Commands/Sheet/ISheetCommands.cs")
+    "WorksheetStyleAction" = @("src/OutlookMcp.Core/Commands/Sheet/ISheetCommands.cs")
+    "RangeAction" = @("src/OutlookMcp.Core/Commands/Range/IRangeCommands.cs")
+    "RangeEditAction" = @("src/OutlookMcp.Core/Commands/Range/IRangeCommands.cs")
+    "RangeFormatAction" = @("src/OutlookMcp.Core/Commands/Range/IRangeCommands.cs")
+    "RangeLinkAction" = @("src/OutlookMcp.Core/Commands/Range/IRangeCommands.cs")
+    "TableAction" = @("src/OutlookMcp.Core/Commands/Table/ITableCommands.cs")
+    "TableColumnAction" = @("src/OutlookMcp.Core/Commands/Table/ITableCommands.cs")
+    "DataModelAction" = @("src/OutlookMcp.Core/Commands/DataModel/IDataModelCommands.cs")
+    "DataModelRelAction" = @("src/OutlookMcp.Core/Commands/DataModel/IDataModelCommands.cs")
+    "VbaAction" = @("src/OutlookMcp.Core/Commands/Vba/IVbaCommands.cs")
+    "ConnectionAction" = @("src/OutlookMcp.Core/Commands/Connection/IConnectionCommands.cs")
+    "NamedRangeAction" = @("src/OutlookMcp.Core/Commands/NamedRange/INamedRangeCommands.cs")
+    "PivotTableAction" = @("src/OutlookMcp.Core/Commands/PivotTable/IPivotTableCommands.cs")
+    "PivotTableFieldAction" = @("src/OutlookMcp.Core/Commands/PivotTable/IPivotTableCommands.cs")
+    "PivotTableCalcAction" = @("src/OutlookMcp.Core/Commands/PivotTable/IPivotTableCommands.cs")
+    "ChartAction" = @("src/OutlookMcp.Core/Commands/Chart/IChartCommands.cs")
+    "ChartConfigAction" = @("src/OutlookMcp.Core/Commands/Chart/IChartCommands.cs")
     "SlicerAction" = @(
-        "src/PptMcp.Core/Commands/PivotTable/IPivotTableCommands.cs",
-        "src/PptMcp.Core/Commands/Table/ITableCommands.cs"
+        "src/OutlookMcp.Core/Commands/PivotTable/IPivotTableCommands.cs",
+        "src/OutlookMcp.Core/Commands/Table/ITableCommands.cs"
     )
 }
 
 # Read ToolActions.cs to extract enum values
-$toolActionsFile = Join-Path $rootDir "src/PptMcp.Core/Models/Actions/ToolActions.cs"
+$toolActionsFile = Join-Path $rootDir "src/OutlookMcp.Core/Models/Actions/ToolActions.cs"
 $toolActionsContent = Get-Content $toolActionsFile -Raw
 
 foreach ($enumName in $mappings.Keys) {

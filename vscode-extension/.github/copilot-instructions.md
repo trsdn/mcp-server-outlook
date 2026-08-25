@@ -28,4 +28,4 @@ Do not use this extension for non-Outlook formats or generic file editing outsid
 - Prefer inspection before mutation.
 - Prefer draft-producing actions before `mail.send`.
 - Inspect attachments before exporting them.
-- Remember that some internal names still use inherited `PptMcp.*` migration naming.
+- Remember that some internal names still use inherited `OutlookMcp.*` migration naming.

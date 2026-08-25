@@ -1,5 +1,5 @@
-# Refactor PptMcpService.cs: Replace hand-written handlers with generated dispatch
-$file = "C:\Users\torstenmahr\github\mcp-server-ppt\src\PptMcp.Service\PptMcpService.cs"
+# Refactor OutlookMcpService.cs: Replace hand-written handlers with generated dispatch
+$file = "C:\Users\torstenmahr\github\mcp-server-outlook\src\OutlookMcp.Service\OutlookMcpService.cs"
 $lines = Get-Content $file -Encoding utf8
 
 # Find the line containing "// === SHEET COMMANDS ===" -- start of DELETE section

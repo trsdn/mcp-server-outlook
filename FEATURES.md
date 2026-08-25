@@ -1,4 +1,4 @@
-# PptMcp - Complete Feature Reference
+# OutlookMcp - Complete Feature Reference
 
 **33 specialized tools with 204 operations for comprehensive PowerPoint automation**
 
@@ -7,12 +7,12 @@
 In addition to the PowerPoint tool surface, the repository now documents three official automation layers:
 
 - **MCP Server** — conversational tool surface for rich tool discovery
-- **CLI** (`pptcli`) — compact scripting and coding-agent surface
-- **Agent Client** (`src\PptMcp.Agent`) — source-side Copilot SDK orchestrator for plan → execute → verify → repair workflows on top of the MCP server
+- **CLI** (`outlookcli`) — compact scripting and coding-agent surface
+- **Agent Client** (`src\OutlookMcp.Agent`) — source-side Copilot SDK orchestrator for plan → execute → verify → repair workflows on top of the MCP server
 
 Related docs:
 
-- [Agent Client](src/PptMcp.Agent/README.md)
+- [Agent Client](src/OutlookMcp.Agent/README.md)
 - [Agent Client Architecture](docs/AGENT-CLIENT.md)
 - [Eval Framework](eval/README.md)
 - [Archetype Pipeline](docs/ARCHETYPE-PIPELINE.md)

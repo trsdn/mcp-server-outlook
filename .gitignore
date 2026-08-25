@@ -209,7 +209,7 @@ FodyWeavers.xsd
 .idea/
 *.sln.iml
 
-# PptCLI specific ignores - test files
+# OutlookCli specific ignores - test files
 *.xlsx
 *.xls
 *.pq
@@ -218,13 +218,13 @@ temp/
 sample_files/
 
 # Exception: Allow Data Model template (required for tests)
-!tests/PptMcp.Core.Tests/TestAssets/DataModelTemplate.xlsx
+!tests/OutlookMcp.Core.Tests/TestAssets/DataModelTemplate.xlsx
 
 # Exception: Allow ComInterop static test file (required for batch tests)
-!tests/PptMcp.ComInterop.Tests/Integration/Session/TestFiles/batch-test-static.pptx
+!tests/OutlookMcp.ComInterop.Tests/Integration/Session/TestFiles/batch-test-static.pptx
 
 # LOCAL-ONLY diagnostic tests (reference external workbooks with confidential data)
-tests/PptMcp.Core.Tests/Integration/Commands/PowerQuery/PowerQueryCommandsTests.ExternalWorkbook.cs
+tests/OutlookMcp.Core.Tests/Integration/Commands/PowerQuery/PowerQueryCommandsTests.ExternalWorkbook.cs
 
 codeql-db/*
 infrastructure/azure/appinsights.secrets.local
@@ -236,7 +236,7 @@ eval/data/
 
 # Legacy local-only archetype reference data (superseded by eval/data/archetype-references)
 local-data/archetype-references/
-src/PptMcp.Core/Data/archetype-references/
+src/OutlookMcp.Core/Data/archetype-references/
 
 # Local environment files (secrets, connection strings)
 .env

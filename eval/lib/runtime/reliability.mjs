@@ -55,7 +55,7 @@ function detectInstructionsTransport(instructionsText = "", instructionsFile = "
   if (normalizedFile.includes("mcp")) mcpSignals.push("instructions file name");
   if (normalizedFile.includes("cli")) cliSignals.push("instructions file name");
 
-  if (normalizedText.includes("pptcli")) cliSignals.push("pptcli mention");
+  if (normalizedText.includes("outlookcli")) cliSignals.push("outlookcli mention");
   if (normalizedText.includes("use the cli")) cliSignals.push("CLI directive");
   if (normalizedText.includes("session create")) cliSignals.push("CLI session workflow");
 

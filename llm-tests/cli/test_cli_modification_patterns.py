@@ -13,12 +13,12 @@ pytestmark = [pytest.mark.aitest, pytest.mark.cli]
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="LLM intermittently omits required action parameter on complex workflows", strict=False)
-async def test_cli_range_updates(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_range_updates(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-range-updates",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )
@@ -47,12 +47,12 @@ async def test_cli_range_updates(aitest_run, ppt_cli_server, ppt_cli_skill):
 
 
 @pytest.mark.asyncio
-async def test_cli_table_updates(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_table_updates(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-table-updates",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )
@@ -76,12 +76,12 @@ async def test_cli_table_updates(aitest_run, ppt_cli_server, ppt_cli_skill):
 
 
 @pytest.mark.asyncio
-async def test_cli_chart_updates(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_chart_updates(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-chart-updates",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )
@@ -106,12 +106,12 @@ async def test_cli_chart_updates(aitest_run, ppt_cli_server, ppt_cli_skill):
 
 @pytest.mark.xfail(reason="LLM intermittently omits required action parameter on complex workflows", strict=False)
 @pytest.mark.asyncio
-async def test_cli_slide_structural_changes(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_slide_structural_changes(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-slide-struct",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )

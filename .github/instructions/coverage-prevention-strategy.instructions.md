@@ -1,5 +1,5 @@
 ---
-applyTo: "src/PptMcp.Core/Commands/**/*.cs,src/PptMcp.McpServer/**/*.cs"
+applyTo: "src/OutlookMcp.Core/Commands/**/*.cs,src/OutlookMcp.McpServer/**/*.cs"
 ---
 
 # Core Commands Coverage - Mandatory Workflow
@@ -23,29 +23,29 @@ applyTo: "src/PptMcp.Core/Commands/**/*.cs,src/PptMcp.McpServer/**/*.cs"
 
 ```markdown
 1. ✅ Add method to Core Commands interface
-   File: src/PptMcp.Core/Commands/[Feature]/I[Feature]Commands.cs
+   File: src/OutlookMcp.Core/Commands/[Feature]/I[Feature]Commands.cs
    Example: Task<OperationResult> NewMethodAsync(IPptBatch batch);
 
 2. ✅ Implement in Core Commands class  
-   File: src/PptMcp.Core/Commands/[Feature]/[Feature]Commands.cs
+   File: src/OutlookMcp.Core/Commands/[Feature]/[Feature]Commands.cs
 
 3. ✅ Add enum value to ToolActions.cs
-   File: src/PptMcp.McpServer/Models/ToolActions.cs
+   File: src/OutlookMcp.McpServer/Models/ToolActions.cs
    Example: SlideAction.NewMethod
    ⚠️ Build will show CS8524 error until steps 4-6 complete
 
 4. ✅ Add ToActionString mapping
-   File: src/PptMcp.McpServer/Models/ActionExtensions.cs
+   File: src/OutlookMcp.McpServer/Models/ActionExtensions.cs
    Example: SlideAction.NewMethod => "new-method",
    ⚠️ CS8524 error persists
 
 5. ✅ Add switch case in MCP Tool
-   File: src/PptMcp.McpServer/Tools/Ppt[Feature]Tool.cs
+   File: src/OutlookMcp.McpServer/Tools/Ppt[Feature]Tool.cs
    Example: SlideAction.NewMethod => await NewMethodAsync(...),
    ⚠️ CS8524 error persists
 
 6. ✅ Implement MCP method
-   File: src/PptMcp.McpServer/Tools/Ppt[Feature]Tool.cs
+   File: src/OutlookMcp.McpServer/Tools/Ppt[Feature]Tool.cs
    Example: private static async Task<string> NewMethodAsync(...)
    ✅ CS8524 errors resolved
 

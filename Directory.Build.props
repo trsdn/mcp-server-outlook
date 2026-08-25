@@ -61,11 +61,11 @@
   </PropertyGroup>
 
   <!--
-    Pre-build cleanup: gracefully stop PptMcp Service and kill PowerPoint processes.
+    Pre-build cleanup: gracefully stop OutlookMcp Service and kill PowerPoint processes.
     Prevents file locking during build. Skipped in CI (no PowerPoint/Service there).
   -->
-  <Target Name="StopPptMcpProcesses" BeforeTargets="Build" Condition="'$(CI)' != 'true' AND '$(PptMcpSkipCleanup)' != 'true'">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\Stop-PptMcpProcesses.ps1&quot;"
+  <Target Name="StopOutlookMcpProcesses" BeforeTargets="Build" Condition="'$(CI)' != 'true' AND '$(OutlookMcpSkipCleanup)' != 'true'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\Stop-OutlookMcpProcesses.ps1&quot;"
           IgnoreExitCode="true"
           StandardOutputImportance="low" />
   </Target>

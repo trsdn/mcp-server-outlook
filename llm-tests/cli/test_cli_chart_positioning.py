@@ -13,12 +13,12 @@ pytestmark = [pytest.mark.aitest, pytest.mark.cli]
 
 @pytest.mark.xfail(reason="LLM intermittently omits required action parameter on complex workflows", strict=False)
 @pytest.mark.asyncio
-async def test_cli_chart_position_below_data(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_chart_position_below_data(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-chart-below",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )
@@ -44,12 +44,12 @@ async def test_cli_chart_position_below_data(aitest_run, ppt_cli_server, ppt_cli
 
 
 @pytest.mark.asyncio
-async def test_cli_chart_position_right_of_table(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_chart_position_right_of_table(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-chart-right",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )

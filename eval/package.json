@@ -1,7 +1,7 @@
 {
   "name": "eval",
   "version": "1.0.0",
-  "description": "A reusable quality improvement system for PptMcp's design skills. This is **not part of the MCP package** — it's a development tool used to iteratively improve the design guidance in `skills/shared/`.",
+  "description": "A reusable quality improvement system for OutlookMcp's design skills. This is **not part of the MCP package** — it's a development tool used to iteratively improve the design guidance in `skills/shared/`.",
   "main": "index.js",
   "scripts": {
     "postinstall": "node patch-deps.cjs",

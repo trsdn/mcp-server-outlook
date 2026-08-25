@@ -23,7 +23,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			provideMcpServerDefinitions: async () => {
 				// Return the MCP server definition for the Outlook migration server
 				const extensionPath = context.extensionPath;
-				const mcpServerPath = path.join(extensionPath, 'bin', 'PptMcp.McpServer.exe');
+				const mcpServerPath = path.join(extensionPath, 'bin', 'OutlookMcp.McpServer.exe');
 
 				return [
 					new vscode.McpStdioServerDefinition(

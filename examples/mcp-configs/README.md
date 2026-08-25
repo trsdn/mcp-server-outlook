@@ -4,10 +4,10 @@ This directory contains ready-to-use MCP configuration files for various AI codi
 
 ## Quick Setup Guide
 
-### 1. Install PptMcp MCP Server
+### 1. Install OutlookMcp MCP Server
 
 ```powershell
-dotnet tool install --global PptMcp.McpServer
+dotnet tool install --global OutlookMcp.McpServer
 ```
 
 ### 2. Choose Your Client and Copy the Config
@@ -27,7 +27,7 @@ Select the configuration file for your AI assistant and follow the instructions 
 1. Open File Explorer and navigate to: `%APPDATA%\Claude\`
 2. If `claude_desktop_config.json` doesn't exist, create it
 3. Copy the contents of `claude-desktop-config.json` from this folder
-4. If you already have a config file, merge the `ppt-mcp` server entry into your existing `mcpServers` section
+4. If you already have a config file, merge the `outlook-mcp` server entry into your existing `mcpServers` section
 5. Restart Claude Desktop
 
 **Test it:**
@@ -51,7 +51,7 @@ Create a PowerPoint file called "test.pptx"
 2. Search for "MCP" in settings
 3. Click "Edit in settings.json" or manually create the config file at the location above
 4. Copy the contents of `cursor-mcp-config.json` from this folder
-5. If you already have a config file, merge the `ppt-mcp` server entry
+5. If you already have a config file, merge the `outlook-mcp` server entry
 6. Restart Cursor
 
 **Test it:**
@@ -115,7 +115,7 @@ Create a PowerPoint file called "test.pptx"
 **Setup Steps:**
 
 **Option A: Use VS Code Extension (Recommended)**
-1. Install the [PowerPoint MCP VS Code Extension](https://marketplace.visualstudio.com/items?itemName=trsdn.ppt-mcp)
+1. Install the [PowerPoint MCP VS Code Extension](https://marketplace.visualstudio.com/items?itemName=trsdn.outlook-mcp)
 2. Configuration is automatic!
 
 **Option B: Manual Configuration**
@@ -136,7 +136,7 @@ Create a PowerPoint file called "test.pptx"
 
 1. **Verify installation:**
    ```powershell
-   dotnet tool list --global | Select-String "PptMcp"
+   dotnet tool list --global | Select-String "OutlookMcp"
    ```
 
 2. **Check .NET is installed:**
@@ -147,24 +147,24 @@ Create a PowerPoint file called "test.pptx"
 
 3. **Reinstall if needed:**
    ```powershell
-   dotnet tool uninstall --global PptMcp.McpServer
-   dotnet tool install --global PptMcp.McpServer
+   dotnet tool uninstall --global OutlookMcp.McpServer
+   dotnet tool install --global OutlookMcp.McpServer
    ```
 
 ### PowerPoint Not Found
 
 - Ensure Microsoft PowerPoint Desktop (2016+) is installed
-- PptMcp requires Windows OS with PowerPoint installed
+- OutlookMcp requires Windows OS with PowerPoint installed
 
 ### Permission Issues
 
-- Close all PowerPoint windows before running PptMcp
+- Close all PowerPoint windows before running OutlookMcp
 - Ensure your user account has PowerPoint access
 
 ### Still Having Issues?
 
 - Check the [main installation guide](../../docs/INSTALLATION.md)
-- Report issues on [GitHub](https://github.com/trsdn/mcp-server-ppt/issues)
+- Report issues on [GitHub](https://github.com/trsdn/mcp-server-outlook/issues)
 
 ---
 
@@ -182,5 +182,5 @@ If you work with multiple workspaces, you can:
 
 - **[Main README](../../README.md)** - Feature overview and examples
 - **[Installation Guide](../../docs/INSTALLATION.md)** - Comprehensive setup instructions
-- **[MCP Server README](../../src/PptMcp.McpServer/README.md)** - Tool documentation
-- **[GitHub Repository](https://github.com/trsdn/mcp-server-ppt)** - Source code and issues
+- **[MCP Server README](../../src/OutlookMcp.McpServer/README.md)** - Tool documentation
+- **[GitHub Repository](https://github.com/trsdn/mcp-server-outlook)** - Source code and issues

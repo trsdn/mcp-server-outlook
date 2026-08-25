@@ -1,6 +1,6 @@
-# PptMcp CLI Examples
+# OutlookMcp CLI Examples
 
-This directory contains example scripts demonstrating PptMcp CLI features.
+This directory contains example scripts demonstrating OutlookMcp CLI features.
 
 ## Session Mode Demo
 
@@ -9,7 +9,7 @@ The session mode demo shows how to use sessions for high-performance multi-opera
 ### Requirements
 
 - Windows with PowerPoint installed
-- PptMcp installed (`dotnet tool install --global PptMcp.McpServer`)
+- OutlookMcp installed (`dotnet tool install --global OutlookMcp.McpServer`)
 
 ### Running the Demo
 

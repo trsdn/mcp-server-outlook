@@ -25,7 +25,7 @@ vscode-extension/
 │   │   └── SKILL.md
 │   └── shared/               # Shared reference docs
 │       └── *.md
-└── PptMcp-1.0.0.vsix      # Packaged extension
+└── OutlookMcp-1.0.0.vsix      # Packaged extension
 ```
 
 ## Key Implementation Details
@@ -37,7 +37,7 @@ The extension uses VS Code's `mcpServerDefinitionProvider` contribution point:
 ```typescript
 vscode.lm.registerMcpServerDefinitionProvider('outlook-mcp', {
   provideMcpServerDefinitions: async () => {
-    const serverPath = path.join(context.extensionPath, 'bin', 'PptMcp.McpServer.exe');
+    const serverPath = path.join(context.extensionPath, 'bin', 'OutlookMcp.McpServer.exe');
     return [
       new vscode.McpStdioServerDefinition(
         'outlook-mcp',
@@ -96,17 +96,17 @@ The extension includes self-contained MCP server and CLI executables. To update 
 ```powershell
 # Build MCP server as self-contained single-file exe
 cd d:\source\mcp-server-outlook
-dotnet publish src/PptMcp.McpServer/PptMcp.McpServer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:PublishReadyToRun=false -p:NuGetAudit=false -o vscode-extension/bin
+dotnet publish src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:PublishReadyToRun=false -p:NuGetAudit=false -o vscode-extension/bin
 
 # Build CLI as self-contained single-file exe
-dotnet publish src/PptMcp.CLI/PptMcp.CLI.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:PublishReadyToRun=false -p:NuGetAudit=false -o vscode-extension/bin
+dotnet publish src/OutlookMcp.CLI/OutlookMcp.CLI.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:PublishReadyToRun=false -p:NuGetAudit=false -o vscode-extension/bin
 
 # Or use the npm script which builds both
 npm run build:all
 
 # Verify the executables work
-vscode-extension/bin/PptMcp.McpServer.exe --version
-vscode-extension/bin/pptcli.exe --version
+vscode-extension/bin/OutlookMcp.McpServer.exe --version
+vscode-extension/bin/outlookcli.exe --version
 ```
 
 This creates self-contained executables with the .NET runtime and all dependencies included. No .NET SDK or runtime installation needed on end-user machines.
@@ -122,8 +122,8 @@ The extension uses bundled self-contained executables. For development testing:
 npm run build:all
 
 # Verify bundled executables work
-vscode-extension/bin/PptMcp.McpServer.exe --version
-vscode-extension/bin/pptcli.exe --version
+vscode-extension/bin/OutlookMcp.McpServer.exe --version
+vscode-extension/bin/outlookcli.exe --version
 ```
 
 **Why this approach**: The extension bundles self-contained MCP server and CLI executables. No .NET runtime or SDK needed on the target machine.
@@ -138,7 +138,7 @@ vscode-extension/bin/pptcli.exe --version
 2. **Press F5 in VS Code** (opens Extension Development Host)
 
 3. **Check the Debug Console** for activation logs:
-   - ✅ `PptMcp extension is now active`
+   - ✅ `OutlookMcp extension is now active`
    - ❌ NO errors about "Cannot read properties of undefined"
 
 4. **In the Extension Development Host**:
@@ -148,7 +148,7 @@ vscode-extension/bin/pptcli.exe --version
 
 5. **Check Developer Tools Console** (Ctrl+Shift+I):
    - Go to Console tab
-   - Look for "PptMcp:" messages
+   - Look for "OutlookMcp:" messages
    - Verify no errors
 
 ### Package Testing
@@ -160,7 +160,7 @@ vscode-extension/bin/pptcli.exe --version
 
 2. **Install from VSIX**:
    - `Ctrl+Shift+P` → "Install from VSIX"
-   - Select `PptMcp-1.0.0.vsix`
+   - Select `OutlookMcp-1.0.0.vsix`
 
 3. **Verify**:
    - Extension appears in Extensions panel
@@ -352,12 +352,12 @@ When VS Code releases new API features:
 - Verify extension ID matches registration
 
 **MCP server not found**
-- Ensure bundled executable exists in `bin/PptMcp.McpServer.exe`
+- Ensure bundled executable exists in `bin/OutlookMcp.McpServer.exe`
 - Run `npm run build:all` to build both MCP server and CLI executables
-- Verify bundled executable runs: `bin/PptMcp.McpServer.exe --version`
+- Verify bundled executable runs: `bin/OutlookMcp.McpServer.exe --version`
 
 **CLI not found**
-- Ensure `bin/pptcli.exe` exists
+- Ensure `bin/outlookcli.exe` exists
 - Run `npm run build:all` to build both executables
 
 ## Extension Size 

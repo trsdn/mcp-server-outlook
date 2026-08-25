@@ -33,15 +33,15 @@ $ErrorActionPreference = 'Stop'
 
 # Find CLI executable (prefer Release build)
 $candidateCliPaths = @(
-    "..\src\PptMcp.CLI\bin\Release\net9.0-windows\pptcli.exe",
-    "..\src\PptMcp.CLI\bin\Debug\net9.0-windows\pptcli.exe",
-    "..\src\PptMcp.CLI\bin\Release\net10.0-windows\pptcli.exe",
-    "..\src\PptMcp.CLI\bin\Debug\net10.0-windows\pptcli.exe"
+    "..\src\OutlookMcp.CLI\bin\Release\net9.0-windows\outlookcli.exe",
+    "..\src\OutlookMcp.CLI\bin\Debug\net9.0-windows\outlookcli.exe",
+    "..\src\OutlookMcp.CLI\bin\Release\net10.0-windows\outlookcli.exe",
+    "..\src\OutlookMcp.CLI\bin\Debug\net10.0-windows\outlookcli.exe"
 ) | ForEach-Object { Join-Path $PSScriptRoot $_ }
 
 $cliPath = $candidateCliPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $cliPath) {
-    Write-Error "CLI not found. Build first: dotnet build src/PptMcp.CLI"
+    Write-Error "CLI not found. Build first: dotnet build src/OutlookMcp.CLI"
     exit 1
 }
 

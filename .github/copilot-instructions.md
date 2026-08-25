@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions - PptMcp
+# GitHub Copilot Instructions - OutlookMcp
 
 > **🎯 Optimized for AI Coding Agents** - Modular, path-specific instructions
 
@@ -22,23 +22,23 @@
 
 ---
 
-## What is PptMcp?
+## What is OutlookMcp?
 
-**PptMcp** is a Windows-only toolset for programmatic PowerPoint automation via COM interop, designed for coding agents and automation scripts.
+**OutlookMcp** is a Windows-only toolset for programmatic PowerPoint automation via COM interop, designed for coding agents and automation scripts.
 
-> **⚠️ CRITICAL: PptMcp has TWO equal entry points — MCP Server AND CLI.**
+> **⚠️ CRITICAL: OutlookMcp has TWO equal entry points — MCP Server AND CLI.**
 > Both are first-class citizens. Every feature, action, and parameter must work identically through both.
 > When adding/changing features, ALWAYS verify BOTH MCP Server tools AND CLI commands are updated.
 > See Rule 24 (Post-Change Sync) for the full checklist.
 
 **Core Layers:**
-1. **ComInterop** (`src/PptMcp.ComInterop`) - Reusable COM automation patterns (STA threading, session management, batch operations, OLE message filter)
-2. **Core** (`src/PptMcp.Core`) - PowerPoint-specific business logic (slides, shapes, VBA, parameters)
-3. **Service** (`src/PptMcp.Service`) - PowerPoint session management and command routing (in-process for MCP Server, named pipe for CLI daemon)
-4. **CLI** (`src/PptMcp.CLI`) - Command-line interface for scripting (EQUAL entry point)
-5. **MCP Server** (`src/PptMcp.McpServer`) - Model Context Protocol for AI assistants (EQUAL entry point)
+1. **ComInterop** (`src/OutlookMcp.ComInterop`) - Reusable COM automation patterns (STA threading, session management, batch operations, OLE message filter)
+2. **Core** (`src/OutlookMcp.Core`) - PowerPoint-specific business logic (slides, shapes, VBA, parameters)
+3. **Service** (`src/OutlookMcp.Service`) - PowerPoint session management and command routing (in-process for MCP Server, named pipe for CLI daemon)
+4. **CLI** (`src/OutlookMcp.CLI`) - Command-line interface for scripting (EQUAL entry point)
+5. **MCP Server** (`src/OutlookMcp.McpServer`) - Model Context Protocol for AI assistants (EQUAL entry point)
 
-**Source Generators** (`src/PptMcp.Generators*`) - Generate CLI commands and MCP tools from Core interfaces
+**Source Generators** (`src/OutlookMcp.Generators*`) - Generate CLI commands and MCP tools from Core interfaces
 
 ---
 
@@ -143,8 +143,8 @@ public void TestMethod()
 GitHub Copilot auto-loads instructions based on files you're editing:
 
 - `tests/**/*.cs` → [Testing Strategy](instructions/testing-strategy.instructions.md)
-- `src/PptMcp.Core/**/*.cs` → [PowerPoint COM Interop](instructions/ppt-com-interop.instructions.md)
-- `src/PptMcp.McpServer/**/*.cs` → [MCP Server Guide](instructions/mcp-server-guide.instructions.md)
+- `src/OutlookMcp.Core/**/*.cs` → [PowerPoint COM Interop](instructions/ppt-com-interop.instructions.md)
+- `src/OutlookMcp.McpServer/**/*.cs` → [MCP Server Guide](instructions/mcp-server-guide.instructions.md)
 - `.github/workflows/**/*.yml` → [Development Workflow](instructions/development-workflow.instructions.md)
 - `**` (all files) → [CRITICAL-RULES.md](instructions/critical-rules.instructions.md)
 
@@ -194,7 +194,7 @@ uv run pytest -m aitest -v   # All LLM tests
 
 **Prerequisites:**
 - Azure OpenAI endpoint: `$env:AZURE_OPENAI_ENDPOINT = "https://<resource>.openai.azure.com/"`
-- Build MCP Server: `dotnet build src\PptMcp.McpServer -c Release`
+- Build MCP Server: `dotnet build src\OutlookMcp.McpServer -c Release`
 
 **Structure:**
 - `test_mcp_*.py` - MCP Server workflows
@@ -209,8 +209,8 @@ Two cross-platform AI assistant skill packages:
 
 | Skill | File | Target | Best For |
 |-------|------|--------|----------|
-| **ppt-cli** | `skills/ppt-cli/SKILL.md` | CLI Tool | Coding agents (token-efficient, `--help` discoverable) |
-| **ppt-mcp** | `skills/ppt-mcp/SKILL.md` | MCP Server | Conversational AI (rich tool schemas) |
+| **outlook-cli** | `skills/outlook-cli/SKILL.md` | CLI Tool | Coding agents (token-efficient, `--help` discoverable) |
+| **outlook-mcp** | `skills/outlook-mcp/SKILL.md` | MCP Server | Conversational AI (rich tool schemas) |
 
 **Build skills from source:**
 ```powershell
@@ -225,8 +225,8 @@ dotnet build -c Release  # Generates SKILL.md, copies references, and generates 
 
 **Install via npx:**
 ```bash
-npx skills add trsdn/mcp-server-ppt --skill ppt-cli   # Coding agents
-npx skills add trsdn/mcp-server-ppt --skill ppt-mcp   # Conversational AI
+npx skills add trsdn/mcp-server-outlook --skill outlook-cli   # Coding agents
+npx skills add trsdn/mcp-server-outlook --skill outlook-mcp   # Conversational AI
 ```
 
 ---
@@ -265,13 +265,13 @@ catch (Exception ex) {
 ### Service Architecture (TWO EQUAL ENTRY POINTS)
 
 ```
-MCP Server ──► In-process PptMcpService ──► Core Commands ──► PowerPoint COM
+MCP Server ──► In-process OutlookMcpService ──► Core Commands ──► PowerPoint COM
 CLI ─────────► CLI Daemon (named pipe) ─────► Core Commands ──► PowerPoint COM
 ```
 
-**⚠️ MCP Server and CLI are BOTH first-class entry points.** Each hosts its own PptMcpService instance:
+**⚠️ MCP Server and CLI are BOTH first-class entry points.** Each hosts its own OutlookMcpService instance:
 - **MCP Server**: Fully in-process, direct method calls (no pipe)
-- **CLI**: Daemon process with named pipe (`PptMcp-cli-{SID}`), sessions persist across CLI invocations
+- **CLI**: Daemon process with named pipe (`OutlookMcp-cli-{SID}`), sessions persist across CLI invocations
 - **Feature parity**: Every action available in MCP must be available in CLI and vice versa
 - **Parameter parity**: Same parameters, same defaults, same validation
 

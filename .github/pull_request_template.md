@@ -32,8 +32,8 @@ Relates to #[issue number]
 ## Test Commands
 ```powershell
 # Commands used for testing
-PptMcp command1 "test.pptx"
-PptMcp command2 "test.pptx" "param"
+OutlookMcp command1 "test.pptx"
+OutlookMcp command2 "test.pptx" "param"
 ```
 
 ## Screenshots (if applicable)

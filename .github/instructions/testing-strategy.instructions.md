@@ -11,49 +11,49 @@ applyTo: "tests/**/*.cs"
 ### Core.Tests (Business Logic)
 ```bash
 # Development (fast - excludes VBA and Screenshot)
-dotnet test tests/PptMcp.Core.Tests/PptMcp.Core.Tests.csproj --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust&Feature!=Screenshot"
+dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust&Feature!=Screenshot"
 
 # Diagnostic tests (validate patterns, slow ~20s each)
-dotnet test tests/PptMcp.Diagnostics.Tests/PptMcp.Diagnostics.Tests.csproj --filter "RunType=OnDemand&Layer=Diagnostics"
+dotnet test tests/OutlookMcp.Diagnostics.Tests/OutlookMcp.Diagnostics.Tests.csproj --filter "RunType=OnDemand&Layer=Diagnostics"
 
 # VBA tests (manual only - requires VBA trust)
-dotnet test tests/PptMcp.Core.Tests/PptMcp.Core.Tests.csproj --filter "(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand"
+dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj --filter "(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand"
 
 # Screenshot tests (isolated run only - clipboard contention when parallel)
-dotnet test tests/PptMcp.Core.Tests/PptMcp.Core.Tests.csproj --filter "Feature=Screenshot"
+dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj --filter "Feature=Screenshot"
 
 # Specific feature
-dotnet test tests/PptMcp.Core.Tests/PptMcp.Core.Tests.csproj --filter "Feature=Slide"
+dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj --filter "Feature=Slide"
 ```
 
 ### ComInterop.Tests (Session/Batch Infrastructure)
 ```bash
 # Session/batch changes (MANDATORY - see CRITICAL-RULES.md Rule 3)
-dotnet test tests/PptMcp.ComInterop.Tests/PptMcp.ComInterop.Tests.csproj --filter "RunType=OnDemand"
+dotnet test tests/OutlookMcp.ComInterop.Tests/OutlookMcp.ComInterop.Tests.csproj --filter "RunType=OnDemand"
 ```
 
 ### McpServer.Tests (End-to-End Tool Tests)
 ```bash
 # All MCP tool tests
-dotnet test tests/PptMcp.McpServer.Tests/PptMcp.McpServer.Tests.csproj
+dotnet test tests/OutlookMcp.McpServer.Tests/OutlookMcp.McpServer.Tests.csproj
 
 # Specific tool
-dotnet test tests/PptMcp.McpServer.Tests/PptMcp.McpServer.Tests.csproj --filter "FullyQualifiedName~SlideTool"
+dotnet test tests/OutlookMcp.McpServer.Tests/OutlookMcp.McpServer.Tests.csproj --filter "FullyQualifiedName~SlideTool"
 ```
 
 ### CLI.Tests (Command-Line Interface)
 ```bash
 # All CLI tests
-dotnet test tests/PptMcp.CLI.Tests/PptMcp.CLI.Tests.csproj
+dotnet test tests/OutlookMcp.CLI.Tests/OutlookMcp.CLI.Tests.csproj
 
 # Specific command
-dotnet test tests/PptMcp.CLI.Tests/PptMcp.CLI.Tests.csproj --filter "FullyQualifiedName~Slide"
+dotnet test tests/OutlookMcp.CLI.Tests/OutlookMcp.CLI.Tests.csproj --filter "FullyQualifiedName~Slide"
 ```
 
 ### Run Specific Test by Name
 ```bash
 # Use full project path + filter
-dotnet test tests/PptMcp.Core.Tests/PptMcp.Core.Tests.csproj --filter "FullyQualifiedName~TestMethodName"
+dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj --filter "FullyQualifiedName~TestMethodName"
 ```
 
 ## Round-Trip Validation Pattern
@@ -190,12 +190,12 @@ It runs these six scenarios:
 
 ### Configuration Overrides
 
-- `ppt_mcp_SERVER_COMMAND` to override MCP server command
-- `PPT_CLI_COMMAND` to override CLI command
+- `outlook_mcp_SERVER_COMMAND` to override MCP server command
+- `OUTLOOK_CLI_COMMAND` to override CLI command
 
 ### Test Results
 
-Reports are generated in `tests/PptMcp.LLM.Tests/TestResults/`:
+Reports are generated in `tests/OutlookMcp.LLM.Tests/TestResults/`:
 - `report.html` - Visual HTML report
 - `report.json` - Machine-readable JSON
 

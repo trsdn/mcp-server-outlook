@@ -12,12 +12,12 @@ pytestmark = [pytest.mark.aitest, pytest.mark.cli]
 
 
 @pytest.mark.asyncio
-async def test_cli_chart_workflows(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_chart_workflows(aitest_run, outlook_cli_server, outlook_cli_skill):
     agent = Agent(
         name="cli-chart-workflows",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=25,
         retries=DEFAULT_RETRIES,
     )

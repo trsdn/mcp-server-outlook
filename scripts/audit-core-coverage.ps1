@@ -11,7 +11,7 @@
     .\audit-core-coverage.ps1
 
 .NOTES
-    Author: PptMcp Team
+    Author: OutlookMcp Team
     Created: 2025-01-28
     Purpose: Prevent Core Commands from being added without MCP Server exposure
 #>
@@ -282,10 +282,10 @@ function Find-InterfaceForEnum {
     }
 }
 
-$toolActionsPath = "$rootDir/src/PptMcp.Core/Models/Actions/ToolActions.cs"
+$toolActionsPath = "$rootDir/src/OutlookMcp.Core/Models/Actions/ToolActions.cs"
 
 # Dynamically discover all interfaces to check
-$commandsPath = Join-Path $rootDir "src\PptMcp.Core\Commands"
+$commandsPath = Join-Path $rootDir "src\OutlookMcp.Core\Commands"
 $enumTypes = Get-AllEnumTypes -ToolActionsPath $toolActionsPath
 
 $interfaces = @()
@@ -617,7 +617,7 @@ function Get-HandledEnumValues {
 }
 
 # Check switch completeness for each tool
-$toolsPath = Join-Path $rootDir "src\PptMcp.McpServer\Tools"
+$toolsPath = Join-Path $rootDir "src\OutlookMcp.McpServer\Tools"
 $switchIssues = @()
 $hasSwitchIssues = $false
 

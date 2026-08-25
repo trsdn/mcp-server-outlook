@@ -51,7 +51,7 @@ A real user doesn't know our CLI syntax. Neither should the test prompt.
 # ❌ WRONG: Teaching the LLM how to use our CLI
 prompt = """
 Create a slide layout then set it to use a custom master using 
-'pptcli slidemaster' (run --help to see options).
+'outlookcli slidemaster' (run --help to see options).
 The custom layout uses layout-type value 0.
 """
 
@@ -67,7 +67,7 @@ title and content areas.
 ```python
 # ❌ WRONG: Directing the LLM to a specific command
 prompt = """
-Use the 'pptcli chartconfig' command to change the chart title.
+Use the 'outlookcli chartconfig' command to change the chart title.
 """
 
 # ✅ CORRECT: What the user wants
@@ -85,14 +85,14 @@ The system prompt belongs to the agent, not to us. We don't control what system 
 # ❌ WRONG: Adding our own guidance to the system prompt
 agent = Agent(
     system_prompt=(
-        "Run 'pptcli <command> --help' when unsure about parameter names\n"
+        "Run 'outlookcli <command> --help' when unsure about parameter names\n"
         "Always use -q flag for clean JSON output"
     ),
 )
 
 # ✅ CORRECT: No system prompt (use skill only) or minimal role context
 agent = Agent(
-    skill=ppt_cli_skill,  # Our product — this IS the right place for guidance
+    skill=outlook_cli_skill,  # Our product — this IS the right place for guidance
 )
 ```
 
@@ -101,12 +101,12 @@ agent = Agent(
 ```python
 # ❌ WRONG: Teaching the LLM our session model
 prompt = """
-IMPORTANT: First, run 'pptcli session list' to confirm 
+IMPORTANT: First, run 'outlookcli session list' to confirm 
 which file is open, then use that file path.
 """
 
 # ✅ CORRECT: If session discovery is hard, fix the product:
-# - Better error messages: "No active session. Run 'pptcli session list' to see open files."
+# - Better error messages: "No active session. Run 'outlookcli session list' to see open files."
 # - Better skill docs: Add "Session Management" section with recovery patterns
 # - Better --help: Show session workflow in command help
 ```
@@ -167,7 +167,7 @@ Match test complexity to what a real user would attempt in one conversation:
 
 When a test fails, investigate in this order:
 
-### 1. Skill Documentation (`skills/ppt-cli/SKILL.md`, `skills/ppt-mcp/SKILL.md`)
+### 1. Skill Documentation (`skills/outlook-cli/SKILL.md`, `skills/outlook-mcp/SKILL.md`)
 
 The skill IS our product's interface to LLMs. If the LLM doesn't know how to:
 - Add a shape to a slide → Add workflow patterns to the skill
@@ -183,7 +183,7 @@ To change chart properties WITHOUT deleting the chart:
 
 ### 2. CLI `--help` Output
 
-The `--help` text is what the LLM sees when it runs `pptcli <command> --help`. If a parameter is hard to discover, improve the help text.
+The `--help` text is what the LLM sees when it runs `outlookcli <command> --help`. If a parameter is hard to discover, improve the help text.
 
 Look at:
 - `[Description]` attributes on Settings properties
@@ -220,10 +220,10 @@ If the LLM consistently gets a parameter name wrong, the name might be confusing
 agent = Agent(
     name="descriptive-test-name",
     provider=Provider(model=f"azure/{DEFAULT_MODEL}", rpm=DEFAULT_RPM, tpm=DEFAULT_TPM),
-    cli_servers=[ppt_cli_server],   # CLI tests
+    cli_servers=[outlook_cli_server],   # CLI tests
     # OR
-    mcp_servers=[ppt_mcp_server],   # MCP tests
-    skill=ppt_cli_skill,            # Our product documentation
+    mcp_servers=[outlook_mcp_server],   # MCP tests
+    skill=outlook_cli_skill,            # Our product documentation
     max_turns=DEFAULT_MAX_TURNS,      # Always set explicitly
 )
 ```
@@ -286,16 +286,16 @@ The ONLY differences between CLI and MCP versions of a test should be:
 # CLI version
 agent = Agent(
     name="test-name-cli",
-    cli_servers=[ppt_cli_server],
-    skill=ppt_cli_skill,
+    cli_servers=[outlook_cli_server],
+    skill=outlook_cli_skill,
     ...
 )
 
 # MCP version
 agent = Agent(
     name="test-name-mcp",
-    mcp_servers=[ppt_mcp_server],
-    skill=ppt_mcp_skill,
+    mcp_servers=[outlook_mcp_server],
+    skill=outlook_mcp_skill,
     ...
 )
 ```
@@ -343,8 +343,8 @@ skills/shared/*.md (source of truth)
 
 - **Templates:** `skills/templates/SKILL.cli.sbn`, `skills/templates/SKILL.mcp.sbn`
 - **Reference docs (source of truth):** `skills/shared/*.md` → auto-synced to BOTH skill refs AND MCP prompts
-- **Generated files (NEVER edit):** `skills/ppt-cli/SKILL.md`, `skills/ppt-mcp/SKILL.md`, `obj/.../PptSkillPrompts.g.cs`
-- **Description overrides:** `src/PptMcp.McpServer/PptMcp.McpServer.csproj` → `GenerateSkillPromptsClass` task
+- **Generated files (NEVER edit):** `skills/outlook-cli/SKILL.md`, `skills/outlook-mcp/SKILL.md`, `obj/.../PptSkillPrompts.g.cs`
+- **Description overrides:** `src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj` → `GenerateSkillPromptsClass` task
 - **Build command:** `dotnet build -c Release` regenerates SKILL.md, copies references, and generates prompt class
 
 ### Testing Impact

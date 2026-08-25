@@ -1,4 +1,4 @@
-# Test Naming Standard - PptMcp
+# Test Naming Standard - OutlookMcp
 
 ## Overview
 

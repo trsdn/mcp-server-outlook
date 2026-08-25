@@ -4,14 +4,14 @@
 [![.NET](https://img.shields.io/badge/.NET-9-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#requirements)
 
-**Outlook-first MCP server migration built on the architecture of `mcp-server-ppt`.**
+**Outlook-first MCP server migration built on the architecture of `mcp-server-outlook`.**
 
-This repository is no longer intended to remain a PowerPoint product. It is the active Outlook migration target bootstrapped from the local `mcp-server-ppt` baseline.
+This repository is no longer intended to remain a PowerPoint product. It is the active Outlook migration target bootstrapped from the local `mcp-server-outlook` baseline.
 
 Today the repository is still in transition:
 
 - the repo identity is now Outlook-first
-- the internal codebase still contains many inherited `PptMcp` names
+- the internal codebase still contains many inherited `OutlookMcp` names
 - many packages, skills, binaries, tests, and docs still reflect PowerPoint-era naming and behavior
 - the long-term goal is full Outlook COM coverage with MCP, CLI, and VS Code extension parity
 
@@ -62,11 +62,11 @@ After that, the next major domains are:
 
 The migration keeps the proven generator-driven shape of the original project where it still makes sense:
 
-- `src\PptMcp.Core` defines command interfaces and implementations
-- `src\PptMcp.Service` handles routing and IPC-backed orchestration
-- `src\PptMcp.Generators.Mcp` and `src\PptMcp.Generators.Cli` generate MCP and CLI surfaces
-- `src\PptMcp.McpServer` hosts the MCP server
-- `src\PptMcp.CLI` provides the command-line surface
+- `src\OutlookMcp.Core` defines command interfaces and implementations
+- `src\OutlookMcp.Service` handles routing and IPC-backed orchestration
+- `src\OutlookMcp.Generators.Mcp` and `src\OutlookMcp.Generators.Cli` generate MCP and CLI surfaces
+- `src\OutlookMcp.McpServer` hosts the MCP server
+- `src\OutlookMcp.CLI` provides the command-line surface
 - `vscode-extension` packages the user-facing VS Code integration
 
 The biggest architectural change is the session model:
@@ -120,7 +120,7 @@ These PowerPoint-centric families should not survive as Outlook concepts:
 
 This repo is now `mcp-server-outlook`, but several inherited names are still present during migration:
 
-- solution and projects still use `PptMcp.*`
+- solution and projects still use `OutlookMcp.*`
 - package ids and skill names still use inherited `ppt-*` forms
 - some docs and examples still refer to PowerPoint
 - some public metadata still points at the original PowerPoint lineage until the Outlook surfaces are in place
@@ -134,7 +134,7 @@ That cleanup is intentional work still to be completed, not hidden compatibility
 3. Generate Outlook CLI and MCP surfaces from that taxonomy.
 4. Rewire skills and extension UX to those surfaces.
 5. Replace PowerPoint-specific tests, docs, examples, and evals.
-6. Perform the final coordinated rename of inherited `PptMcp` internals.
+6. Perform the final coordinated rename of inherited `OutlookMcp` internals.
 
 ## Requirements
 

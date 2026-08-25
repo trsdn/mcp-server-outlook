@@ -16,8 +16,8 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE = "PPTMCP_EVAL_ASSET_REPO_ROOT"
-PPTCLI = str(REPO_ROOT / "src" / "PptMcp.CLI" / "bin" / "Release" / "net9.0-windows" / "pptcli.exe")
+EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE = "OUTLOOKMCP_EVAL_ASSET_REPO_ROOT"
+OUTLOOKCLI = str(REPO_ROOT / "src" / "OutlookMcp.CLI" / "bin" / "Release" / "net9.0-windows" / "outlookcli.exe")
 
 
 def get_eval_asset_repo_root() -> Path:
@@ -46,8 +46,8 @@ PROFILES = {
 
 
 def cli(*args):
-    """Run pptcli command, return parsed JSON."""
-    result = subprocess.run([PPTCLI] + list(args), capture_output=True, text=True, timeout=30)
+    """Run outlookcli command, return parsed JSON."""
+    result = subprocess.run([OUTLOOKCLI] + list(args), capture_output=True, text=True, timeout=30)
     # Find last JSON line
     for line in reversed(result.stdout.strip().split("\n")):
         line = line.strip()

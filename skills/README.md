@@ -21,4 +21,4 @@ The skill surface should be rebuilt around Outlook workflows such as:
 
 ## Transitional naming note
 
-Until the cleanup pass lands, expect both the new `outlook-*` skill folders and inherited names such as `ppt-cli`, `ppt-mcp`, and `PptMcp.*` in this area.
+Until the cleanup pass lands, expect both the new `outlook-*` skill folders and inherited names such as `outlook-cli`, `outlook-mcp`, and `OutlookMcp.*` in this area.

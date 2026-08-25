@@ -29,10 +29,10 @@ Enforced: PR reviews, CI/CD checks, create a branch first, up-to-date branches, 
 # ⚠️ IMPORTANT: gh CLI requires authentication with a PERSONAL GitHub account.
 # Enterprise Managed User (EMU) accounts cannot access public repos via gh CLI.
 # Use: gh auth login --with-token (with a personal access token)
-gh api repos/trsdn/mcp-server-ppt/pulls/PULL_NUMBER/comments --paginate
+gh api repos/trsdn/mcp-server-outlook/pulls/PULL_NUMBER/comments --paginate
 
 # Or use the mcp_github tool if available
-mcp_github_github_pull_request_read(method="get_review_comments", owner="trsdn", repo="mcp-server-ppt", pullNumber=PULL_NUMBER)
+mcp_github_github_pull_request_read(method="get_review_comments", owner="trsdn", repo="mcp-server-outlook", pullNumber=PULL_NUMBER)
 ```
 
 **Common automated reviewers:**

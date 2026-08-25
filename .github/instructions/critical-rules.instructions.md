@@ -4,7 +4,7 @@ applyTo: "**"
 
 # CRITICAL RULES - MUST FOLLOW
 
-> **⚠️ NON-NEGOTIABLE rules for all PptMcp development**
+> **⚠️ NON-NEGOTIABLE rules for all OutlookMcp development**
 
 ## Rule 0: NEVER Commit Without Running Tests (CRITICAL)
 
@@ -382,7 +382,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 
 **Violations:**
 - ❌ `<InternalsVisibleTo Include="*.Tests" />` in production `.csproj`
-- ❌ `using PptMcp.*.Tests` in production code
+- ❌ `using OutlookMcp.*.Tests` in production code
 - ❌ Production code calling test helper methods
 - ❌ Production business logic in helper classes that tests use
 
@@ -678,10 +678,10 @@ if (string.IsNullOrWhiteSpace(tableName))
 # ⚠️ IMPORTANT: gh CLI requires authentication with a PERSONAL GitHub account.
 # Enterprise Managed User (EMU) accounts cannot access public repos via gh CLI.
 # Use: gh auth login --with-token (with a personal access token)
-gh api repos/trsdn/mcp-server-ppt/pulls/PULL_NUMBER/comments --paginate
+gh api repos/trsdn/mcp-server-outlook/pulls/PULL_NUMBER/comments --paginate
 
 # Or use the mcp_github tool if available
-mcp_github_github_pull_request_read(method="get_review_comments", owner="trsdn", repo="mcp-server-ppt", pullNumber=PULL_NUMBER)
+mcp_github_github_pull_request_read(method="get_review_comments", owner="trsdn", repo="mcp-server-outlook", pullNumber=PULL_NUMBER)
 ```
 
 **Common automated reviewers:**
@@ -878,24 +878,24 @@ Result: Caught during commit review, required additional fixes.
 
 ## Rule 25: Use PowerShell Syntax in Documentation (CRITICAL)
 
-**PptMcp is Windows-only. ALL documentation code blocks MUST use PowerShell syntax, NOT bash.**
+**OutlookMcp is Windows-only. ALL documentation code blocks MUST use PowerShell syntax, NOT bash.**
 
 ```markdown
 # ❌ WRONG: bash syntax
 ```bash
 dotnet build
-pptcli sheet list --file "test.pptx"
+outlookcli sheet list --file "test.pptx"
 ```
 
 # ✅ CORRECT: PowerShell syntax
 ```powershell
 dotnet build
-pptcli sheet list --file "test.pptx"
+outlookcli sheet list --file "test.pptx"
 ```
 ```
 
 **Why Critical:**
-- PptMcp requires Windows + PowerPoint COM interop
+- OutlookMcp requires Windows + PowerPoint COM interop
 - bash syntax confuses Windows users
 - PowerShell is the native Windows shell
 - Syntax highlighting differs between bash/powershell
@@ -1079,7 +1079,7 @@ public void ProgressAdapter_Maps_Current_To_Progress()
 
 **NEVER write unit tests. Unit tests that mock COM objects, fake contexts, or test adapter mappings in isolation prove NOTHING. Write integration tests that exercise real PowerPoint COM automation.**
 
-**Why Critical:** PptMcp is a COM interop project. The bugs that matter — STA threading deadlocks, COM object leaks, OleMessageFilter re-entrancy, type conversion failures (`double` vs `int`), shape persistence — **only manifest when real PowerPoint is running**. A unit test that verifies an adapter maps field A to field B catches zero real bugs. An integration test that opens a presentation, adds a shape, and verifies the result catches ALL of them.
+**Why Critical:** OutlookMcp is a COM interop project. The bugs that matter — STA threading deadlocks, COM object leaks, OleMessageFilter re-entrancy, type conversion failures (`double` vs `int`), shape persistence — **only manifest when real PowerPoint is running**. A unit test that verifies an adapter maps field A to field B catches zero real bugs. An integration test that opens a presentation, adds a shape, and verifies the result catches ALL of them.
 
 ```csharp
 // ❌ WRONG: Unit test that proves nothing

@@ -1,6 +1,6 @@
-# PptMcp Tests
+# OutlookMcp Tests
 
-> **⚠️ No Traditional Unit Tests**: PptMcp has no unit tests. Integration tests ARE our unit tests because PowerPoint COM cannot be meaningfully mocked. See [`docs/ADR-001-NO-UNIT-TESTS.md`](../docs/ADR-001-NO-UNIT-TESTS.md) for full architectural rationale.
+> **⚠️ No Traditional Unit Tests**: OutlookMcp has no unit tests. Integration tests ARE our unit tests because PowerPoint COM cannot be meaningfully mocked. See [`docs/ADR-001-NO-UNIT-TESTS.md`](../docs/ADR-001-NO-UNIT-TESTS.md) for full architectural rationale.
 
 ## Quick Start
 
@@ -29,11 +29,11 @@ dotnet test --filter "(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand"
 
 ```
 tests/
-├── PptMcp.Core.Tests/           # Core business logic (Integration)
-├── PptMcp.Diagnostics.Tests/    # PowerPoint COM behavior research (OnDemand, Manual)
-├── PptMcp.McpServer.Tests/      # MCP protocol layer (Integration)
-├── PptMcp.CLI.Tests/            # CLI wrapper (Integration)
-└── PptMcp.ComInterop.Tests/     # COM utilities (OnDemand)
+├── OutlookMcp.Core.Tests/           # Core business logic (Integration)
+├── OutlookMcp.Diagnostics.Tests/    # PowerPoint COM behavior research (OnDemand, Manual)
+├── OutlookMcp.McpServer.Tests/      # MCP protocol layer (Integration)
+├── OutlookMcp.CLI.Tests/            # CLI wrapper (Integration)
+└── OutlookMcp.ComInterop.Tests/     # COM utilities (OnDemand)
 
 llm-tests/                          # LLM tool behavior validation (Manual)
 ```
@@ -49,7 +49,7 @@ llm-tests/                          # LLM tool behavior validation (Manual)
 
 ## Diagnostics Tests
 
-Diagnostics tests are research/exploratory tests in `PptMcp.Diagnostics.Tests` that document the actual behavior of PowerPoint's COM APIs without our abstraction layer. These tests are **excluded from CI** to keep automation focused on core functionality.
+Diagnostics tests are research/exploratory tests in `OutlookMcp.Diagnostics.Tests` that document the actual behavior of PowerPoint's COM APIs without our abstraction layer. These tests are **excluded from CI** to keep automation focused on core functionality.
 
 **Purpose:**
 - Understand PowerPoint COM API behavior for Power Query, Data Model, PivotTables, etc.
@@ -63,10 +63,10 @@ Diagnostics tests are research/exploratory tests in `PptMcp.Diagnostics.Tests` t
 **Run diagnostics tests locally:**
 ```powershell
 # All diagnostics tests
-dotnet test tests/PptMcp.Diagnostics.Tests/ --filter "RunType=OnDemand&Layer=Diagnostics"
+dotnet test tests/OutlookMcp.Diagnostics.Tests/ --filter "RunType=OnDemand&Layer=Diagnostics"
 
 # Specific diagnostic tests
-dotnet test tests/PptMcp.Diagnostics.Tests/ --filter "Feature=PowerQuery&RunType=OnDemand"
+dotnet test tests/OutlookMcp.Diagnostics.Tests/ --filter "Feature=PowerQuery&RunType=OnDemand"
 ```
 
 **CI Behavior:**
@@ -165,13 +165,13 @@ dotnet test --filter "Category=Integration&RunType!=OnDemand"
 All VBA tests are tagged with `[Trait("Feature", "VBA")]` or `[Trait("Feature", "VBATrust")]`:
 
 ```
-tests/PptMcp.Core.Tests/Integration/Commands/Script/
+tests/OutlookMcp.Core.Tests/Integration/Commands/Script/
   - ScriptCommandsTests.cs
   - ScriptCommandsTests.Lifecycle.cs
   - VbaTrustDetectionTests.ScriptCommands.cs
   - VbaTrustDetectionTests.cs
 
-tests/PptMcp.CLI.Tests/Integration/Commands/
+tests/OutlookMcp.CLI.Tests/Integration/Commands/
   - ScriptAndSetupCommandsTests.cs
 ```
 

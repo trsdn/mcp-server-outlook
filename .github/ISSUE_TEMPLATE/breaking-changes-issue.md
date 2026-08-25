@@ -12,7 +12,7 @@ Implement breaking changes from `MCP-BREAKING-CHANGES-PROPOSAL.md` before the 1.
 
 ## Objectives
 
-Since PptMcp MCP Server hasn't been released yet, we can make breaking changes without affecting users. This is a **golden opportunity** to improve the API before 1.0.
+Since OutlookMcp MCP Server hasn't been released yet, we can make breaking changes without affecting users. This is a **golden opportunity** to improve the API before 1.0.
 
 ### Key Changes
 
@@ -38,7 +38,7 @@ Since PptMcp MCP Server hasn't been released yet, we can make breaking changes w
   - `commit_ppt_batch` → `end_ppt_session`
   - `list_ppt_batches` → `list_ppt_sessions`
 - [ ] Update all `batchId` parameters to `sessionId` in:
-  - All 9 tool files in `src/PptMcp.McpServer/Tools/`
+  - All 9 tool files in `src/OutlookMcp.McpServer/Tools/`
   - `PptToolsBase.cs`
   - All prompt files (4 files)
 - [ ] Update documentation:
@@ -80,7 +80,7 @@ Since PptMcp MCP Server hasn't been released yet, we can make breaking changes w
 ### Phase 2: Error Response Standardization (1-2 days)
 
 #### 2.1 Define Error Codes
-- [ ] Create `src/PptMcp.Core/Models/ErrorCodes.cs`
+- [ ] Create `src/OutlookMcp.Core/Models/ErrorCodes.cs`
 - [ ] Define standard error codes:
   ```csharp
   FILE_NOT_FOUND
@@ -183,8 +183,8 @@ Since PptMcp MCP Server hasn't been released yet, we can make breaking changes w
 ## Files Affected
 
 **C# Files**: ~30 files
-- 9 tool files in `src/PptMcp.McpServer/Tools/`
-- 4 prompt files in `src/PptMcp.McpServer/Prompts/`
+- 9 tool files in `src/OutlookMcp.McpServer/Tools/`
+- 4 prompt files in `src/OutlookMcp.McpServer/Prompts/`
 - 1 Program.cs
 - ~10 Core command files
 - ~10 test files

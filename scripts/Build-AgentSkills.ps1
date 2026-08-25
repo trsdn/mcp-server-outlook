@@ -4,23 +4,23 @@
 
 .DESCRIPTION
     Creates distributable artifacts for Agent Skills:
-    - ppt-skills-v{version}.zip: Combined skill package with both ppt-mcp and ppt-cli
-    - packages/ppt-mcp-skill/: npm package for ppt-mcp skill (publish with npm publish)
-    - packages/ppt-cli-skill/: npm package for ppt-cli skill (publish with npm publish)
+    - outlook-skills-v{version}.zip: Combined skill package with both outlook-mcp and outlook-cli
+    - packages/outlook-mcp-skill/: npm package for outlook-mcp skill (publish with npm publish)
+    - packages/outlook-cli-skill/: npm package for outlook-cli skill (publish with npm publish)
     - CLAUDE.md: Claude Code project instructions
     - .cursorrules: Cursor project rules
 
     Shared behavioral guidance from skills/shared/ is automatically copied
-    to both ppt-mcp/references/ and ppt-cli/references/ during packaging.
+    to both outlook-mcp/references/ and outlook-cli/references/ during packaging.
 
-    Users install with: npx skills add trsdn/mcp-server-ppt
-    Or via npm: npx skillpm install ppt-mcp-skill
+    Users install with: npx skills add trsdn/mcp-server-outlook
+    Or via npm: npx skillpm install outlook-mcp-skill
 
 .PARAMETER OutputDir
     Output directory for artifacts. Default: artifacts/skills
 
 .PARAMETER Version
-    Override version from skills/ppt-mcp/VERSION
+    Override version from skills/outlook-mcp/VERSION
 
 .PARAMETER PopulateReferences
     Copy shared references to skill folders for local development (without packaging).
@@ -45,25 +45,25 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $SkillsDir = Join-Path $RepoRoot "skills"
 $SharedDir = Join-Path $SkillsDir "shared"
 
-# Function to generate CLI command reference from pptcli --help output
+# Function to generate CLI command reference from outlookcli --help output
 function Generate-CliReference {
     param(
         [string]$SkillPath,
-        [string]$pptcliPath = $null
+        [string]$outlookcliPath = $null
     )
 
-    # Find pptcli binary
-    if (-not $pptcliPath) {
-        $pptcliPath = Join-Path $RepoRoot "src/PptMcp.CLI/bin/Release/net10.0-windows/pptcli.exe"
+    # Find outlookcli binary
+    if (-not $outlookcliPath) {
+        $outlookcliPath = Join-Path $RepoRoot "src/OutlookMcp.CLI/bin/Release/net10.0-windows/outlookcli.exe"
     }
 
-    if (-not (Test-Path $pptcliPath)) {
-        Write-Warning "pptcli not found at $pptcliPath - skipping CLI reference generation"
-        Write-Warning "Build the CLI first: dotnet build src/PptMcp.CLI -c Release"
+    if (-not (Test-Path $outlookcliPath)) {
+        Write-Warning "outlookcli not found at $outlookcliPath - skipping CLI reference generation"
+        Write-Warning "Build the CLI first: dotnet build src/OutlookMcp.CLI -c Release"
         return
     }
 
-    Write-Host "  Generating CLI command reference from pptcli..." -ForegroundColor Cyan
+    Write-Host "  Generating CLI command reference from outlookcli..." -ForegroundColor Cyan
 
     $RefsDir = Join-Path $SkillPath "references"
     if (-not (Test-Path $RefsDir)) {
@@ -74,11 +74,11 @@ function Generate-CliReference {
     $Content = @()
     $Content += "# CLI Command Reference"
     $Content += ""
-    $Content += "> Auto-generated from \`pptcli --help\`. Do not edit manually."
+    $Content += "> Auto-generated from \`outlookcli --help\`. Do not edit manually."
     $Content += ""
 
     # Get main help to extract commands
-    $MainHelp = & $pptcliPath --help 2>&1 | Out-String
+    $MainHelp = & $outlookcliPath --help 2>&1 | Out-String
 
     # Parse commands from main help (look for lines with command names)
     $Commands = @()
@@ -101,7 +101,7 @@ function Generate-CliReference {
         $Content += ""
 
         # Get command help
-        $CmdHelp = & $pptcliPath $cmd --help 2>&1 | Out-String
+        $CmdHelp = & $outlookcliPath $cmd --help 2>&1 | Out-String
 
         # Extract actions from the description line
         if ($CmdHelp -match "Actions:\s*(.+?)(?:\r?\n|$)") {
@@ -168,13 +168,13 @@ function Copy-SharedReferences {
 
     # Define which files each skill needs (based on SKILL.md @references/)
     $SkillReferences = @{
-        "ppt-cli" = @(
+        "outlook-cli" = @(
             "behavioral-rules.md"
             "anti-patterns.md"
             "workflows.md"
             # cli-commands.md is generated dynamically by Generate-CliReference
         )
-        "ppt-mcp" = @(
+        "outlook-mcp" = @(
             "behavioral-rules.md"
             "anti-patterns.md"
             "workflows.md"
@@ -218,17 +218,17 @@ function Copy-SharedReferences {
 if ($PopulateReferences) {
     Write-Host "Populating references from shared/ for local development..." -ForegroundColor Cyan
 
-    # Copy to ppt-mcp
-    $McpPath = Join-Path $SkillsDir "ppt-mcp"
+    # Copy to outlook-mcp
+    $McpPath = Join-Path $SkillsDir "outlook-mcp"
     if (Test-Path $McpPath) {
-        Copy-SharedReferences -SkillPath $McpPath -SkillName "ppt-mcp"
+        Copy-SharedReferences -SkillPath $McpPath -SkillName "outlook-mcp"
     }
 
-    # Copy to ppt-cli
-    $CliPath = Join-Path $SkillsDir "ppt-cli"
+    # Copy to outlook-cli
+    $CliPath = Join-Path $SkillsDir "outlook-cli"
     if (Test-Path $CliPath) {
-        Copy-SharedReferences -SkillPath $CliPath -SkillName "ppt-cli"
-        # Generate CLI command reference from pptcli --help
+        Copy-SharedReferences -SkillPath $CliPath -SkillName "outlook-cli"
+        # Generate CLI command reference from outlookcli --help
         Generate-CliReference -SkillPath $CliPath
     }
 
@@ -239,7 +239,7 @@ if ($PopulateReferences) {
 
 # Get version
 if (-not $Version) {
-    $VersionFile = Join-Path $SkillsDir "ppt-mcp/VERSION"
+    $VersionFile = Join-Path $SkillsDir "outlook-mcp/VERSION"
     if (Test-Path $VersionFile) {
         $Version = (Get-Content $VersionFile -Raw).Trim()
     } else {
@@ -262,7 +262,7 @@ if (-not (Test-Path $OutputPath)) {
 Write-Host "Building combined skills package..." -ForegroundColor Yellow
 
 # Create staging directory
-$StagingDir = Join-Path $env:TEMP "ppt-skills-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+$StagingDir = Join-Path $env:TEMP "outlook-skills-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null
 
 try {
@@ -270,24 +270,24 @@ try {
     $SkillsStagingDir = Join-Path $StagingDir "skills"
     New-Item -ItemType Directory -Path $SkillsStagingDir -Force | Out-Null
 
-    # Copy ppt-mcp skill
-    $McpSource = Join-Path $SkillsDir "ppt-mcp"
+    # Copy outlook-mcp skill
+    $McpSource = Join-Path $SkillsDir "outlook-mcp"
     if (Test-Path $McpSource) {
-        Copy-Item -Path $McpSource -Destination "$SkillsStagingDir/ppt-mcp" -Recurse
-        Copy-SharedReferences -SkillPath "$SkillsStagingDir/ppt-mcp" -SkillName "ppt-mcp"
+        Copy-Item -Path $McpSource -Destination "$SkillsStagingDir/outlook-mcp" -Recurse
+        Copy-SharedReferences -SkillPath "$SkillsStagingDir/outlook-mcp" -SkillName "outlook-mcp"
     } else {
-        Write-Warning "ppt-mcp skill not found"
+        Write-Warning "outlook-mcp skill not found"
     }
 
-    # Copy ppt-cli skill
-    $CliSource = Join-Path $SkillsDir "ppt-cli"
+    # Copy outlook-cli skill
+    $CliSource = Join-Path $SkillsDir "outlook-cli"
     if (Test-Path $CliSource) {
-        Copy-Item -Path $CliSource -Destination "$SkillsStagingDir/ppt-cli" -Recurse
-        Copy-SharedReferences -SkillPath "$SkillsStagingDir/ppt-cli" -SkillName "ppt-cli"
-        # Generate CLI command reference from pptcli --help
-        Generate-CliReference -SkillPath "$SkillsStagingDir/ppt-cli"
+        Copy-Item -Path $CliSource -Destination "$SkillsStagingDir/outlook-cli" -Recurse
+        Copy-SharedReferences -SkillPath "$SkillsStagingDir/outlook-cli" -SkillName "outlook-cli"
+        # Generate CLI command reference from outlookcli --help
+        Generate-CliReference -SkillPath "$SkillsStagingDir/outlook-cli"
     } else {
-        Write-Warning "ppt-cli skill not found"
+        Write-Warning "outlook-cli skill not found"
     }
 
     # Copy skills README to root of package
@@ -297,7 +297,7 @@ try {
     }
 
     # Create ZIP archive
-    $ZipName = "ppt-skills-v$Version.zip"
+    $ZipName = "outlook-skills-v$Version.zip"
     $ZipPath = Join-Path $OutputPath $ZipName
 
     if (Test-Path $ZipPath) {
@@ -316,27 +316,27 @@ try {
 Write-Host ""
 Write-Host "Building npm skill packages..." -ForegroundColor Yellow
 
-# Populate ppt-mcp-skill npm package
-$NpmMcpDir = Join-Path $RepoRoot "packages/ppt-mcp-skill/skills/ppt-mcp"
+# Populate outlook-mcp-skill npm package
+$NpmMcpDir = Join-Path $RepoRoot "packages/outlook-mcp-skill/skills/outlook-mcp"
 if (Test-Path $NpmMcpDir) {
     # Clean previous build output (keep .gitkeep)
     Get-ChildItem $NpmMcpDir -Exclude ".gitkeep" -Recurse | Remove-Item -Recurse -Force
     # Copy SKILL.md
-    Copy-Item -Path (Join-Path $SkillsDir "ppt-mcp/SKILL.md") -Destination $NpmMcpDir
-    Copy-SharedReferences -SkillPath $NpmMcpDir -SkillName "ppt-mcp"
-    Write-Host "  Populated: packages/ppt-mcp-skill/" -ForegroundColor Green
+    Copy-Item -Path (Join-Path $SkillsDir "outlook-mcp/SKILL.md") -Destination $NpmMcpDir
+    Copy-SharedReferences -SkillPath $NpmMcpDir -SkillName "outlook-mcp"
+    Write-Host "  Populated: packages/outlook-mcp-skill/" -ForegroundColor Green
 }
 
-# Populate ppt-cli-skill npm package
-$NpmCliDir = Join-Path $RepoRoot "packages/ppt-cli-skill/skills/ppt-cli"
+# Populate outlook-cli-skill npm package
+$NpmCliDir = Join-Path $RepoRoot "packages/outlook-cli-skill/skills/outlook-cli"
 if (Test-Path $NpmCliDir) {
     # Clean previous build output (keep .gitkeep)
     Get-ChildItem $NpmCliDir -Exclude ".gitkeep" -Recurse | Remove-Item -Recurse -Force
     # Copy SKILL.md
-    Copy-Item -Path (Join-Path $SkillsDir "ppt-cli/SKILL.md") -Destination $NpmCliDir
-    Copy-SharedReferences -SkillPath $NpmCliDir -SkillName "ppt-cli"
+    Copy-Item -Path (Join-Path $SkillsDir "outlook-cli/SKILL.md") -Destination $NpmCliDir
+    Copy-SharedReferences -SkillPath $NpmCliDir -SkillName "outlook-cli"
     Generate-CliReference -SkillPath $NpmCliDir
-    Write-Host "  Populated: packages/ppt-cli-skill/" -ForegroundColor Green
+    Write-Host "  Populated: packages/outlook-cli-skill/" -ForegroundColor Green
 }
 
 # Copy CLAUDE.md and .cursorrules
@@ -356,35 +356,35 @@ if (Test-Path $CursorSrc) {
 
 # Generate manifest
 $Manifest = @{
-    name = "ppt-skills"
+    name = "outlook-skills"
     version = $Version
-    description = "PowerPoint MCP Server Agent Skills for AI coding assistants"
+    description = "Outlook MCP Server Agent Skills for AI coding assistants"
     platforms = @("github-copilot", "claude-code", "cursor", "windsurf", "gemini-cli", "goose", "codex", "opencode", "amp", "kilo", "roo", "trae")
     skills = @(
         @{
-            name = "ppt-mcp"
-            path = "skills/ppt-mcp"
+            name = "outlook-mcp"
+            path = "skills/outlook-mcp"
             description = "MCP Server skill - for conversational AI (Claude Desktop, VS Code Chat)"
             target = "MCP Server"
         }
         @{
-            name = "ppt-cli"
-            path = "skills/ppt-cli"
+            name = "outlook-cli"
+            path = "skills/outlook-cli"
             description = "CLI skill - for coding agents (Copilot, Cursor, Windsurf)"
             target = "CLI Tool"
         }
     )
     installation = @{
-        npx = "npx skills add trsdn/mcp-server-ppt"
-        selectSkill = "npx skills add trsdn/mcp-server-ppt --skill ppt-cli"
-        installBoth = "npx skills add trsdn/mcp-server-ppt --skill '*'"
+        npx = "npx skills add trsdn/mcp-server-outlook"
+        selectSkill = "npx skills add trsdn/mcp-server-outlook --skill outlook-cli"
+        installBoth = "npx skills add trsdn/mcp-server-outlook --skill '*'"
     }
     files = @(
         @{ name = "CLAUDE.md"; type = "config"; description = "Claude Code project instructions" }
         @{ name = ".cursorrules"; type = "config"; description = "Cursor project rules" }
     )
-    repository = "https://github.com/trsdn/mcp-server-ppt"
-    documentation = "https://PptMcpserver.dev/"
+    repository = "https://github.com/trsdn/mcp-server-outlook"
+    documentation = "https://github.com/trsdn/mcp-server-outlook"
     buildDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 }
 
@@ -405,5 +405,5 @@ Get-ChildItem $OutputPath | ForEach-Object {
 
 Write-Host ""
 Write-Host "Installation:" -ForegroundColor Cyan
-Write-Host "  npx skills add trsdn/mcp-server-ppt" -ForegroundColor White
-Write-Host "  (users will be prompted to select ppt-cli, ppt-mcp, or both)"
+Write-Host "  npx skills add trsdn/mcp-server-outlook" -ForegroundColor White
+Write-Host "  (users will be prompted to select outlook-cli, outlook-mcp, or both)"

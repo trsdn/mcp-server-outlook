@@ -48,7 +48,7 @@ git push origin feature/your-feature-name
 
 ### 4. **Create Pull Request**
 
-1. Go to [GitHub Repository](https://github.com/trsdn/mcp-server-ppt)
+1. Go to [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
 2. Click **"New Pull Request"**
 3. Select your feature branch
 4. Fill out the PR template:
@@ -122,21 +122,21 @@ The `main` branch is protected with:
 
 ### **Three-Tier Test Architecture**
 
-PptMcp uses a **production-ready three-tier testing approach** with organized directory structure:
+OutlookMcp uses a **production-ready three-tier testing approach** with organized directory structure:
 
 ```
 tests/
-├── PptMcp.Core.Tests/
+├── OutlookMcp.Core.Tests/
 │   ├── Unit/           # Fast tests, no PowerPoint required (~2-5 sec)
 │   ├── Integration/    # Medium speed, requires PowerPoint (~1-15 min)
 │   └── RoundTrip/      # Slow, comprehensive workflows (~3-10 min each)
-├── PptMcp.Diagnostics.Tests/
+├── OutlookMcp.Diagnostics.Tests/
 │   └── Integration/Diagnostics/ # Research tests, manual only (excluded from CI)
-├── PptMcp.McpServer.Tests/
+├── OutlookMcp.McpServer.Tests/
 │   ├── Unit/           # Fast tests, no server required  
 │   ├── Integration/    # Medium speed, requires MCP server
 │   └── RoundTrip/      # Slow, end-to-end protocol testing
-└── PptMcp.CLI.Tests/
+└── OutlookMcp.CLI.Tests/
     ├── Unit/           # Fast tests, no PowerPoint required
     └── Integration/    # Medium speed, requires PowerPoint & CLI
 ```
@@ -231,16 +231,16 @@ dotnet build -c Release
 - ✅ Update documentation
 - ✅ No unit tests needed (see ADR-001-NO-UNIT-TESTS.md)
 
-### **Source Agent Client (`src\PptMcp.Agent`)**
+### **Source Agent Client (`src\OutlookMcp.Agent`)**
 
 The repository also contains an official Node-based source component for multi-phase orchestration on top of the MCP server.
 
-Use this workflow when changing `src\PptMcp.Agent\**`:
+Use this workflow when changing `src\OutlookMcp.Agent\**`:
 
 ```powershell
-dotnet build src\PptMcp.McpServer\PptMcp.McpServer.csproj -c Release
+dotnet build src\OutlookMcp.McpServer\OutlookMcp.McpServer.csproj -c Release
 
-Set-Location src\PptMcp.Agent
+Set-Location src\OutlookMcp.Agent
 npm install
 npm run check
 npm test
@@ -313,7 +313,7 @@ When adding a new service category to Core:
    - ServiceRegistry class in Core
    - Command class in CLI.Generated
    - Registration entry in CliCommandRegistration
-4. **Test** - verify `pptcli COMMAND_NAME --help` works
+4. **Test** - verify `outlookcli COMMAND_NAME --help` works
 
 ### **Why Hard-Coded Categories?**
 
@@ -345,7 +345,7 @@ The categories are currently hard-coded in the CLI generator because:
 
 ### **CRITICAL: Keep server.json in Sync**
 
-When modifying MCP Server functionality, **you must update** `src/PptMcp.McpServer/.mcp/server.json`:
+When modifying MCP Server functionality, **you must update** `src/OutlookMcp.McpServer/.mcp/server.json`:
 
 #### **When to Update server.json:**
 
@@ -361,13 +361,13 @@ When modifying MCP Server functionality, **you must update** `src/PptMcp.McpServ
 # After making MCP Server code changes, verify:
 
 # 1. Tool definitions match actual implementations
-Compare-Object (Get-Content "src/PptMcp.McpServer/.mcp/server.json" | ConvertFrom-Json).tools (Get-ChildItem "src/PptMcp.McpServer/Tools/*.cs")
+Compare-Object (Get-Content "src/OutlookMcp.McpServer/.mcp/server.json" | ConvertFrom-Json).tools (Get-ChildItem "src/OutlookMcp.McpServer/Tools/*.cs")
 
 # 2. Build succeeds with updated configuration
-dotnet build src/PptMcp.McpServer/PptMcp.McpServer.csproj
+dotnet build src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj
 
 # 3. Test MCP server starts without errors
-dnx PptMcp.McpServer --yes
+dnx OutlookMcp.McpServer --yes
 ```
 
 #### **server.json Structure:**
@@ -467,8 +467,8 @@ When creating a PR, verify:
 
 ```powershell
 # Clone the repository
-git clone https://github.com/trsdn/mcp-server-ppt.git
-cd PptMcp
+git clone https://github.com/trsdn/mcp-server-outlook.git
+cd OutlookMcp
 
 # Install dependencies
 dotnet restore
@@ -480,14 +480,14 @@ dotnet test
 dotnet build -c Release
 
 # Test the built executable
-.\src\PptMcp.CLI\bin\Release\net10.0\pptcli.exe --version
+.\src\OutlookMcp.CLI\bin\Release\net10.0\outlookcli.exe --version
 ```
 
 ## ✂️ **Trimming and Native AOT Compatibility**
 
 ### **Why Trimming Is Not Supported**
 
-PptMcp **cannot be trimmed** due to fundamental architectural constraints of PowerPoint COM automation. The IL trimmer removes unused code at publish time, but PowerPoint COM interop requires dynamic code paths that the trimmer cannot statically analyze.
+OutlookMcp **cannot be trimmed** due to fundamental architectural constraints of PowerPoint COM automation. The IL trimmer removes unused code at publish time, but PowerPoint COM interop requires dynamic code paths that the trimmer cannot statically analyze.
 
 ### **Technical Constraints**
 

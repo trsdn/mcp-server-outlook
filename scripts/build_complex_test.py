@@ -2,8 +2,8 @@ import asyncio, json, os
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-DOTNET = r'C:\Users\torstenmahr\GitHub\mcp-server-ppt\src\PptMcp.McpServer\bin\Debug\net9.0-windows\PptMcp.McpServer.dll'
-FILE = r'C:\Users\torstenmahr\OneDrive - Microsoft\Desktop\PptMcp-ComplexTest.pptx'
+DOTNET = r'C:\Users\torstenmahr\GitHub\mcp-server-outlook\src\OutlookMcp.McpServer\bin\Debug\net9.0-windows\OutlookMcp.McpServer.dll'
+FILE = r'C:\Users\torstenmahr\OneDrive - Microsoft\Desktop\OutlookMcp-ComplexTest.pptx'
 
 if os.path.exists(FILE):
     os.remove(FILE)
@@ -37,7 +37,7 @@ async def main():
             s1_names = [s['name'] for s in s1.get('shapes', [])]
             print(f'  Slide 1 shapes: {s1_names}', flush=True)
             if len(s1_names) >= 2:
-                await ct(session, 'text', {'action': 'set', 'session_id': sid, 'slide_index': 1, 'shape_name': s1_names[0], 'text': 'PptMcp Complex Demo'})
+                await ct(session, 'text', {'action': 'set', 'session_id': sid, 'slide_index': 1, 'shape_name': s1_names[0], 'text': 'OutlookMcp Complex Demo'})
                 await ct(session, 'text', {'action': 'set', 'session_id': sid, 'slide_index': 1, 'shape_name': s1_names[1], 'text': 'Testing All COM Components\nTable \u2022 Chart \u2022 Animation \u2022 Design \u2022 Shapes'})
                 await ct(session, 'text', {'action': 'format', 'session_id': sid, 'slide_index': 1, 'shape_name': s1_names[0], 'font_name': 'Segoe UI', 'font_size': 44, 'bold': True, 'color': '#1B3A5C'})
 
@@ -132,7 +132,7 @@ async def main():
                 'text': 'Slide 2: Push transition (1.5s)\nSlide 3: Wipe transition (1.0s)\nSlide 4: Split transition (0.8s)\nSlide 5: Fade transition (1.2s)\n\nNavigate slides to see effects!'})
 
             # === NOTES ===
-            await ct(session, 'notes', {'action': 'set', 'session_id': sid, 'slide_index': 1, 'text': 'Title slide of the PptMcp complex demo.'})
+            await ct(session, 'notes', {'action': 'set', 'session_id': sid, 'slide_index': 1, 'text': 'Title slide of the OutlookMcp complex demo.'})
             await ct(session, 'notes', {'action': 'set', 'session_id': sid, 'slide_index': 2, 'text': 'Financial data table. Data entered cell-by-cell via COM.'})
             await ct(session, 'notes', {'action': 'set', 'session_id': sid, 'slide_index': 5, 'text': 'Animation demo - Fade, Fly, Appear effects via COM.'})
 

@@ -49,6 +49,11 @@ jobs:
           # ("see LICENSE.md"), which no SPDX allow-list can express. It is a
           # required dependency of @github/copilot-sdk, used by the source-side
           # agent in src/OutlookMcp.Agent, and is not redistributed by us.
+          #
+          # The Office interop assemblies carry no machine-readable license and
+          # StreamJsonRpc declares the compound expression
+          # "Apache-2.0 AND MIT AND MS-PL". All three are load-bearing for a
+          # Windows COM automation server and cannot be swapped out.
           allow-dependencies-licenses: >-
             pkg:npm/%40github/copilot,
             pkg:npm/%40github/copilot-darwin-arm64,
@@ -58,7 +63,10 @@ jobs:
             pkg:npm/%40github/copilot-linuxmusl-arm64,
             pkg:npm/%40github/copilot-linuxmusl-x64,
             pkg:npm/%40github/copilot-win32-arm64,
-            pkg:npm/%40github/copilot-win32-x64
+            pkg:npm/%40github/copilot-win32-x64,
+            pkg:nuget/Microsoft.Office.Interop.Outlook,
+            pkg:nuget/Microsoft.Office.Interop.PowerPoint,
+            pkg:nuget/StreamJsonRpc
           
       - name: Dependency Review Summary
         if: always()

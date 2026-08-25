@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-We actively support the following versions of PptMcp with security updates:
+We actively support the following versions of OutlookMcp with security updates:
 
 | Version | Supported          | Status |
 | ------- | ------------------ | ------ |
@@ -12,7 +12,7 @@ We actively support the following versions of PptMcp with security updates:
 
 ## Security Features
 
-PptMcp includes several security measures:
+OutlookMcp includes several security measures:
 
 ### Input Validation
 
@@ -33,13 +33,13 @@ PptMcp includes several security measures:
 - **Resource Cleanup**: Comprehensive COM object disposal and garbage collection
 - **No Remote Connections**: Only local PowerPoint automation supported
 
-### PptMcp Service Security
+### OutlookMcp Service Security
 
-The PptMcp Service manages PowerPoint COM automation sessions:
+The OutlookMcp Service manages PowerPoint COM automation sessions:
 
 **MCP Server**: The service runs fully **in-process** — no inter-process communication. There is no attack surface beyond the MCP Server process itself.
 
-**CLI**: The CLI daemon uses a **Windows named pipe** (`PptMcp-cli-{USER_SID}`) for communication between CLI commands and the daemon process:
+**CLI**: The CLI daemon uses a **Windows named pipe** (`OutlookMcp-cli-{USER_SID}`) for communication between CLI commands and the daemon process:
 
 | Protection | Status | Description |
 |------------|--------|-------------|
@@ -82,7 +82,7 @@ Report security vulnerabilities using one of these methods:
 
 **Preferred Method: GitHub Security Advisories**
 
-1. Go to <https://github.com/trsdn/mcp-server-ppt/security/advisories>
+1. Go to <https://github.com/trsdn/mcp-server-outlook/security/advisories>
 2. Click "Report a vulnerability"
 3. Fill out the advisory form with detailed information
 
@@ -90,7 +90,7 @@ Report security vulnerabilities using one of these methods:
 
 Contact the maintainer via GitHub: [@trsdn](https://github.com/trsdn)
 
-Subject: `[SECURITY] PptMcp Vulnerability Report`
+Subject: `[SECURITY] OutlookMcp Vulnerability Report`
 
 ### 3. Information to Include
 
@@ -108,7 +108,7 @@ Example:
 Vulnerability: Path traversal in file operations
 Impact: Attacker could read/write files outside intended directory
 Affected Versions: 1.0.0 - 1.0.2
-PoC: PptMcp.exe pq-export "../../../etc/passwd" "query"
+PoC: OutlookMcp.exe pq-export "../../../etc/passwd" "query"
 Suggested Fix: Validate resolved paths are within allowed directories
 ```
 
@@ -160,7 +160,7 @@ We follow responsible disclosure practices:
 
 ### PowerPoint COM Automation
 
-- **Local Only**: PptMcp only supports local PowerPoint automation
+- **Local Only**: OutlookMcp only supports local PowerPoint automation
 - **Windows Only**: Requires Windows with PowerPoint installed
 - **PowerPoint Process**: Creates PowerPoint.Application COM objects
 - **Macro Security**: VBA operations require user consent via `setup-vba-trust`
@@ -182,8 +182,8 @@ We follow responsible disclosure practices:
 
 Security updates are published through:
 
-- **GitHub Security Advisories**: <https://github.com/trsdn/mcp-server-ppt/security/advisories>
-- **Release Notes**: <https://github.com/trsdn/mcp-server-ppt/releases>
+- **GitHub Security Advisories**: <https://github.com/trsdn/mcp-server-outlook/security/advisories>
+- **Release Notes**: <https://github.com/trsdn/mcp-server-outlook/releases>
 - **NuGet Advisories**: Package vulnerabilities shown in NuGet
 
 Subscribe to repository notifications to receive security alerts.
@@ -206,7 +206,7 @@ Subscribe to repository notifications to receive security alerts.
 
 ## Security Contacts
 
-- **GitHub Security**: <https://github.com/trsdn/mcp-server-ppt/security>
+- **GitHub Security**: <https://github.com/trsdn/mcp-server-outlook/security>
 - **Maintainer**: @trsdn
 
 ## Additional Resources
@@ -227,4 +227,4 @@ Subscribe to repository notifications to receive security alerts.
 
 **Last Updated**: 2026-03-03
 
-Thank you for helping keep PptMcp and its users safe!
+Thank you for helping keep OutlookMcp and its users safe!

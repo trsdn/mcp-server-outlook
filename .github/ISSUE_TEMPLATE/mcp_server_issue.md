@@ -47,8 +47,8 @@ How is the MCP Server configured?
 ```json
 {
   "mcpServers": {
-    "ppt-mcp": {
-      "command": "mcp-ppt",
+    "outlook-mcp": {
+      "command": "mcp-outlook",
       // or other configuration
     }
   }
@@ -58,10 +58,10 @@ How is the MCP Server configured?
 ## Environment
 - **Windows Version**: [e.g. Windows 11, Windows 10]
 - **PowerPoint Version**: [e.g. PowerPoint 365, PowerPoint 2019]
-- **PptMcp Version**: [e.g. v1.0.0 - run `mcp-ppt --version` or `dotnet tool list -g`]
+- **OutlookMcp Version**: [e.g. v1.0.0 - run `mcp-outlook --version` or `dotnet tool list -g`]
 - **.NET Version**: [Run `dotnet --version`]
 - **Installation Method**: 
-  - [ ] Global .NET tool (`dotnet tool install --global PptMcp.McpServer`)
+  - [ ] Global .NET tool (`dotnet tool install --global OutlookMcp.McpServer`)
   - [ ] Source build
   - [ ] Other: [please specify]
 
@@ -94,7 +94,7 @@ AI: [response]
   - [ ] External connections
 
 ## VBA-Related Issues (if applicable)
-- [ ] VBA trust is properly configured (`PptMcp check-vba-trust`)
+- [ ] VBA trust is properly configured (`OutlookMcp check-vba-trust`)
 - [ ] Using .pptm file format for VBA operations
 - [ ] VBA module exists in the presentation
 - [ ] Macro security settings allow programmatic access

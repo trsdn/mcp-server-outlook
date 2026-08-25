@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Checks that all ((dynamic)) casts in PptMcp.Core and PptMcp.ComInterop have justification comments.
+    Checks that all ((dynamic)) casts in OutlookMcp.Core and OutlookMcp.ComInterop have justification comments.
 
 .DESCRIPTION
     Every use of ((dynamic)) cast (explicit type coercion) must be preceded by a comment explaining
@@ -34,8 +34,8 @@ $ErrorActionPreference = "Stop"
 $rootDir = Split-Path -Parent $PSScriptRoot
 
 $searchDirs = @(
-    (Join-Path $rootDir "src\PptMcp.Core"),
-    (Join-Path $rootDir "src\PptMcp.ComInterop")
+    (Join-Path $rootDir "src\OutlookMcp.Core"),
+    (Join-Path $rootDir "src\OutlookMcp.ComInterop")
 )
 
 # Files where bare dynamic casts are acceptable (infrastructure files)

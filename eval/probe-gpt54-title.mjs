@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
-const CLI_PATH = join(REPO_ROOT, 'src', 'PptMcp.CLI', 'bin', 'Release', 'net9.0-windows', 'pptcli.exe');
+const CLI_PATH = join(REPO_ROOT, 'src', 'OutlookMcp.CLI', 'bin', 'Release', 'net9.0-windows', 'outlookcli.exe');
 const pptx = join(__dirname, 'output', 'probe-gpt54-title.pptx');
 const png = join(__dirname, 'output', 'probe-gpt54-title.png');
 const prompt = `Use the CLI at ${CLI_PATH}. Build one title slide in ${pptx} and export ${png}. Use this exact workflow: session create -> slide create blank -> add 2 textboxes -> format text -> export slide-to-image -> session close --save. Keep it under 10 commands. Title: Revenue +8% validates Q4 plan. Subtitle: Board review | FY2025 Q4 | $128M revenue. When done, reply DONE only.`;

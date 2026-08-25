@@ -1,5 +1,5 @@
 ---
-applyTo: "src/PptMcp.McpServer/**/*.cs"
+applyTo: "src/OutlookMcp.McpServer/**/*.cs"
 ---
 
 # MCP Server Development Guide
@@ -50,7 +50,7 @@ private static string ForwardSomeAction(string sessionId, string? param)
     if (string.IsNullOrEmpty(param))
         throw new ModelContextProtocol.McpException("param is required for action");
 
-    // 2. Forward to in-process PptMcpService (direct call, no pipe)
+    // 2. Forward to in-process OutlookMcpService (direct call, no pipe)
     return PptToolsBase.ForwardToService("category.action", sessionId, new { param });
 }
 ```
@@ -166,7 +166,7 @@ public static async Task<string> PptSlide(string action, ...)
     };
 }
 
-// Action methods forward to in-process PptMcpService:
+// Action methods forward to in-process OutlookMcpService:
 private static string ForwardList(string sessionId)
 {
     return PptToolsBase.ForwardToService("slide.list", sessionId);

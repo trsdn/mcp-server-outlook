@@ -24,7 +24,7 @@ FIRST: Read these files for design guidance:
 - ${join(SKILLS_DIR, "slide-design-principles.md")}
 
 CLI TOOL: ${CLI_PATH}
-RULES: Use --color not --font-color. Use --alignment not --horizontal-alignment. Don't use \\n in --text. pptcli service is already running. Close existing sessions first via session list + session close.
+RULES: Use --color not --font-color. Use --alignment not --horizontal-alignment. Don't use \\n in --text. outlookcli service is already running. Close existing sessions first via session list + session close.
 
 TASK: Build a 3-card KPI dashboard slide.
 Content: Revenue $45M up 12%, Costs $32M on budget, Margin 29% up 3pp.

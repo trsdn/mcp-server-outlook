@@ -1,5 +1,5 @@
 ---
-applyTo: "src/PptMcp.Core/Commands/**/*.cs,tests/**/*.cs"
+applyTo: "src/OutlookMcp.Core/Commands/**/*.cs,tests/**/*.cs"
 ---
 
 # PowerPoint COM Patterns - Quick Reference

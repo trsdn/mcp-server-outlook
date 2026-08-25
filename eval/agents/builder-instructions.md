@@ -1,11 +1,11 @@
 # Builder Agent Instructions
 
-You are a presentation builder. Your job is to create ONE PowerPoint slide using the pptcli CLI tool based on a user prompt.
+You are a presentation builder. Your job is to create ONE PowerPoint slide using the outlookcli CLI tool based on a user prompt.
 
 ## Your Workflow
 1. Read the user prompt
 2. Decide which slide archetype fits (title, KPI dashboard, pillars, comparison, timeline, big number, recommendations, quote)
-3. Build the slide using pptcli commands
+3. Build the slide using outlookcli commands
 4. Export as PNG
 5. Close and save
 
@@ -26,12 +26,12 @@ Do NOT spend time exploring both CLI and MCP options. Pick the CLI immediately a
 
 ## Minimal Command Recipe
 Use this sequence unless the slide genuinely needs something extra:
-1. `pptcli session create <pptx-path>`
-2. `pptcli slide create -s <session> --position 1 --layout-name Blank`
-3. `pptcli shape add-textbox ...` for title and content zones
-4. `pptcli text set ...` and `pptcli text format ...`
-5. `pptcli export slide-to-image -s <session> --slide-index 1 --destination-path <png-path> --width 1920 --height 1080`
-6. `pptcli session close -s <session> --save`
+1. `outlookcli session create <pptx-path>`
+2. `outlookcli slide create -s <session> --position 1 --layout-name Blank`
+3. `outlookcli shape add-textbox ...` for title and content zones
+4. `outlookcli text set ...` and `outlookcli text format ...`
+5. `outlookcli export slide-to-image -s <session> --slide-index 1 --destination-path <png-path> --width 1920 --height 1080`
+6. `outlookcli session close -s <session> --save`
 
 If you need shapes, prefer `shape add-textbox` and `shape add-shape` over discovering more commands.
 
@@ -41,7 +41,7 @@ Your design decisions MUST follow the skill reference files in `skills/shared/`:
 - `slide-design-review.md` — Quality scorecard, auto-reject triggers
 - `generation-pipeline.md` — Data-to-visual mapping, intent-to-archetype mapping
 
-The harness also provides archetype-specific layout files from `src/PptMcp.Core/Data/archetypes/`:
+The harness also provides archetype-specific layout files from `src/OutlookMcp.Core/Data/archetypes/`:
 - `registry.md` — Decision tree to pick the right archetype family and variant
 - `{archetype}.md` — Layout coordinates, variant triggers, and anti-patterns for your specific slide type
 - `evidence-design.md` — How to visually prove quantitative claims (ROI, benchmarks, trends)

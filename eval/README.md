@@ -1,12 +1,12 @@
 # Slide Eval Framework
 
-Config-driven evaluation harnesses for testing and improving PptMcp slide-building behavior with real PowerPoint outputs.
+Config-driven evaluation harnesses for testing and improving OutlookMcp slide-building behavior with real PowerPoint outputs.
 
 This directory is a development-only workflow. It is not part of the shipped MCP package.
 
 ## Related Documentation
 
-- [Official Agent Client](../src/PptMcp.Agent/README.md)
+- [Official Agent Client](../src/OutlookMcp.Agent/README.md)
 - [Agent Client Architecture](../docs/AGENT-CLIENT.md)
 - [Archetype Pipeline](../docs/ARCHETYPE-PIPELINE.md)
 
@@ -16,11 +16,11 @@ The repo now contains both an official source-side agent client and the eval har
 
 | Area | Primary goal | Typical output |
 |---|---|---|
-| `src\PptMcp.Agent` | Build a deck from one user task through plan → execute → verify → repair | A presentation plus plan and run artifacts |
+| `src\OutlookMcp.Agent` | Build a deck from one user task through plan → execute → verify → repair | A presentation plus plan and run artifacts |
 | `eval\` | Measure, compare, and improve builder behavior across repeated scenarios | Score histories, PNGs, manifests, and run reports |
 | `skills\shared\*.md` | Shared guidance consumed by both | Reusable planning and design rules |
 
-Use `src\PptMcp.Agent` when you want one production-style build workflow.
+Use `src\OutlookMcp.Agent` when you want one production-style build workflow.
 
 Use `eval\` when you want repeatable experiments, score tracking, archetype sweeps, or skill-tuning loops.
 
@@ -201,8 +201,8 @@ But it is still the older workflow and should not be treated as the long-term sk
 
 - Node.js 18+
 - GitHub Copilot CLI installed and authenticated
-- PptMcp CLI built: `dotnet build src/PptMcp.CLI -c Release`
-- For MCP builder transport: build the MCP server too: `dotnet build src/PptMcp.McpServer -c Release`
+- OutlookMcp CLI built: `dotnet build src/OutlookMcp.CLI -c Release`
+- For MCP builder transport: build the MCP server too: `dotnet build src/OutlookMcp.McpServer -c Release`
 - Windows with PowerPoint installed
 
 ### Install
@@ -216,7 +216,7 @@ npm run postinstall
 ### Start the CLI service when using CLI-backed builds
 
 ```powershell
-pptcli service start
+outlookcli service start
 ```
 
 The archetype harness calls service startup defensively, but having the CLI service available up front is still the safest workflow for CLI-backed runs and fallback export paths.
@@ -225,7 +225,7 @@ The archetype harness calls service startup defensively, but having the CLI serv
 
 The eval code stays in this repo, but the large/private assets can live in a separate private repo clone.
 
-Set `PPTMCP_EVAL_ASSET_REPO_ROOT` to the **root of that private repo**. When set, the harnesses read and write eval assets under:
+Set `OUTLOOKMCP_EVAL_ASSET_REPO_ROOT` to the **root of that private repo**. When set, the harnesses read and write eval assets under:
 
 - `<asset-repo>\eval\input`
 - `<asset-repo>\eval\output`
@@ -234,7 +234,7 @@ Set `PPTMCP_EVAL_ASSET_REPO_ROOT` to the **root of that private repo**. When set
 
 When the variable is not set, the current repo root remains the default asset root.
 
-`PPTMCP_REFERENCE_DATA_ROOT` still works as a direct override for the reference catalog itself, but the preferred repo-local path is now `eval\data\archetype-references` instead of `local-data\archetype-references`.
+`OUTLOOKMCP_REFERENCE_DATA_ROOT` still works as a direct override for the reference catalog itself, but the preferred repo-local path is now `eval\data\archetype-references` instead of `local-data\archetype-references`.
 
 To move assets between this repo and a private repo clone, use:
 
@@ -489,7 +489,7 @@ If you are debugging instability or bad scores, inspect `builder.validation`, `j
 CLI-oriented builder guidance:
 
 - read design skills
-- build one slide with `pptcli`
+- build one slide with `outlookcli`
 - export PNG
 - save and close
 - stay available for a `builder-summary/v1` follow-up request

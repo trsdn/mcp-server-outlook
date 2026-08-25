@@ -2,7 +2,7 @@
  * Automated Slide Design Evaluation Loop
  *
  * Architecture:
- *   Builder Agent (Sonnet) + PptMcp MCP Server + Design Skills → builds slide → exports PNG
+ *   Builder Agent (Sonnet) + OutlookMcp MCP Server + Design Skills → builds slide → exports PNG
  *   Judge Agent (GPT) + Structure Instructions → evaluates PNG → scores + gaps
  *   Harness → records results, applies gaps to skills, repeats
  *
@@ -164,7 +164,7 @@ async function runBuilder(prompt, outputPath, opts, builderRuntime = null) {
   const skillPaths = SKILL_FILES.map((file) => join(SKILLS_DIR, file)).join("\n- ");
   const buildPrompt = `${builderInstructions}
 
-You build PowerPoint slides using the pptcli CLI.
+You build PowerPoint slides using the outlookcli CLI.
 
 CLI: ${CLI_PATH}
 RULES: --color not --font-color. --alignment not --horizontal-alignment. No \\n in --text. Service running. Close existing sessions first.
@@ -390,7 +390,7 @@ async function main() {
   const serviceStatus = ensureService();
 
   if (!serviceStatus.ok) {
-    throw new Error(`Failed to start pptcli service: ${serviceStatus.error}`);
+    throw new Error(`Failed to start outlookcli service: ${serviceStatus.error}`);
   }
 
   let selected = prompts;

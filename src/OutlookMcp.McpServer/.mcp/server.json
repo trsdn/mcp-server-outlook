@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.trsdn/mcp-server-outlook",
+  "title": "MCP Server for Outlook",
+  "description": "Outlook automation for AI - mailboxes, folders, mail items, drafts and attachments. Windows only.",
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "nuget",
+      "identifier": "OutlookMcp.McpServer",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [],
+      "environmentVariables": []
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/trsdn/mcp-server-outlook",
+    "source": "github"
+  }
+}

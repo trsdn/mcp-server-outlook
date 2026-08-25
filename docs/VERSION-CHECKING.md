@@ -1,10 +1,10 @@
 # Version Checking and Update Notifications
 
-This document describes how version checking and update notifications work in PptMcp.
+This document describes how version checking and update notifications work in OutlookMcp.
 
 ## Overview
 
-PptMcp provides version checking in two contexts:
+OutlookMcp provides version checking in two contexts:
 
 1. **CLI Tool** - Manual version check and automatic service startup notification
 2. **MCP Server** - Protocol-level version negotiation (handled by MCP SDK)
@@ -16,7 +16,7 @@ PptMcp provides version checking in two contexts:
 Users can check for updates at any time using the `--version` flag:
 
 ```powershell
-pptcli --version
+outlookcli --version
 ```
 
 This command:
@@ -28,10 +28,10 @@ This command:
 **Example output when update is available:**
 ```
 ⚠ Update available: 1.0.0 → 1.1.0
-Run: dotnet tool update --global PptMcp.McpServer
-Release notes: https://github.com/trsdn/mcp-server-ppt/releases/latest
+Run: dotnet tool update --global OutlookMcp.McpServer
+Release notes: https://github.com/trsdn/mcp-server-outlook/releases/latest
 
-When the PptMcp Service starts, it automatically checks for updates in the background:
+When the OutlookMcp Service starts, it automatically checks for updates in the background:
 
 1. **Timing**: Check occurs 5 seconds after service startup
 2. **Non-blocking**: Version check runs asynchronously and never blocks service operations
@@ -58,7 +58,7 @@ When the PptMcp Service starts, it automatically checks for updates in the backg
    - Thread-safe (invokes on UI thread if needed)
    - Integrates with existing tray icon
 
-3. **`PptMcpService.cs`** - Service startup
+3. **`OutlookMcpService.cs`** - Service startup
    - Triggers version check 5 seconds after startup
    - Runs in background Task.Run() to avoid blocking
    - Fails silently on any errors
@@ -86,7 +86,7 @@ The current implementation uses classic balloon tips. For Windows 11, consider u
 Users can check for updates at any time using the `--version` flag:
 
 ```powershell
-PptMcp.McpServer.exe --version
+OutlookMcp.McpServer.exe --version
 ```
 
 This command:
@@ -100,8 +100,8 @@ This command:
 PowerPoint MCP Server v1.0.0
 
 Update available: 1.0.0 -> 1.1.0
-Run: dotnet tool update --global PptMcp.McpServer
-Release notes: https://github.com/trsdn/mcp-server-ppt/releases/latest
+Run: dotnet tool update --global OutlookMcp.McpServer
+Release notes: https://github.com/trsdn/mcp-server-outlook/releases/latest
 ```
 
 ### Automatic Startup Logging
@@ -115,8 +115,8 @@ When the MCP Server starts, it automatically checks for updates in the backgroun
 
 **Log Message:**
 ```
-info: PptMcp.McpServer.Program[0]
-      MCP Server update available: 1.0.0 -> 1.1.0. Run: dotnet tool update --global PptMcp.McpServer
+info: OutlookMcp.McpServer.Program[0]
+      MCP Server update available: 1.0.0 -> 1.1.0. Run: dotnet tool update --global OutlookMcp.McpServer
 ```
 
 **Why stderr?** The MCP protocol uses stdio for communication (stdin/stdout), so all logging goes to stderr to avoid interfering with the protocol.
@@ -126,7 +126,7 @@ info: PptMcp.McpServer.Program[0]
 **Components:**
 
 1. **`NuGetVersionChecker.cs`** - NuGet API client
-   - Queries `https://api.nuget.org/v3-flatcontainer/PptMcp.mcpserver/index.json`
+   - Queries `https://api.nuget.org/v3-flatcontainer/OutlookMcp.mcpserver/index.json`
    - Returns latest non-prerelease version
    - 5-second timeout (inherited from HttpClient)
 
@@ -174,7 +174,7 @@ The MCP Server includes application version in the `ServerInfo` response:
 
 ```json
 {
-  "name": "ppt-mcp",
+  "name": "outlook-mcp",
   "version": "1.0.0"
 }
 ```
@@ -204,8 +204,8 @@ Adding a separate version check mechanism would:
 
 ### Unit Tests
 
-**CLI Location**: `tests/PptMcp.CLI.Tests/Unit/ServiceVersionCheckerTests.cs`
-**MCP Server Location**: `tests/PptMcp.McpServer.Tests/Unit/McpServerVersionCheckerTests.cs`
+**CLI Location**: `tests/OutlookMcp.CLI.Tests/Unit/ServiceVersionCheckerTests.cs`
+**MCP Server Location**: `tests/OutlookMcp.McpServer.Tests/Unit/McpServerVersionCheckerTests.cs`
 
 Tests verify:
 1. Version comparison logic
@@ -215,33 +215,33 @@ Tests verify:
 
 **Run CLI tests:**
 ```powershell
-dotnet test tests/PptMcp.CLI.Tests/PptMcp.CLI.Tests.csproj --filter "Feature=VersionCheck"
+dotnet test tests/OutlookMcp.CLI.Tests/OutlookMcp.CLI.Tests.csproj --filter "Feature=VersionCheck"
 ```
 
 **Run MCP Server tests:**
 ```powershell
-dotnet test tests/PptMcp.McpServer.Tests/PptMcp.McpServer.Tests.csproj --filter "Feature=VersionCheck"
+dotnet test tests/OutlookMcp.McpServer.Tests/OutlookMcp.McpServer.Tests.csproj --filter "Feature=VersionCheck"
 ```
 
 ### Manual Testing
 
-**Test PptMcp Service notification:**
-1. Start service via CLI: `pptcli session open <file>` (service starts automatically)
+**Test OutlookMcp Service notification:**
+1. Start service via CLI: `outlookcli session open <file>` (service starts automatically)
 2. Wait 5 seconds after startup
 3. If update is available, Windows notification should appear in system tray
 
 **Test CLI version flag:**
-1. Run: `pptcli --version`
+1. Run: `outlookcli --version`
 2. Verify output shows current version and checks NuGet
 3. If update available, message includes update command
 
 **Test MCP Server version flag:**
-1. Run: `PptMcp.McpServer.exe --version`
+1. Run: `OutlookMcp.McpServer.exe --version`
 2. Verify output shows current version and checks NuGet
 3. If update available, message includes update command
 
 **Test MCP Server startup logging:**
-1. Start MCP Server and redirect stderr: `PptMcp.McpServer.exe 2> server.log`
+1. Start MCP Server and redirect stderr: `OutlookMcp.McpServer.exe 2> server.log`
 2. Wait 2 seconds after startup
 3. Check `server.log` for update message (if update is available)
 
@@ -259,12 +259,12 @@ These would require adding configuration to `ServiceVersionChecker` or service s
 ## Troubleshooting
 
 **CLI - No notification shown:**
-- Check: Is an update actually available? Run `pptcli --version` to verify
+- Check: Is an update actually available? Run `outlookcli --version` to verify
 - Check: Network connectivity (version check requires internet to reach NuGet)
 - Check: Service logs for any errors during version check
 
 **MCP Server - No log message shown:**
-- Check: Is an update actually available? Run `PptMcp.McpServer.exe --version` to verify
+- Check: Is an update actually available? Run `OutlookMcp.McpServer.exe --version` to verify
 - Check: Network connectivity (version check requires internet to reach NuGet)
 - Check: stderr output is not being suppressed (redirect stderr to see messages)
 - Note: Only logs if update is available - no message if up-to-date
@@ -273,8 +273,8 @@ These would require adding configuration to `ServiceVersionChecker` or service s
 - Ensure you have internet connectivity
 - Verify NuGet package manager is working: `dotnet tool list --global`
 - Try updating manually: 
-  - CLI: `dotnet tool update --global PptMcp.CLI`
-  - MCP Server: `dotnet tool update --global PptMcp.McpServer`
+  - CLI: `dotnet tool update --global OutlookMcp.CLI`
+  - MCP Server: `dotnet tool update --global OutlookMcp.McpServer`
 
 **Version check takes too long:**
 - Timeout is 5 seconds by default (from `NuGetVersionChecker`)

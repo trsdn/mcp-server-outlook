@@ -1,0 +1,31 @@
+{
+  "name": "outlook-cli-skill",
+  "version": "1.7.0",
+  "description": "Agent Skill for automating Microsoft Outlook via CLI — mailboxes, folders, mail items, drafts, and attachments from scripts and coding agents",
+  "keywords": [
+    "agent-skill",
+    "outlook",
+    "cli",
+    "email",
+    "mailbox",
+    "calendar",
+    "automation"
+  ],
+  "homepage": "https://github.com/trsdn/mcp-server-outlook",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trsdn/mcp-server-outlook.git",
+    "directory": "packages/outlook-cli-skill"
+  },
+  "bugs": {
+    "url": "https://github.com/trsdn/mcp-server-outlook/issues"
+  },
+  "author": "trsdn",
+  "license": "MIT",
+  "files": [
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {}
+}

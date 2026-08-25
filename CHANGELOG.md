@@ -1,14 +1,34 @@
 # Changelog
 
-All notable changes to PptMcp (PowerPoint MCP Server) will be documented in this file.
+All notable changes to OutlookMcp (PowerPoint MCP Server) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — Project and package rename `PptMcp.*` → `OutlookMcp.*`** (#5): every project under `src/` and `tests/`, the solution file, all assembly names, root namespaces, `using` directives, NuGet package IDs, build scripts, and CI workflows were renamed so this repository publishes only under its own identity.
+  - NuGet package IDs: `PptMcp.McpServer` → `OutlookMcp.McpServer`, `PptMcp.CLI` → `OutlookMcp.CLI`, `PptMcp.Core` → `OutlookMcp.Core`, `PptMcp.ComInterop` → `OutlookMcp.ComInterop`
+  - dotnet tool commands: `pptcli` → `outlookcli`, `mcp-ppt` → `mcp-outlook`
+  - npm packages: `ppt-mcp-skill` → `outlook-mcp-skill`, `ppt-cli-skill` → `outlook-cli-skill`
+  - Release artifacts: `PptMcp-<version>.vsix` → `OutlookMcp-<version>.vsix`, `ppt-skills-v<version>.zip` → `outlook-skills-v<version>.zip`
+  - Skill generation now writes to `skills/outlook-mcp` and `skills/outlook-cli`; the stale `skills/ppt-mcp` and `skills/ppt-cli` directories were removed
+  - Repository self-references updated from `trsdn/mcp-server-ppt` to `trsdn/mcp-server-outlook`
+
+### Fixed
+
+- **Release workflow published under foreign package identities** (#5): removed the temporary `if: false` guard on the `publish` job now that every registry target is Outlook-owned.
+- **MCP registry `server.json` version was never updated**: the version-rewrite regex matched a non-existent `Trsdn.PptMcp.McpServer` identifier and silently did nothing, so a stale version would have been published.
+- **Scriban 6.6.0 broke every restore**: the templating engine behind SKILL.md generation carried a critical advisory (GHSA-5wr9-m6jw-xx44, patched in 7.0.0) and `NuGetAudit` treats it as an error, so `dotnet restore` failed outright. Bumped to 7.2.6; generated SKILL.md output is byte-identical.
+- **Dependency review rejected the GitHub Copilot CLI license**: added an explicit `allow-dependencies-licenses` entry, since GitHub's proprietary terms cannot be expressed as an SPDX identifier.
+- **Vulnerable transitive dependency in the agent lockfile**: `@github/copilot` resolved to 1.0.4, which is affected by GHSA-9ccr-r5hg-74gf (arbitrary command execution via `core.fsmonitor`). Refreshed to 1.0.80 within the existing `@github/copilot-sdk@0.1.32` range.
+- **CI never ran on any branch**: all workflows filtered on `main`, but this repository's default branch is `master`, so build, CodeQL, dependency-review, and integration-test workflows were silently inert. `build-mcp-server.yml` was also missing a `pull_request` trigger entirely.
+- **NuGet propagation check never succeeded**: the readme poll used a mixed-case package ID, which the lowercase-only flat-container API always answers with 404, wasting the full 30-minute retry window on every release.
+
 ### Added
 
-- Official source-side Copilot SDK agent client under `src\PptMcp.Agent`, including local planner tests and documentation for the agent architecture
+- Official source-side Copilot SDK agent client under `src\OutlookMcp.Agent`, including local planner tests and documentation for the agent architecture
 - Dedicated documentation for the evaluation framework and the archetype/reference pipeline
 - **33 PowerPoint MCP tools with 204 operations** for comprehensive PowerPoint automation via COM interop
 - **Slide management** (7 ops) — list, read, create, duplicate, move, delete, apply-layout
@@ -42,7 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Slide Import** (1 op) — import slides from another .pptx file
 - **Tags** (3 ops) — custom metadata on slides and shapes
 - **MCP Server** — Model Context Protocol server for AI assistants (GitHub Copilot, Claude, ChatGPT)
-- **CLI** (`pptcli`) — Command-line interface for scripting and coding agents
+- **CLI** (`outlookcli`) — Command-line interface for scripting and coding agents
 - **COM interop** — Uses PowerPoint's native COM API for 100% safe automation
 - **Session management** — Shared sessions between MCP Server and CLI
 - **Parameter validation** — All required string parameters validated before COM execution

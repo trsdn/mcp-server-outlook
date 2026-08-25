@@ -11,7 +11,7 @@ description: >
 
 Provides {{ operationcount }} Outlook operations via Model Context Protocol. The MCP server forwards
 requests to the shared service layer while the repository continues its migration from inherited
-`PptMcp.*` internals.
+`OutlookMcp.*` internals.
 
 ## Recommended workflow
 
@@ -47,4 +47,4 @@ requests to the shared service layer while the repository continues its migratio
 ## Transitional note
 
 The repo is still migrating from copied PowerPoint plumbing, so some executables or project names
-may still contain `PptMcp`. Public guidance should nevertheless stay Outlook-first.
+may still contain `OutlookMcp`. Public guidance should nevertheless stay Outlook-first.

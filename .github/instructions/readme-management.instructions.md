@@ -9,7 +9,7 @@ applyTo: "**/*.md,README.md,**/README.md,**/index.md"
 | File | Lines | Audience | Purpose |
 |------|-------|----------|---------|
 | `/README.md` | 250-300 | All users | Comprehensive reference |
-| `/src/PptMcp.McpServer/README.md` | 80-100 | .NET devs | Concise NuGet gateway |
+| `/src/OutlookMcp.McpServer/README.md` | 80-100 | .NET devs | Concise NuGet gateway |
 | `/vscode-extension/README.md` | 100-120 | VS Code users | User benefits focus |
 | `/gh-pages/index.md` | 450-5000 | All users | Comprehensive reference |
 
@@ -32,10 +32,10 @@ Before updating counts, verify by counting:
 - **Operations**: Count separately for each - they differ!
 
 Sync counts across:
-  - GitHub Project About: https://github.com/trsdn/mcp-server-ppt (use the GitHub CLI to update)
+  - GitHub Project About: https://github.com/trsdn/mcp-server-outlook (use the GitHub CLI to update)
   - `/README.md`
-  - `/src/PptMcp.McpServer/README.md`
-  - `/src/PptMcp.CLI/README.md`
+  - `/src/OutlookMcp.McpServer/README.md`
+  - `/src/OutlookMcp.CLI/README.md`
   - `/vscode-extension/README.md`
   - `/gh-pages/index.md`
   - `/FEATURES.md`
@@ -102,7 +102,7 @@ The project uses a **centralized changelog** at `/CHANGELOG.md` covering all com
 
 gh-pages uses Jekyll includes to pull content from source READMEs:
 
-1. **Source file** (e.g., `src/PptMcp.McpServer/README.md`)
+1. **Source file** (e.g., `src/OutlookMcp.McpServer/README.md`)
 2. **build.sh copies** to `_includes/mcp-server.md` (stripping H1, badges)
 3. **Page file** (e.g., `gh-pages/mcp-server.md`) uses Jekyll include
 4. **Result**: Local URL `/mcp-server/` instead of GitHub link
@@ -114,8 +114,8 @@ gh-pages uses Jekyll includes to pull content from source READMEs:
 | `/features/` | `/FEATURES.md` | `gh-pages/features.md` |
 | `/installation/` | `/docs/INSTALLATION.md` | `gh-pages/installation.md` |
 | `/changelog/` | `/CHANGELOG.md` | `gh-pages/changelog.md` |
-| `/mcp-server/` | `/src/PptMcp.McpServer/README.md` | `gh-pages/mcp-server.md` |
-| `/cli/` | `/src/PptMcp.CLI/README.md` | `gh-pages/cli.md` |
+| `/mcp-server/` | `/src/OutlookMcp.McpServer/README.md` | `gh-pages/mcp-server.md` |
+| `/cli/` | `/src/OutlookMcp.CLI/README.md` | `gh-pages/cli.md` |
 | `/skills/` | `/skills/README.md` | `gh-pages/skills.md` |
 | `/contributing/` | `/docs/CONTRIBUTING.md` | `gh-pages/contributing.md` |
 

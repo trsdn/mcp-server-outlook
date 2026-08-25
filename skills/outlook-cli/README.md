@@ -11,7 +11,7 @@ Agent Skill for coding assistants using the inherited Outlook CLI surface.
 
 ## Transitional note
 
-The CLI binary naming is still inherited from the copied PowerPoint repo, so some commands and package names may still reference `PptMcp` or `pptcli` during migration.
+The CLI binary naming is still inherited from the copied PowerPoint repo, so some commands and package names may still reference `OutlookMcp` or `outlookcli` during migration.
 
 ## Current Outlook seed
 

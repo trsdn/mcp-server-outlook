@@ -1,10 +1,10 @@
-# Contributing to PptMcp
+# Contributing to OutlookMcp
 
-Thank you for your interest in contributing to PptMcp! This project is designed to be extended by the community, especially to support coding agents like GitHub Copilot.
+Thank you for your interest in contributing to OutlookMcp! This project is designed to be extended by the community, especially to support coding agents like GitHub Copilot.
 
 ## 🎯 Project Vision
 
-PptMcp aims to be the go-to command-line tool for coding agents to interact with Microsoft PowerPoint files. We prioritize:
+OutlookMcp aims to be the go-to command-line tool for coding agents to interact with Microsoft PowerPoint files. We prioritize:
 
 - **Simplicity** - Clear, predictable commands
 - **Reliability** - Robust COM automation
@@ -23,8 +23,8 @@ PptMcp aims to be the go-to command-line tool for coding agents to interact with
 
 2. **Setup**:
    ```powershell
-   git clone https://github.com/trsdn/mcp-server-ppt.git
-   cd PptMcp
+   git clone https://github.com/trsdn/mcp-server-outlook.git
+   cd OutlookMcp
    dotnet restore
    dotnet build
    ```
@@ -127,7 +127,7 @@ Before submitting:
 
 ```csharp
 // Commands/INewCommands.cs
-namespace PptMcp.Commands;
+namespace OutlookMcp.Commands;
 
 public interface INewCommands
 {
@@ -141,7 +141,7 @@ public interface INewCommands
 // Commands/NewCommands.cs
 using Spectre.Console;
 
-namespace PptMcp.Commands;
+namespace OutlookMcp.Commands;
 
 public class NewCommands : INewCommands
 {
@@ -276,4 +276,4 @@ Great feature requests include:
 
 ---
 
-Thank you for contributing to PptMcp! Together we're making PowerPoint automation more accessible to coding agents and developers worldwide. 🚀
+Thank you for contributing to OutlookMcp! Together we're making PowerPoint automation more accessible to coding agents and developers worldwide. 🚀

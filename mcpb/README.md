@@ -23,7 +23,7 @@ PowerPoint MCP Server lets you automate PowerPoint through conversation with Cla
 
 ## Installation
 
-1. Download the `.mcpb` file from the [latest release](https://github.com/trsdn/mcp-server-ppt/releases/latest)
+1. Download the `.mcpb` file from the [latest release](https://github.com/trsdn/mcp-server-outlook/releases/latest)
 2. Double-click to install in Claude Desktop
 3. Restart Claude Desktop if prompted
 
@@ -106,13 +106,13 @@ PowerPoint MCP Server runs **entirely on your computer**. Your PowerPoint data:
 - Ensure PowerPoint is installed and working normally
 
 **Need help?**
-- [Report an issue](https://github.com/trsdn/mcp-server-ppt/issues)
-- [Full documentation](https://PptMcpserver.dev/)
+- [Report an issue](https://github.com/trsdn/mcp-server-outlook/issues)
+- [Full documentation](https://github.com/trsdn/mcp-server-outlook)
 
 ## Links
 
-- [GitHub Repository](https://github.com/trsdn/mcp-server-ppt)
-- [Feature Reference](https://PptMcpserver.dev/features/)
-- [Agent Skills](https://github.com/trsdn/mcp-server-ppt/blob/main/skills/README.md) - Cross-platform AI guidance
-- [Privacy Policy](https://PptMcpserver.dev/privacy/)
-- [License (MIT)](https://github.com/trsdn/mcp-server-ppt/blob/main/LICENSE)
+- [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
+- [Feature Reference](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md)
+- [Agent Skills](https://github.com/trsdn/mcp-server-outlook/blob/master/skills/README.md) - Cross-platform AI guidance
+- [Privacy Policy](https://github.com/trsdn/mcp-server-outlook/blob/master/SECURITY.md)
+- [License (MIT)](https://github.com/trsdn/mcp-server-outlook/blob/master/LICENSE)

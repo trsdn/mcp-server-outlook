@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE = "PPTMCP_EVAL_ASSET_REPO_ROOT"
+EVAL_ASSET_REPO_ROOT_ENVIRONMENT_VARIABLE = "OUTLOOKMCP_EVAL_ASSET_REPO_ROOT"
 SKILLS_DIR = REPO_ROOT / "skills" / "shared"
 PROMPTS_FILE = REPO_ROOT / "eval" / "prompts" / "test-prompts.json"
 

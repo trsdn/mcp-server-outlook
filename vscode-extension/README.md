@@ -6,7 +6,7 @@ Current reality:
 
 - the repository target is now `mcp-server-outlook`
 - the published extension now exposes Outlook-first provider ids and bundled Outlook skill folders
-- the bundled binaries still use inherited `PptMcp.*` executable names during migration
+- the bundled binaries still use inherited `OutlookMcp.*` executable names during migration
 - the extension now documents the real Outlook seed instead of the legacy PowerPoint product
 
 ## Implemented Outlook seed
@@ -64,8 +64,8 @@ The VS Code extension should become an Outlook-first marketplace offering for wo
 
 Until the cleanup pass lands, expect inherited names in adjacent files and packaging metadata, including:
 
-- `PptMcp.*` project names
-- `ppt-mcp` extension/package identifiers
-- `mcp-ppt` and `pptcli` command names in some docs and configs
+- `OutlookMcp.*` project names
+- `outlook-mcp` extension/package identifiers
+- `mcp-outlook` and `outlookcli` command names in some docs and configs
 
 Those names are transitional, not the intended long-term Outlook branding.

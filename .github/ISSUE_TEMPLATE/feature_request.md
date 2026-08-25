@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for PptMcp
+about: Suggest an idea for OutlookMcp
 title: '[FEATURE] '
 labels: 'enhancement'
 assignees: ''
@@ -25,7 +25,7 @@ A clear and concise description of what you want to happen.
 
 **For CLI:**
 ```bash
-PptMcp new-command <file.pptx> <parameters>
+OutlookMcp new-command <file.pptx> <parameters>
 ```
 
 **For MCP Server:**

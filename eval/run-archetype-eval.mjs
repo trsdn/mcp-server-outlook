@@ -658,7 +658,7 @@ async function runConfig(configPath) {
 
   const serviceStatus = ensureService();
   if (!serviceStatus.ok) {
-    throw new Error(`Failed to start pptcli service: ${serviceStatus.error}`);
+    throw new Error(`Failed to start outlookcli service: ${serviceStatus.error}`);
   }
 
   const judgeInstructionsFile = loadInstructionsFile({

@@ -13,12 +13,12 @@ pytestmark = [pytest.mark.aitest, pytest.mark.mcp]
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="LLM intermittently omits required action parameter on complex workflows", strict=False)
-async def test_mcp_range_updates(aitest_run, ppt_mcp_server, ppt_mcp_skill):
+async def test_mcp_range_updates(aitest_run, outlook_mcp_server, outlook_mcp_skill):
     agent = Agent(
         name="mcp-range-updates",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        mcp_servers=[ppt_mcp_server],
-        skill=ppt_mcp_skill,
+        mcp_servers=[outlook_mcp_server],
+        skill=outlook_mcp_skill,
         allowed_tools=["range", "file", "slide"],
         max_turns=25,
         retries=DEFAULT_RETRIES,
@@ -48,12 +48,12 @@ async def test_mcp_range_updates(aitest_run, ppt_mcp_server, ppt_mcp_skill):
 
 
 @pytest.mark.asyncio
-async def test_mcp_table_updates(aitest_run, ppt_mcp_server, ppt_mcp_skill):
+async def test_mcp_table_updates(aitest_run, outlook_mcp_server, outlook_mcp_skill):
     agent = Agent(
         name="mcp-table-updates",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        mcp_servers=[ppt_mcp_server],
-        skill=ppt_mcp_skill,
+        mcp_servers=[outlook_mcp_server],
+        skill=outlook_mcp_skill,
         allowed_tools=["range", "table", "file", "slide"],
         max_turns=20,
         retries=DEFAULT_RETRIES,
@@ -79,12 +79,12 @@ async def test_mcp_table_updates(aitest_run, ppt_mcp_server, ppt_mcp_skill):
 
 
 @pytest.mark.asyncio
-async def test_mcp_chart_updates(aitest_run, ppt_mcp_server, ppt_mcp_skill):
+async def test_mcp_chart_updates(aitest_run, outlook_mcp_server, outlook_mcp_skill):
     agent = Agent(
         name="mcp-chart-updates",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        mcp_servers=[ppt_mcp_server],
-        skill=ppt_mcp_skill,
+        mcp_servers=[outlook_mcp_server],
+        skill=outlook_mcp_skill,
         allowed_tools=["chart", "chart_config", "file", "slide", "range"],
         max_turns=20,
         retries=DEFAULT_RETRIES,
@@ -111,12 +111,12 @@ async def test_mcp_chart_updates(aitest_run, ppt_mcp_server, ppt_mcp_skill):
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="LLM intermittently omits required action parameter on complex workflows", strict=False)
-async def test_mcp_slide_structural_changes(aitest_run, ppt_mcp_server, ppt_mcp_skill):
+async def test_mcp_slide_structural_changes(aitest_run, outlook_mcp_server, outlook_mcp_skill):
     agent = Agent(
         name="mcp-slide-struct",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        mcp_servers=[ppt_mcp_server],
-        skill=ppt_mcp_skill,
+        mcp_servers=[outlook_mcp_server],
+        skill=outlook_mcp_skill,
         allowed_tools=["range", "file", "slide"],
         max_turns=25,
         retries=DEFAULT_RETRIES,

@@ -1,9 +1,9 @@
 {
 	"inputs": [],
 	"servers": {
-		"ppt-mcp": {
+		"outlook-mcp": {
 			"type": "stdio",
-			"command": "${workspaceFolder}/src/PptMcp.McpServer/bin/Release/net9.0-windows/PptMcp.McpServer.exe"
+			"command": "${workspaceFolder}/src/OutlookMcp.McpServer/bin/Release/net9.0-windows/OutlookMcp.McpServer.exe"
 		}
 	}
 }

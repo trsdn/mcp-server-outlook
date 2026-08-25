@@ -1,4 +1,4 @@
-# CodeQL Configuration for PptMcp
+# CodeQL Configuration for OutlookMcp
 # Defines security scanning rules and exclusions
 # Version: 4.0 - Exclude test code from analysis (production code only)
 #
@@ -10,7 +10,7 @@
 #
 # See CODEQL-FIXES-SUMMARY.md for detailed rationale
 
-name: "PptMcp CodeQL Configuration v3.0"
+name: "OutlookMcp CodeQL Configuration v3.0"
 
 # Disable default query suite and use custom security-focused queries
 disable-default-queries: true
@@ -48,7 +48,7 @@ query-filters:
   - exclude:
       id: cs/catch-of-all-exceptions
       paths:
-        - src/PptMcp.McpServer/Tools/**
+        - src/OutlookMcp.McpServer/Tools/**
 
   # ============================================================================
   # INTENTIONAL PATTERN: Generic Exception Catches in CLI Commands
@@ -58,8 +58,8 @@ query-filters:
   - exclude:
       id: cs/catch-of-all-exceptions
       paths:
-        - src/PptMcp.CLI/Commands/**
-        - src/PptMcp.CLI/Program.cs
+        - src/OutlookMcp.CLI/Commands/**
+        - src/OutlookMcp.CLI/Program.cs
 
   # ============================================================================
   # INTENTIONAL PATTERN: COM Interop Exception Handling
@@ -69,7 +69,7 @@ query-filters:
   - exclude:
       id: cs/catch-of-all-exceptions
       paths:
-        - src/PptMcp.ComInterop/Session/**
+        - src/OutlookMcp.ComInterop/Session/**
 
   # ============================================================================
   # INTENTIONAL PATTERN: Dynamic COM Calls
@@ -79,8 +79,8 @@ query-filters:
   - exclude:
       id: cs/invalid-dynamic-call
       paths:
-        - src/PptMcp.Core/**
-        - src/PptMcp.ComInterop/**
+        - src/OutlookMcp.Core/**
+        - src/OutlookMcp.ComInterop/**
 
   # ============================================================================
   # INTENTIONAL PATTERN: Explicit GC for COM Cleanup
@@ -90,7 +90,7 @@ query-filters:
   - exclude:
       id: cs/call-to-gc
       paths:
-        - src/PptMcp.ComInterop/**
+        - src/OutlookMcp.ComInterop/**
 
   # ============================================================================
   # AUTO-GENERATED CODE: Regex Generator

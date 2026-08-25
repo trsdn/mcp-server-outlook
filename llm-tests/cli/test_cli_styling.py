@@ -12,13 +12,13 @@ pytestmark = [pytest.mark.aitest, pytest.mark.cli]
 
 
 @pytest.mark.asyncio
-async def test_cli_styling_table_style(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_styling_table_style(aitest_run, outlook_cli_server, outlook_cli_skill):
     """LLM should use table(set-style) for table visual styling, not range_format on header."""
     agent = Agent(
         name="cli-styling-table",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )
@@ -43,13 +43,13 @@ Close the presentation without saving.
 
 
 @pytest.mark.asyncio
-async def test_cli_styling_semantic_status(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_styling_semantic_status(aitest_run, outlook_cli_server, outlook_cli_skill):
     """LLM should use range_format(set-style) with Good/Bad/Neutral for status cells."""
     agent = Agent(
         name="cli-styling-status",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )
@@ -77,13 +77,13 @@ Close the presentation without saving.
 
 
 @pytest.mark.asyncio
-async def test_cli_styling_header_fill(aitest_run, ppt_cli_server, ppt_cli_skill):
+async def test_cli_styling_header_fill(aitest_run, outlook_cli_server, outlook_cli_skill):
     """LLM should use format-range (not set-style) for a header row with a fill colour."""
     agent = Agent(
         name="cli-styling-header",
         provider=Provider(model="azure/gpt-4.1", rpm=10, tpm=10000),
-        cli_servers=[ppt_cli_server],
-        skill=ppt_cli_skill,
+        cli_servers=[outlook_cli_server],
+        skill=outlook_cli_skill,
         max_turns=20,
         retries=DEFAULT_RETRIES,
     )

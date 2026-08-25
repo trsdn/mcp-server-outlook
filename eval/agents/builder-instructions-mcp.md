@@ -43,7 +43,7 @@ Your design decisions MUST follow the skill reference files in `skills/shared/`:
 - `slide-design-review.md` — Quality scorecard, auto-reject triggers
 - `generation-pipeline.md` — Data-to-visual mapping, intent-to-archetype mapping
 
-The harness also provides archetype-specific layout files from `src/PptMcp.Core/Data/archetypes/`:
+The harness also provides archetype-specific layout files from `src/OutlookMcp.Core/Data/archetypes/`:
 - `registry.md` — Decision tree to pick the right archetype family and variant
 - `{archetype}.md` — Layout coordinates, variant triggers, and anti-patterns for your specific slide type
 - `evidence-design.md` — How to visually prove quantitative claims (ROI, benchmarks, trends)

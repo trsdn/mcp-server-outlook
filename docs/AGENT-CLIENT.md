@@ -1,6 +1,6 @@
 # Agent Client Architecture
 
-`src\PptMcp.Agent` is the official source-side Copilot SDK controller for multi-phase PowerPoint deck generation in this repository.
+`src\OutlookMcp.Agent` is the official source-side Copilot SDK controller for multi-phase PowerPoint deck generation in this repository.
 
 It exists to handle orchestration that should **not** live inside the MCP server itself.
 
@@ -21,9 +21,9 @@ The MCP server remains responsible for primitive PowerPoint capabilities, while 
 
 | Layer | Responsibility |
 |---|---|
-| `src\PptMcp.Core` + `src\PptMcp.Service` + `src\PptMcp.McpServer` | Primitive PowerPoint operations, sessions, and MCP transport |
+| `src\OutlookMcp.Core` + `src\OutlookMcp.Service` + `src\OutlookMcp.McpServer` | Primitive PowerPoint operations, sessions, and MCP transport |
 | `skills\shared\*.md` | Planning, design, and review guidance shared across hosts |
-| `src\PptMcp.Agent` | Plan → execute → verify → repair orchestration plus deterministic artifact/quality validation |
+| `src\OutlookMcp.Agent` | Plan → execute → verify → repair orchestration plus deterministic artifact/quality validation |
 | `eval\` | Experimental measurement, scoring, sweeps, and skill-tuning loops |
 
 ## Design Constraints
@@ -43,7 +43,7 @@ The orchestrator currently works in four logical phases.
 
 ### 1. Plan
 
-- Reads archetype guidance from `src\PptMcp.Core\Data\archetypes\registry.md`
+- Reads archetype guidance from `src\OutlookMcp.Core\Data\archetypes\registry.md`
 - Reads generation guidance from `skills\shared\generation-pipeline.md`
 - Asks the model for a JSON slide plan
 - Falls back to fenced JSON, outermost JSON, or markdown slide blocks if the reply is not perfectly structured
@@ -89,19 +89,19 @@ The official client keeps the hardened behaviors from the verified prototype:
 
 | Path | Purpose |
 |---|---|
-| `src\PptMcp.Agent\src\cli.mjs` | CLI entry point |
-| `src\PptMcp.Agent\src\orchestrator.mjs` | Phase sequencing and artifact validation |
-| `src\PptMcp.Agent\src\runtime.mjs` | Copilot SDK session/runtime wrapper |
-| `src\PptMcp.Agent\src\planner.mjs` | Plan extraction and normalization |
-| `src\PptMcp.Agent\patch-deps.cjs` | Node 24 compatibility patch for `@github/copilot-sdk` dependencies |
-| `src\PptMcp.Agent\tests\planner.test.mjs` | Fast local regression coverage for plan parsing |
+| `src\OutlookMcp.Agent\src\cli.mjs` | CLI entry point |
+| `src\OutlookMcp.Agent\src\orchestrator.mjs` | Phase sequencing and artifact validation |
+| `src\OutlookMcp.Agent\src\runtime.mjs` | Copilot SDK session/runtime wrapper |
+| `src\OutlookMcp.Agent\src\planner.mjs` | Plan extraction and normalization |
+| `src\OutlookMcp.Agent\patch-deps.cjs` | Node 24 compatibility patch for `@github/copilot-sdk` dependencies |
+| `src\OutlookMcp.Agent\tests\planner.test.mjs` | Fast local regression coverage for plan parsing |
 
 ## Build and Test
 
 ```powershell
-dotnet build src\PptMcp.McpServer\PptMcp.McpServer.csproj -c Release
+dotnet build src\OutlookMcp.McpServer\OutlookMcp.McpServer.csproj -c Release
 
-Set-Location src\PptMcp.Agent
+Set-Location src\OutlookMcp.Agent
 npm install
 npm run check
 npm test
@@ -130,7 +130,7 @@ These artifacts make the run inspectable and reproducible without pushing orches
 
 The agent and eval harnesses use related building blocks, but they are not the same thing:
 
-- `src\PptMcp.Agent` is for one production-style build workflow
+- `src\OutlookMcp.Agent` is for one production-style build workflow
 - `eval\` is for repeated experiments, judgments, and score histories
 
 See also:

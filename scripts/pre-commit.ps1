@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Runs checks before allowing commits:
-    0. Process cleanup - kills stale PowerPoint, pptcli, and MCP server processes to prevent file locks
+    0. Process cleanup - kills stale PowerPoint, outlookcli, and MCP server processes to prevent file locks
     1. COM leak checker - ensures no PowerPoint COM objects are leaked
     2. Coverage audit - ensures 100% Core Commands are exposed via MCP Server
     3. Naming consistency - ensures enum names match Core method names exactly
@@ -54,7 +54,7 @@ Write-Host ""
 Write-Host "Killing stale PowerPoint and server processes..." -ForegroundColor Cyan
 
 $killedProcesses = @()
-foreach ($procName in @("POWERPNT", "pptcli", "PptMcp.McpServer", "PptMcp.Service")) {
+foreach ($procName in @("POWERPNT", "outlookcli", "OutlookMcp.McpServer", "OutlookMcp.Service")) {
     $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
     if ($procs) {
         $procs | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -178,10 +178,10 @@ try {
     # SKILL.md + references are generated during Release build.
     # Auto-stage all of them so developers never have to think about it.
     $skillPaths = @(
-        "skills/ppt-mcp/SKILL.md",
-        "skills/ppt-cli/SKILL.md",
-        "skills/ppt-mcp/references/",
-        "skills/ppt-cli/references/"
+        "skills/outlook-mcp/SKILL.md",
+        "skills/outlook-cli/SKILL.md",
+        "skills/outlook-mcp/references/",
+        "skills/outlook-cli/references/"
     )
     $skillDiff = git diff --name-only -- @skillPaths 2>&1
     $untrackedSkills = git ls-files --others --exclude-standard -- @skillPaths 2>&1
@@ -232,8 +232,8 @@ catch {
 Write-Host ""
 Write-Host "Running MCP Server smoke test..." -ForegroundColor Cyan
 
-# Stop PptMcp Service before smoke test to prevent DLL locking
-& "$PSScriptRoot\Stop-PptMcpProcesses.ps1"
+# Stop OutlookMcp Service before smoke test to prevent DLL locking
+& "$PSScriptRoot\Stop-OutlookMcpProcesses.ps1"
 
 try {
     # Run the smoke test - validates all MCP tools work correctly

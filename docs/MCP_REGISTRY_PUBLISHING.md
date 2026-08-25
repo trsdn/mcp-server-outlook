@@ -1,10 +1,10 @@
 # MCP Registry Publishing Guide
 
-This document describes how the PptMcp server is published to the [Model Context Protocol (MCP) Registry](https://registry.modelcontextprotocol.io/).
+This document describes how the OutlookMcp server is published to the [Model Context Protocol (MCP) Registry](https://registry.modelcontextprotocol.io/).
 
 ## Overview
 
-The PptMcp server is automatically published to the MCP Registry whenever a new release is tagged with the format `v*` (e.g., `v1.0.10`). This is handled by the GitHub Actions workflow `.github/workflows/release-mcp-server.yml`.
+The OutlookMcp server is automatically published to the MCP Registry whenever a new release is tagged with the format `v*` (e.g., `v1.0.10`). This is handled by the GitHub Actions workflow `.github/workflows/release-mcp-server.yml`.
 
 **Note**: The same tag also triggers CLI release - both MCP Server and CLI are released together with unified versioning.
 
@@ -12,21 +12,21 @@ The PptMcp server is automatically published to the MCP Registry whenever a new 
 
 ### server.json
 
-Location: `src/PptMcp.McpServer/.mcp/server.json`
+Location: `src/OutlookMcp.McpServer/.mcp/server.json`
 
 This is the MCP registry metadata file that describes the server:
 
 ```json
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-  "name": "io.github.trsdn/mcp-server-ppt",
+  "name": "io.github.trsdn/mcp-server-outlook",
   "title": "PowerPoint COM Automation",
   "description": "PowerPoint COM automation - Slides, shapes, text, charts, tables, animations, transitions, VBA",
   "version": "1.0.0",
   "packages": [
     {
       "registryType": "nuget",
-      "identifier": "PptMcp.McpServer",
+      "identifier": "OutlookMcp.McpServer",
       "version": "1.0.0",
       "transport": {
         "type": "stdio"
@@ -34,7 +34,7 @@ This is the MCP registry metadata file that describes the server:
     }
   ],
   "repository": {
-    "url": "https://github.com/trsdn/mcp-server-ppt",
+    "url": "https://github.com/trsdn/mcp-server-outlook",
     "source": "github"
   }
 }
@@ -51,11 +51,11 @@ Key fields:
 
 For NuGet packages, the MCP Registry validates ownership by checking for `mcp-name:` in the package README.
 
-Location: `src/PptMcp.McpServer/README.md`
+Location: `src/OutlookMcp.McpServer/README.md`
 
 The README includes this validation metadata:
 ```markdown
-<!-- mcp-name: io.github.trsdn/mcp-server-ppt -->
+<!-- mcp-name: io.github.trsdn/mcp-server-outlook -->
 ```
 
 This HTML comment is invisible to users but allows the registry to verify the package belongs to this server.
@@ -105,10 +105,10 @@ Uses **NuGet Trusted Publishing** via OIDC:
 - `NUGET_USER`: Your NuGet.org username (profile name)
 
 **NuGet.org Configuration:**
-- Package: `PptMcp.McpServer`
+- Package: `OutlookMcp.McpServer`
 - Trusted Publisher: GitHub Actions
 - Owner: `trsdn`
-- Repository: `mcp-server-ppt`
+- Repository: `mcp-server-outlook`
 - Workflow: `release-mcp-server.yml`
 
 ### MCP Registry Authentication
@@ -142,9 +142,9 @@ The workflow has `id-token: write` permission enabled for OIDC authentication.
    - Verify all steps complete successfully
 
 4. **Verify publication**
-   - **NuGet**: https://www.nuget.org/packages/PptMcp.McpServer
-   - **MCP Registry**: https://registry.modelcontextprotocol.io/servers/io.github.trsdn/mcp-server-ppt
-   - **GitHub Release**: https://github.com/trsdn/mcp-server-ppt/releases
+   - **NuGet**: https://www.nuget.org/packages/OutlookMcp.McpServer
+   - **MCP Registry**: https://registry.modelcontextprotocol.io/servers/io.github.trsdn/mcp-server-outlook
+   - **GitHub Release**: https://github.com/trsdn/mcp-server-outlook/releases
 
 ### Version Numbering
 
@@ -176,12 +176,12 @@ The workflow has `id-token: write` permission enabled for OIDC authentication.
 
 **Manual Solution**:
 - Wait 5-10 minutes after NuGet publication for full CDN propagation
-- Verify README is accessible: `https://api.nuget.org/v3-flatcontainer/PptMcp.mcpserver/{version}/readme`
+- Verify README is accessible: `https://api.nuget.org/v3-flatcontainer/OutlookMcp.mcpserver/{version}/readme`
 - Manually publish to MCP Registry using the manual publishing process below
 
 **Verification Steps**:
 1. Check that `mcp-name:` is present in the package README
-2. Verify the mcp-name matches the server.json name exactly: `io.github.trsdn/mcp-server-ppt`
+2. Verify the mcp-name matches the server.json name exactly: `io.github.trsdn/mcp-server-outlook`
 3. Ensure NuGet package has been published successfully
 
 **Note**: As of the latest workflow update, MCP Registry publishing failures do not block the release process. The NuGet package will still be published successfully, and you can manually publish to the MCP Registry later if needed.
@@ -210,7 +210,7 @@ The workflow has `id-token: write` permission enabled for OIDC authentication.
 Once published, the server will be:
 
 1. **Discoverable**: Users can search for it in MCP-compatible clients
-2. **Auto-installable**: `dnx PptMcp.McpServer --yes`
+2. **Auto-installable**: `dnx OutlookMcp.McpServer --yes`
 3. **Version-managed**: Users can install specific versions
 4. **Documented**: Description and README visible in registry
 
@@ -232,11 +232,11 @@ tar xf mcp-publisher.tar.gz
 ```
 
 ### 3. Update server.json Version
-Edit `src/PptMcp.McpServer/.mcp/server.json` and update the version fields.
+Edit `src/OutlookMcp.McpServer/.mcp/server.json` and update the version fields.
 
 ### 4. Publish
 ```powershell
-cd src/PptMcp.McpServer
+cd src/OutlookMcp.McpServer
 ../../mcp-publisher publish
 ```
 

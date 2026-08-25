@@ -1,4 +1,4 @@
-# ADR-001: Why PptMcp Has No Traditional Unit Tests
+# ADR-001: Why OutlookMcp Has No Traditional Unit Tests
 
 **Status**: Accepted  
 **Date**: 2025-11-02  
@@ -9,7 +9,7 @@
 
 ## Context and Problem Statement
 
-PptMcp is a COM automation library that wraps PowerPoint's COM API. During code review, the question inevitably arises: **"Why don't you have unit tests?"**
+OutlookMcp is a COM automation library that wraps PowerPoint's COM API. During code review, the question inevitably arises: **"Why don't you have unit tests?"**
 
 This ADR documents our architectural decision and the reasoning behind our testing strategy.
 
@@ -17,7 +17,7 @@ This ADR documents our architectural decision and the reasoning behind our testi
 
 ## Decision
 
-**We do NOT write traditional unit tests for PptMcp.** Our test suite consists exclusively of **integration tests** that interact with real PowerPoint instances via COM automation.
+**We do NOT write traditional unit tests for OutlookMcp.** Our test suite consists exclusively of **integration tests** that interact with real PowerPoint instances via COM automation.
 
 ### What We DON'T Do
 
@@ -88,7 +88,7 @@ In COM automation architecture:
 - **Integration tests** test business logic AND COM interaction (these ARE our unit tests)
 - **E2E tests** don't exist (we ARE the library, not an application)
 
-**Analogy**: PptMcp is like a database driver (e.g., Npgsql for PostgreSQL):
+**Analogy**: OutlookMcp is like a database driver (e.g., Npgsql for PostgreSQL):
 - You don't mock `DbConnection` to test SQL queries
 - You test against a real database instance
 - The "integration test" IS the unit test
@@ -102,7 +102,7 @@ This pattern is **normal and correct** for COM/browser/external system automatio
 | **Selenium WebDriver** | Browser DOM | Integration tests against real browsers |
 | **Playwright** | Browser automation | Integration tests with browser instances |
 | **AWS SDK** | Cloud services | Integration tests against AWS (or LocalStack) |
-| **PptMcp** | PowerPoint COM | Integration tests against PowerPoint instances |
+| **OutlookMcp** | PowerPoint COM | Integration tests against PowerPoint instances |
 
 **None of these libraries have meaningful unit tests** for their core automation logic. They all test against the real external system.
 
@@ -301,7 +301,7 @@ We **would** write unit tests for:
 
 When reviewers ask "Why no unit tests?", respond:
 
-> **PptMcp is a COM automation library.** We test against real PowerPoint instances because:
+> **OutlookMcp is a COM automation library.** We test against real PowerPoint instances because:
 > 
 > 1. **PowerPoint COM cannot be mocked** - Dynamic COM objects don't support traditional mocking frameworks
 > 2. **Integration tests ARE our unit tests** - We test business logic (COM interaction) in the only way possible

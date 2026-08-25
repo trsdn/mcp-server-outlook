@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a report to help us improve PptMcp
+about: Create a report to help us improve OutlookMcp
 title: '[BUG] '
 labels: 'bug'
 assignees: ''
@@ -12,15 +12,15 @@ A clear and concise description of what the bug is.
 
 ## Component
 Which component is this bug related to?
-- [ ] **MCP Server** (Model Context Protocol server for AI assistants - `mcp-ppt`)
-- [ ] **CLI** (Command-line interface - `PptMcp.exe`)
+- [ ] **MCP Server** (Model Context Protocol server for AI assistants - `mcp-outlook`)
+- [ ] **CLI** (Command-line interface - `OutlookMcp.exe`)
 - [ ] **Core Library** (Shared functionality)
 - [ ] **Not sure**
 
 ## Command/Usage
 **For CLI:**
 ```
-PptMcp <command> <arguments>
+OutlookMcp <command> <arguments>
 ```
 
 **For MCP Server:**
@@ -43,7 +43,7 @@ If applicable, paste the full error message:
 ## Environment
 - **Windows Version**: [e.g. Windows 11, Windows 10]
 - **PowerPoint Version**: [e.g. PowerPoint 365, PowerPoint 2019]
-- **PptMcp Version**: [e.g. v1.0.0]
+- **OutlookMcp Version**: [e.g. v1.0.0]
 - **.NET Version**: [Run `dotnet --version`]
 - **Installation Method**: [NuGet tool / Binary download / Source build]
 - **File Format**: [e.g. .pptx, .pptm]
@@ -54,7 +54,7 @@ If applicable, paste the full error message:
 If possible, attach a sample PowerPoint file that reproduces the issue (remove sensitive data).
 
 ## VBA-Related Issues (if applicable)
-- [ ] VBA trust is properly configured (`PptMcp check-vba-trust`)
+- [ ] VBA trust is properly configured (`OutlookMcp check-vba-trust`)
 - [ ] Using .pptm file format for VBA commands
 - [ ] VBA module exists in the presentation
 - [ ] Macro security settings allow programmatic access

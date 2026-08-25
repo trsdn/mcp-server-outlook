@@ -1,6 +1,6 @@
 name: Release All Components
 
-# Unified release workflow for all PptMcp components:
+# Unified release workflow for all OutlookMcp components:
 # - MCP Server (NuGet + ZIP) - includes CLI as bundled dependency
 # - CLI (NuGet) - standalone dotnet tool for coding agents
 # - VS Code Extension (VSIX + Marketplace)
@@ -130,19 +130,19 @@ jobs:
       shell: pwsh
 
     - name: Restore
-      run: dotnet restore src/PptMcp.CLI/PptMcp.CLI.csproj
+      run: dotnet restore src/OutlookMcp.CLI/OutlookMcp.CLI.csproj
 
     - name: Build CLI
-      run: dotnet build src/PptMcp.CLI/PptMcp.CLI.csproj --configuration Release --no-restore -p:Version=${{ env.VERSION }} -p:AssemblyVersion=${{ env.VERSION }}.0 -p:FileVersion=${{ env.VERSION }}.0
+      run: dotnet build src/OutlookMcp.CLI/OutlookMcp.CLI.csproj --configuration Release --no-restore -p:Version=${{ env.VERSION }} -p:AssemblyVersion=${{ env.VERSION }}.0 -p:FileVersion=${{ env.VERSION }}.0
 
     - name: Pack CLI NuGet
-      run: dotnet pack src/PptMcp.CLI/PptMcp.CLI.csproj --configuration Release --no-build --output ./cli-nupkg -p:Version=${{ env.VERSION }}
+      run: dotnet pack src/OutlookMcp.CLI/OutlookMcp.CLI.csproj --configuration Release --no-build --output ./cli-nupkg -p:Version=${{ env.VERSION }}
 
     - name: Upload CLI Build Output
       uses: actions/upload-artifact@v4
       with:
         name: cli-build
-        path: src/PptMcp.CLI/bin/Release/net9.0-windows/
+        path: src/OutlookMcp.CLI/bin/Release/net9.0-windows/
 
     - name: Upload CLI NuGet Artifact
       uses: actions/upload-artifact@v4
@@ -173,7 +173,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: cli-build
-        path: src/PptMcp.CLI/bin/Release/net9.0-windows/
+        path: src/OutlookMcp.CLI/bin/Release/net9.0-windows/
 
     - name: Set Version
       run: |
@@ -187,37 +187,37 @@ jobs:
         $version = $env:VERSION
 
         # Update MCP Registry server.json
-        $serverJsonPath = "src/PptMcp.McpServer/.mcp/server.json"
+        $serverJsonPath = "src/OutlookMcp.McpServer/.mcp/server.json"
         $serverContent = Get-Content $serverJsonPath -Raw
         $serverContent = $serverContent -replace '("version":\s*)"[\d\.]+"(\s*,\s*\n\s*"packages")' , "`$1`"$version`"`$2"
-        $serverContent = $serverContent -replace '("identifier":\s*"Trsdn\.PptMcp\.McpServer",\s*\n\s*"version":\s*)"[\d\.]+"', "`$1`"$version`""
+        $serverContent = $serverContent -replace '("identifier":\s*"OutlookMcp\.McpServer",\s*\n\s*"version":\s*)"[\d\.]+"', "`$1`"$version`""
         Set-Content $serverJsonPath $serverContent
       shell: pwsh
 
     - name: Restore
-      run: dotnet restore src/PptMcp.McpServer/PptMcp.McpServer.csproj
+      run: dotnet restore src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj
 
     - name: Build
-      run: dotnet build src/PptMcp.McpServer/PptMcp.McpServer.csproj --configuration Release --no-restore -p:Version=${{ env.VERSION }} -p:AssemblyVersion=${{ env.VERSION }}.0 -p:FileVersion=${{ env.VERSION }}.0
+      run: dotnet build src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj --configuration Release --no-restore -p:Version=${{ env.VERSION }} -p:AssemblyVersion=${{ env.VERSION }}.0 -p:FileVersion=${{ env.VERSION }}.0
 
     - name: Pack NuGet
-      run: dotnet pack src/PptMcp.McpServer/PptMcp.McpServer.csproj --configuration Release --no-build --output ./nupkg -p:Version=${{ env.VERSION }}
+      run: dotnet pack src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj --configuration Release --no-build --output ./nupkg -p:Version=${{ env.VERSION }}
 
     - name: Create Release Package
       run: |
         $version = $env:VERSION
-        New-Item -ItemType Directory -Path "release/PptMcp-MCP-Server-$version" -Force
-        Copy-Item "src/PptMcp.McpServer/bin/Release/net9.0-windows/*" "release/PptMcp-MCP-Server-$version/" -Recurse
-        Copy-Item "README.md" "release/PptMcp-MCP-Server-$version/"
-        Copy-Item "LICENSE" "release/PptMcp-MCP-Server-$version/"
-        Compress-Archive -Path "release/PptMcp-MCP-Server-$version/*" -DestinationPath "PptMcp-MCP-Server-$version-windows.zip"
+        New-Item -ItemType Directory -Path "release/OutlookMcp-MCP-Server-$version" -Force
+        Copy-Item "src/OutlookMcp.McpServer/bin/Release/net9.0-windows/*" "release/OutlookMcp-MCP-Server-$version/" -Recurse
+        Copy-Item "README.md" "release/OutlookMcp-MCP-Server-$version/"
+        Copy-Item "LICENSE" "release/OutlookMcp-MCP-Server-$version/"
+        Compress-Archive -Path "release/OutlookMcp-MCP-Server-$version/*" -DestinationPath "OutlookMcp-MCP-Server-$version-windows.zip"
       shell: pwsh
 
     - name: Upload ZIP Artifact
       uses: actions/upload-artifact@v4
       with:
         name: mcp-server-zip
-        path: PptMcp-MCP-Server-*-windows.zip
+        path: OutlookMcp-MCP-Server-*-windows.zip
 
     - name: Upload NuGet Artifact
       uses: actions/upload-artifact@v4
@@ -294,7 +294,7 @@ jobs:
         $version = $env:VERSION
         cd vscode-extension
         $vsix = Get-ChildItem -Filter "*.vsix" | Select-Object -First 1
-        $targetName = "PptMcp-$version.vsix"
+        $targetName = "OutlookMcp-$version.vsix"
         if ($vsix.Name -ne $targetName) {
           Rename-Item $vsix.FullName -NewName $targetName
         }
@@ -304,7 +304,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: vscode-vsix
-        path: vscode-extension/PptMcp-*.vsix
+        path: vscode-extension/OutlookMcp-*.vsix
 
   # =============================================================================
   # Job 4: Build MCPB (Claude Desktop Bundle)
@@ -340,7 +340,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: mcpb-bundle
-        path: mcpb/artifacts/ppt-mcp-*.mcpb
+        path: mcpb/artifacts/outlook-mcp-*.mcpb
 
   # =============================================================================
   # Job 5: Build Agent Skills Packages
@@ -380,7 +380,7 @@ jobs:
         New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
         # Create staging directory
-        $stagingDir = Join-Path $env:TEMP "ppt-skills-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        $stagingDir = Join-Path $env:TEMP "outlook-skills-$([guid]::NewGuid().ToString('N').Substring(0,8))"
         New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
 
         try {
@@ -388,11 +388,11 @@ jobs:
           $skillsStagingDir = Join-Path $stagingDir "skills"
           New-Item -ItemType Directory -Path $skillsStagingDir -Force | Out-Null
 
-          # Copy ppt-mcp skill (SKILL.md and references already generated by build)
-          Copy-Item -Path "$skillsDir/ppt-mcp" -Destination "$skillsStagingDir/ppt-mcp" -Recurse
+          # Copy outlook-mcp skill (SKILL.md and references already generated by build)
+          Copy-Item -Path "$skillsDir/outlook-mcp" -Destination "$skillsStagingDir/outlook-mcp" -Recurse
 
-          # Copy ppt-cli skill (SKILL.md and references already generated by build)
-          Copy-Item -Path "$skillsDir/ppt-cli" -Destination "$skillsStagingDir/ppt-cli" -Recurse
+          # Copy outlook-cli skill (SKILL.md and references already generated by build)
+          Copy-Item -Path "$skillsDir/outlook-cli" -Destination "$skillsStagingDir/outlook-cli" -Recurse
 
           # Copy skills README to root of package
           if (Test-Path "$skillsDir/README.md") {
@@ -400,7 +400,7 @@ jobs:
           }
 
           # Create ZIP archive
-          $zipPath = Join-Path $outputDir "ppt-skills-v$version.zip"
+          $zipPath = Join-Path $outputDir "outlook-skills-v$version.zip"
           Compress-Archive -Path "$stagingDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
           Write-Host "Created: $zipPath"
 
@@ -418,35 +418,35 @@ jobs:
 
         # Generate manifest.json
         $manifest = @{
-          name = "ppt-skills"
+          name = "outlook-skills"
           version = $version
-          description = "PowerPoint MCP Server Agent Skills for AI coding assistants"
+          description = "Outlook MCP Server Agent Skills for AI coding assistants"
           platforms = @("github-copilot", "claude-code", "cursor", "windsurf", "gemini-cli", "goose", "codex", "opencode", "amp", "kilo", "roo", "trae")
           skills = @(
             @{
-              name = "ppt-mcp"
-              path = "skills/ppt-mcp"
+              name = "outlook-mcp"
+              path = "skills/outlook-mcp"
               description = "MCP Server skill - for conversational AI (Claude Desktop, VS Code Chat)"
               target = "MCP Server"
             }
             @{
-              name = "ppt-cli"
-              path = "skills/ppt-cli"
+              name = "outlook-cli"
+              path = "skills/outlook-cli"
               description = "CLI skill - for coding agents (Copilot, Cursor, Windsurf)"
               target = "CLI Tool"
             }
           )
           installation = @{
-            npx = "npx skills add trsdn/mcp-server-ppt"
-            selectSkill = "npx skills add trsdn/mcp-server-ppt --skill ppt-cli"
-            installBoth = "npx skills add trsdn/mcp-server-ppt --skill '*'"
+            npx = "npx skills add trsdn/mcp-server-outlook"
+            selectSkill = "npx skills add trsdn/mcp-server-outlook --skill outlook-cli"
+            installBoth = "npx skills add trsdn/mcp-server-outlook --skill '*'"
           }
           files = @(
             @{ name = "CLAUDE.md"; type = "config"; description = "Claude Code project instructions" }
             @{ name = ".cursorrules"; type = "config"; description = "Cursor project rules" }
           )
-          repository = "https://github.com/trsdn/mcp-server-ppt"
-          documentation = "https://PptMcpserver.dev/"
+          repository = "https://github.com/trsdn/mcp-server-outlook"
+          documentation = "https://github.com/trsdn/mcp-server-outlook"
           buildDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
         }
         $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path "$outputDir/manifest.json" -Encoding UTF8
@@ -457,26 +457,26 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: agent-skills
-        path: artifacts/skills/ppt-skills-*.zip
+        path: artifacts/skills/outlook-skills-*.zip
 
     - name: Populate npm Skill Packages
       run: |
         $version = $env:VERSION
 
-        # Populate ppt-mcp-skill
-        $mcpTarget = "packages/ppt-mcp-skill/skills/ppt-mcp"
+        # Populate outlook-mcp-skill
+        $mcpTarget = "packages/outlook-mcp-skill/skills/outlook-mcp"
         Get-ChildItem $mcpTarget -Exclude ".gitkeep" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-        Copy-Item "skills/ppt-mcp/SKILL.md" $mcpTarget
-        Copy-Item "skills/ppt-mcp/references" "$mcpTarget/references" -Recurse -ErrorAction SilentlyContinue
+        Copy-Item "skills/outlook-mcp/SKILL.md" $mcpTarget
+        Copy-Item "skills/outlook-mcp/references" "$mcpTarget/references" -Recurse -ErrorAction SilentlyContinue
 
-        # Populate ppt-cli-skill
-        $cliTarget = "packages/ppt-cli-skill/skills/ppt-cli"
+        # Populate outlook-cli-skill
+        $cliTarget = "packages/outlook-cli-skill/skills/outlook-cli"
         Get-ChildItem $cliTarget -Exclude ".gitkeep" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-        Copy-Item "skills/ppt-cli/SKILL.md" $cliTarget
-        Copy-Item "skills/ppt-cli/references" "$cliTarget/references" -Recurse -ErrorAction SilentlyContinue
+        Copy-Item "skills/outlook-cli/SKILL.md" $cliTarget
+        Copy-Item "skills/outlook-cli/references" "$cliTarget/references" -Recurse -ErrorAction SilentlyContinue
 
         # Update versions in package.json files
-        foreach ($pkg in @("packages/ppt-mcp-skill/package.json", "packages/ppt-cli-skill/package.json")) {
+        foreach ($pkg in @("packages/outlook-mcp-skill/package.json", "packages/outlook-cli-skill/package.json")) {
           $content = Get-Content $pkg -Raw
           $content = $content -replace '"version":\s*"[\d\.]+"', "`"version`": `"$version`""
           Set-Content $pkg $content
@@ -513,17 +513,17 @@ jobs:
     - name: Update server.json Version
       run: |
         $version = $env:VERSION
-        $serverJsonPath = "src/PptMcp.McpServer/.mcp/server.json"
+        $serverJsonPath = "src/OutlookMcp.McpServer/.mcp/server.json"
         $serverContent = Get-Content $serverJsonPath -Raw
         $serverContent = $serverContent -replace '("version":\s*)"[\d\.]+"(\s*,\s*\n\s*"packages")' , "`$1`"$version`"`$2"
-        $serverContent = $serverContent -replace '("identifier":\s*"Trsdn\.PptMcp\.McpServer",\s*\n\s*"version":\s*)"[\d\.]+"', "`$1`"$version`""
+        $serverContent = $serverContent -replace '("identifier":\s*"OutlookMcp\.McpServer",\s*\n\s*"version":\s*)"[\d\.]+"', "`$1`"$version`""
         Set-Content $serverJsonPath $serverContent
       shell: pwsh
 
     - name: Wait for NuGet Propagation
       run: |
         $version = $env:VERSION
-        $packageId = "PptMcp.mcpserver"
+        $packageId = "outlookmcp.mcpserver"
         $readmeUrl = "https://api.nuget.org/v3-flatcontainer/$packageId/$version/readme"
 
         Write-Output "Waiting for NuGet CDN propagation..."
@@ -536,7 +536,7 @@ jobs:
             $response = Invoke-WebRequest -Uri $readmeUrl -UseBasicParsing -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
               $content = [System.Text.Encoding]::UTF8.GetString($response.Content)
-              if ($content -match "mcp-name:\s+io\.github\.trsdn/mcp-server-ppt") {
+              if ($content -match "mcp-name:\s+io\.github\.trsdn/mcp-server-outlook") {
                 Write-Output "README propagated successfully"
                 break
               }
@@ -560,7 +560,7 @@ jobs:
     - name: Publish to MCP Registry
       run: |
         ./mcp-publisher.exe login github-oidc
-        Set-Location src/PptMcp.McpServer/.mcp
+        Set-Location src/OutlookMcp.McpServer/.mcp
         ../../../mcp-publisher.exe publish --verbose
       shell: pwsh
       continue-on-error: true
@@ -594,16 +594,14 @@ jobs:
   # =============================================================================
   # Job 8: Publish to External Registries (after all builds succeed)
   # =============================================================================
-  # SICHERHEITSSPERRE: Dieses Repo ist die Outlook-Migration, aber alle Projekte
-  # heissen noch PptMcp.*. Ohne Sperre wuerde dieser Job Outlook-Code unter den
-  # Paket-IDs des Repos mcp-server-ppt veroeffentlichen (NuGet PptMcp.McpServer/
-  # PptMcp.CLI, npm ppt-mcp-skill/ppt-cli-skill, VS Code Extension PptMcp) und
-  # damit fremde, bereits live veroeffentlichte Pakete ueberschreiben.
-  # Erst nach der Umbenennung auf OutlookMcp.* wieder aktivieren. Siehe Issue #5.
+  # Publish targets are Outlook-owned identities only (see Issue #5):
+  #   NuGet: OutlookMcp.McpServer, OutlookMcp.CLI
+  #   npm:   outlook-mcp-skill, outlook-cli-skill
+  #   VS Code Marketplace: trsdn.outlook-mcp-migration
+  # None of these collide with the mcp-server-ppt packages.
   publish:
     name: Publish to Registries
     needs: [version, create-tag]
-    if: false
     runs-on: windows-latest
     permissions:
       contents: read
@@ -661,17 +659,17 @@ jobs:
     - name: Publish to NuGet.org
       run: |
         $version = $env:VERSION
-        dotnet nuget push "nupkg/PptMcp.McpServer.$version.nupkg" `
+        dotnet nuget push "nupkg/OutlookMcp.McpServer.$version.nupkg" `
           --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} `
           --source https://api.nuget.org/v3/index.json `
           --skip-duplicate
-        Write-Output "Published PptMcp.McpServer.$version to NuGet.org"
+        Write-Output "Published OutlookMcp.McpServer.$version to NuGet.org"
 
-        dotnet nuget push "cli-nupkg/PptMcp.CLI.$version.nupkg" `
+        dotnet nuget push "cli-nupkg/OutlookMcp.CLI.$version.nupkg" `
           --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} `
           --source https://api.nuget.org/v3/index.json `
           --skip-duplicate
-        Write-Output "Published PptMcp.CLI.$version to NuGet.org"
+        Write-Output "Published OutlookMcp.CLI.$version to NuGet.org"
       shell: pwsh
 
     - name: Publish to VS Code Marketplace
@@ -679,7 +677,7 @@ jobs:
       with:
         pat: ${{ secrets.VSCE_TOKEN }}
         registryUrl: https://marketplace.visualstudio.com
-        extensionFile: vscode-vsix/PptMcp-${{ env.VERSION }}.vsix
+        extensionFile: vscode-vsix/OutlookMcp-${{ env.VERSION }}.vsix
       continue-on-error: true
 
     - name: Setup npm registry
@@ -688,15 +686,15 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         registry-url: https://registry.npmjs.org
 
-    - name: Publish ppt-mcp-skill to npm
+    - name: Publish outlook-mcp-skill to npm
       run: |
-        cd npm-packages/ppt-mcp-skill
+        cd npm-packages/outlook-mcp-skill
         npm publish --provenance --access public
       continue-on-error: true
 
-    - name: Publish ppt-cli-skill to npm
+    - name: Publish outlook-cli-skill to npm
       run: |
-        cd npm-packages/ppt-cli-skill
+        cd npm-packages/outlook-cli-skill
         npm publish --provenance --access public
       continue-on-error: true
 
@@ -756,7 +754,7 @@ jobs:
 
         # Build release notes
         cat > release_notes.md << 'NOTES'
-        ## PptMcp ${{ env.VERSION }}
+        ## OutlookMcp ${{ env.VERSION }}
 
         ### What's New
         ${{ steps.changelog.outputs.CHANGELOG }}
@@ -764,27 +762,27 @@ jobs:
         ### Installation Options
 
         **VS Code Extension** (Recommended)
-        - Search "PptMcp" in VS Code Marketplace and click Install
-        - Or download `PptMcp-${{ env.VERSION }}.vsix` below
+        - Search "OutlookMcp" in VS Code Marketplace and click Install
+        - Or download `OutlookMcp-${{ env.VERSION }}.vsix` below
         - Self-contained: no .NET runtime or SDK required
-        - Includes both MCP Server and CLI (`pptcli`)
-        - Agent skills (ppt-mcp + ppt-cli) registered automatically via `chatSkills`
+        - Includes both MCP Server and CLI (`outlookcli`)
+        - Agent skills (outlook-mcp + outlook-cli) registered automatically via `chatSkills`
 
         **Claude Desktop (MCPB)**
-        - Download `ppt-mcp-${{ env.VERSION }}.mcpb` and double-click to install
+        - Download `outlook-mcp-${{ env.VERSION }}.mcpb` and double-click to install
 
         **NuGet (.NET Tool)**
         ```powershell
         # MCP Server (for AI assistants)
-        dotnet tool install --global PptMcp.McpServer
+        dotnet tool install --global OutlookMcp.McpServer
         # CLI (for coding agents and scripting)
-        dotnet tool install --global PptMcp.CLI
+        dotnet tool install --global OutlookMcp.CLI
         ```
 
         **Agent Skills** (for AI coding assistants)
-        - VS Code Extension includes both skills automatically (ppt-mcp + ppt-cli)
-        - Install via npm: `npx skillpm install ppt-mcp-skill` or `npx skillpm install ppt-cli-skill`
-        - Or download `ppt-skills-v${{ env.VERSION }}.zip` or install via `npx skills add trsdn/mcp-server-ppt`
+        - VS Code Extension includes both skills automatically (outlook-mcp + outlook-cli)
+        - Install via npm: `npx skillpm install outlook-mcp-skill` or `npx skillpm install outlook-cli-skill`
+        - Or download `outlook-skills-v${{ env.VERSION }}.zip` or install via `npx skills add trsdn/mcp-server-outlook`
 
         ### Requirements
         - Windows OS
@@ -792,9 +790,9 @@ jobs:
         - .NET 10 Runtime or SDK (for NuGet installation only; VS Code and MCPB bundle it)
 
         ### Documentation
-        - [Website](https://PptMcpserver.dev/)
-        - [GitHub Repository](https://github.com/trsdn/mcp-server-ppt)
-        - [Changelog](https://github.com/trsdn/mcp-server-ppt/blob/main/CHANGELOG.md)
+        - [Website](https://github.com/trsdn/mcp-server-outlook)
+        - [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
+        - [Changelog](https://github.com/trsdn/mcp-server-outlook/blob/master/CHANGELOG.md)
         NOTES
 
         # Collect all artifacts
@@ -808,7 +806,7 @@ jobs:
         echo "Creating release with artifacts:$ARTIFACTS"
 
         gh release create "$TAG" $ARTIFACTS \
-          --title "PptMcp $VERSION" \
+          --title "OutlookMcp $VERSION" \
           --notes-file release_notes.md
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

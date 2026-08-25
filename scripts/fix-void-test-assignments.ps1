@@ -74,18 +74,18 @@ $voidMethodPatterns = @(
 
 # Find all test files
 $testFiles = @(
-    'tests\PptMcp.Core.Tests\Integration\Commands\Sheet\SheetCommandsTests.Move.cs'
-    'tests\PptMcp.Core.Tests\Integration\Commands\Sheet\SheetCommandsTests.TabColor.cs'
-    'tests\PptMcp.Core.Tests\Integration\Commands\Sheet\SheetCommandsTests.Visibility.cs'
-    'tests\PptMcp.Core.Tests\Integration\Commands\PowerQuery\PowerQueryCommandsTests.cs'
-    'tests\PptMcp.Core.Tests\Integration\Commands\DataModel\DataModelCommandsTests.cs'
-    'tests\PptMcp.Core.Tests\Integration\Commands\PivotTable\PivotTableCommandsTests.Creation.cs'
-    'tests\PptMcp.Core.Tests\Integration\Commands\PivotTable\PivotTableCommandsTests.OlapFields.cs'
-    'tests\PptMcp.Core.Tests\Helpers\DataModelTestsFixture.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\Sheet\SheetCommandsTests.Move.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\Sheet\SheetCommandsTests.TabColor.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\Sheet\SheetCommandsTests.Visibility.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\PowerQuery\PowerQueryCommandsTests.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\DataModel\DataModelCommandsTests.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\PivotTable\PivotTableCommandsTests.Creation.cs'
+    'tests\OutlookMcp.Core.Tests\Integration\Commands\PivotTable\PivotTableCommandsTests.OlapFields.cs'
+    'tests\OutlookMcp.Core.Tests\Helpers\DataModelTestsFixture.cs'
 )
 
 foreach ($testFile in $testFiles) {
-    $fullPath = Join-Path 'C:\Users\torstenmahr\github\mcp-server-ppt' $testFile
+    $fullPath = Join-Path 'C:\Users\torstenmahr\github\mcp-server-outlook' $testFile
     
     if (-not (Test-Path $fullPath)) {
         Write-Verbose "File not found: $fullPath"

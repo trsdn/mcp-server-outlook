@@ -1,6 +1,6 @@
-# NuGet Publishing Guide for PptMcp
+# NuGet Publishing Guide for OutlookMcp
 
-Complete guide for publishing and managing all PptMcp NuGet packages using OIDC Trusted Publishing.
+Complete guide for publishing and managing all OutlookMcp NuGet packages using OIDC Trusted Publishing.
 
 ## Table of Contents
 
@@ -17,23 +17,23 @@ Complete guide for publishing and managing all PptMcp NuGet packages using OIDC 
 
 ## Published Packages
 
-PptMcp publishes two NuGet packages (unified release):
+OutlookMcp publishes two NuGet packages (unified release):
 
-### 1. PptMcp.McpServer (.NET Tool)
+### 1. OutlookMcp.McpServer (.NET Tool)
 - **Package Type**: .NET Global Tool (executable)
 - **Purpose**: MCP server for AI assistant integration
 - **Tag Pattern**: `v*` (e.g., `v1.2.0`) - **unified with CLI**
 - **Workflow**: `.github/workflows/release-mcp-server.yml` (handles both packages)
-- **NuGet Page**: https://www.nuget.org/packages/PptMcp.McpServer
-- **Installation**: `dotnet tool install --global PptMcp.McpServer`
+- **NuGet Page**: https://www.nuget.org/packages/OutlookMcp.McpServer
+- **Installation**: `dotnet tool install --global OutlookMcp.McpServer`
 
-### 2. PptMcp.CLI (.NET Tool)
+### 2. OutlookMcp.CLI (.NET Tool)
 - **Package Type**: .NET Global Tool (executable)
 - **Purpose**: Command-line interface for PowerPoint automation
 - **Tag Pattern**: `v*` (e.g., `v1.2.0`) - **unified with MCP Server**
 - **Workflow**: `.github/workflows/release-mcp-server.yml` (handles both packages)
-- **NuGet Page**: https://www.nuget.org/packages/PptMcp.CLI
-- **Installation**: `dotnet tool install --global PptMcp.CLI`
+- **NuGet Page**: https://www.nuget.org/packages/OutlookMcp.CLI
+- **Installation**: `dotnet tool install --global OutlookMcp.CLI`
 
 **Note**: MCP Server and CLI are always released together with the same version number. Core and ComInterop libraries are internal dependencies and not separately published to NuGet.
 
@@ -61,7 +61,7 @@ Trusted Publishing uses short-lived OIDC tokens instead of long-lived API keys f
    ↓
 2. GitHub Actions Workflow Triggered (release-mcp-server.yml)
    └─> Generates OIDC token with claims:
-       • Repository: trsdn/mcp-server-ppt
+       • Repository: trsdn/mcp-server-outlook
        • Workflow: release-mcp-server.yml
        • Actor: (whoever triggered)
    ↓
@@ -89,7 +89,7 @@ Trusted Publishing uses short-lived OIDC tokens instead of long-lived API keys f
 Add your NuGet.org username as a repository secret (one-time setup):
 
 1. **Go to Repository Settings**
-   - Navigate to: https://github.com/trsdn/mcp-server-ppt/settings/secrets/actions
+   - Navigate to: https://github.com/trsdn/mcp-server-outlook/settings/secrets/actions
    - Or: Repository → Settings → Secrets and variables → Actions
 
 2. **Add Repository Secret**
@@ -106,10 +106,10 @@ Trusted publishing requires packages to exist on NuGet.org before configuration.
 
 ```powershell
 # Build the package
-dotnet pack src/PptMcp.ComInterop/PptMcp.ComInterop.csproj -c Release -o ./nupkg
+dotnet pack src/OutlookMcp.ComInterop/OutlookMcp.ComInterop.csproj -c Release -o ./nupkg
 
 # Publish using your NuGet API key (first time only)
-dotnet nuget push ./nupkg/PptMcp.ComInterop.1.0.0.nupkg \
+dotnet nuget push ./nupkg/OutlookMcp.ComInterop.1.0.0.nupkg \
   --api-key YOUR_API_KEY \
   --source https://api.nuget.org/v3/index.json
 ```
@@ -128,29 +128,29 @@ For **each package**, configure a trusted publisher:
 
 #### ComInterop Library
 
-1. Go to: https://www.nuget.org/packages/PptMcp.ComInterop/manage
+1. Go to: https://www.nuget.org/packages/OutlookMcp.ComInterop/manage
 2. Click "Trusted Publishers" tab → "Add Trusted Publisher"
 3. Select "GitHub Actions"
 4. Enter:
    - **Owner**: `trsdn`
-   - **Repository**: `mcp-server-ppt`
+   - **Repository**: `mcp-server-outlook`
    - **Workflow**: `release-cominterop.yml`
    - **Environment**: *(leave empty)*
 5. Click "Add"
 
 #### Core Library
 
-1. Go to: https://www.nuget.org/packages/PptMcp.Core/manage
+1. Go to: https://www.nuget.org/packages/OutlookMcp.Core/manage
 2. Same steps, use workflow: `release-core.yml`
 
 #### MCP Server
 
-1. Go to: https://www.nuget.org/packages/PptMcp.McpServer/manage
+1. Go to: https://www.nuget.org/packages/OutlookMcp.McpServer/manage
 2. Same steps, use workflow: `release-mcp-server.yml`
 
 #### CLI Tool
 
-1. Go to: https://www.nuget.org/packages/PptMcp.CLI/manage
+1. Go to: https://www.nuget.org/packages/OutlookMcp.CLI/manage
 2. Same steps, use workflow: `release-cli.yml`
 
 ### Step 4: Verify Configuration
@@ -205,7 +205,7 @@ git tag cli-v1.1.0
 git push origin cli-v1.1.0
 
 # 5. Monitor workflows
-# - Go to: https://github.com/trsdn/mcp-server-ppt/actions
+# - Go to: https://github.com/trsdn/mcp-server-outlook/actions
 # - Watch release workflows run
 # - Verify NuGet publishing succeeds
 # - Verify GitHub releases created
@@ -259,30 +259,30 @@ Release 4: cominterop-v1.1.0, core-v1.2.0, mcp-v1.2.0, cli-v1.2.0  (Core + wrapp
 
 ```powershell
 # Build all packages
-dotnet pack src/PptMcp.ComInterop/PptMcp.ComInterop.csproj -c Release -o ./nupkg
-dotnet pack src/PptMcp.Core/PptMcp.Core.csproj -c Release -o ./nupkg
-dotnet pack src/PptMcp.McpServer/PptMcp.McpServer.csproj -c Release -o ./nupkg
-dotnet pack src/PptMcp.CLI/PptMcp.CLI.csproj -c Release -o ./nupkg
+dotnet pack src/OutlookMcp.ComInterop/OutlookMcp.ComInterop.csproj -c Release -o ./nupkg
+dotnet pack src/OutlookMcp.Core/OutlookMcp.Core.csproj -c Release -o ./nupkg
+dotnet pack src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj -c Release -o ./nupkg
+dotnet pack src/OutlookMcp.CLI/OutlookMcp.CLI.csproj -c Release -o ./nupkg
 ```
 
 ### Test Local Installation
 
 ```powershell
 # Install .NET tool from local package
-dotnet tool install --global PptMcp.CLI --add-source ./nupkg --version 1.0.0
+dotnet tool install --global OutlookMcp.CLI --add-source ./nupkg --version 1.0.0
 
 # Test the tool
-pptcli --help
+outlookcli --help
 
 # Uninstall
-dotnet tool uninstall --global PptMcp.CLI
+dotnet tool uninstall --global OutlookMcp.CLI
 ```
 
 ### Validate Package Contents
 
 ```powershell
 # Extract package (NuGet packages are ZIP files)
-unzip -l ./nupkg/PptMcp.Core.1.0.0.nupkg
+unzip -l ./nupkg/OutlookMcp.Core.1.0.0.nupkg
 
 # Verify:
 # - README.md is included
@@ -300,7 +300,7 @@ unzip -l ./nupkg/PptMcp.Core.1.0.0.nupkg
 **Wait Time**: NuGet.org indexing takes 5-10 minutes after publishing.
 
 **Check Workflow Logs**:
-1. Go to: https://github.com/trsdn/mcp-server-ppt/actions
+1. Go to: https://github.com/trsdn/mcp-server-outlook/actions
 2. Find the release workflow run
 3. Check "Publish to NuGet.org" step for errors
 
@@ -312,7 +312,7 @@ unzip -l ./nupkg/PptMcp.Core.1.0.0.nupkg
 1. Verify package exists on NuGet.org
 2. Check trusted publisher configuration matches exactly:
    - Owner: `trsdn`
-   - Repository: `mcp-server-ppt`
+   - Repository: `mcp-server-outlook`
    - Workflow: `release-[package].yml` (exact filename)
 3. Ensure `NUGET_USER` secret is set correctly
 4. Verify workflow has `id-token: write` permission
@@ -406,7 +406,7 @@ If you rename a workflow file:
 
 ### GitHub Actions
 
-- **Workflow Runs**: https://github.com/trsdn/mcp-server-ppt/actions
+- **Workflow Runs**: https://github.com/trsdn/mcp-server-outlook/actions
 - Each release workflow creates:
   - NuGet package upload
   - GitHub release with notes
@@ -414,10 +414,10 @@ If you rename a workflow file:
 
 ### NuGet.org Package Pages
 
-- **ComInterop**: https://www.nuget.org/packages/PptMcp.ComInterop
-- **Core**: https://www.nuget.org/packages/PptMcp.Core
-- **MCP Server**: https://www.nuget.org/packages/PptMcp.McpServer
-- **CLI**: https://www.nuget.org/packages/PptMcp.CLI
+- **ComInterop**: https://www.nuget.org/packages/OutlookMcp.ComInterop
+- **Core**: https://www.nuget.org/packages/OutlookMcp.Core
+- **MCP Server**: https://www.nuget.org/packages/OutlookMcp.McpServer
+- **CLI**: https://www.nuget.org/packages/OutlookMcp.CLI
 
 ### Download Statistics
 
@@ -442,7 +442,7 @@ For issues with NuGet publishing:
 1. Check this guide's troubleshooting section
 2. Review GitHub Actions workflow logs
 3. Verify NuGet.org trusted publisher configuration
-4. Open an issue at: https://github.com/trsdn/mcp-server-ppt/issues
+4. Open an issue at: https://github.com/trsdn/mcp-server-outlook/issues
 
 ---
 

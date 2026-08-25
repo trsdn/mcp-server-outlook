@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.3",
-  "name": "ppt-mcp",
+  "name": "outlook-mcp",
   "display_name": "PowerPoint (Windows)",
   "version": "1.7.0",
   "description": "Manage Slides, Shapes, Text, Charts, Layouts, Transitions, Animations, Formatting & more - requires PowerPoint to be installed",
@@ -11,14 +11,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/trsdn/mcp-server-ppt"
+    "url": "https://github.com/trsdn/mcp-server-outlook"
   },
-  "homepage": "https://PptMcpserver.dev/",
-  "documentation": "https://PptMcpserver.dev/",
-  "support": "https://github.com/trsdn/mcp-server-ppt/issues",
+  "homepage": "https://github.com/trsdn/mcp-server-outlook",
+  "documentation": "https://github.com/trsdn/mcp-server-outlook",
+  "support": "https://github.com/trsdn/mcp-server-outlook/issues",
   "icon": "icon-512.png",
   "license": "MIT",
-  "privacy_policies": ["https://PptMcpserver.dev/privacy/"],
+  "privacy_policies": ["https://github.com/trsdn/mcp-server-outlook/blob/master/SECURITY.md"],
   "keywords": [
     "powerpoint",
     "office",
@@ -36,9 +36,9 @@
   ],
   "server": {
     "type": "binary",
-    "entry_point": "server/ppt-mcp-server",
+    "entry_point": "server/outlook-mcp-server",
     "mcp_config": {
-      "command": "${__dirname}/server/ppt-mcp-server",
+      "command": "${__dirname}/server/outlook-mcp-server",
       "args": [],
       "env": {}
     }

@@ -1,13 +1,13 @@
-# PptMcp LLM Integration Tests
+# OutlookMcp LLM Integration Tests
 
-LLM-powered integration tests for both PptMcp MCP Server and PowerPoint CLI using pytest-aitest.
+LLM-powered integration tests for both OutlookMcp MCP Server and PowerPoint CLI using pytest-aitest.
 
 ## Prerequisites
 
 - Windows desktop with Microsoft PowerPoint installed
 - .NET 10 SDK
 - Azure OpenAI endpoint configured
-- PptMcp MCP Server and CLI built/installed
+- OutlookMcp MCP Server and CLI built/installed
 
 ### Azure OpenAI
 
@@ -35,7 +35,7 @@ pytest-aitest = { path = "../../../pytest-aitest", editable = true }
 ## Build MCP Server (Required)
 
 ```powershell
-dotnet build ..\..\src\PptMcp.McpServer\PptMcp.McpServer.csproj -c Release
+dotnet build ..\..\src\OutlookMcp.McpServer\OutlookMcp.McpServer.csproj -c Release
 ```
 
 ## Run Tests (Manual Only)
@@ -79,14 +79,14 @@ Use this gate after changing skill content, MCP tool descriptions, CLI help text
 
 ## Configuration Overrides
 
-- `ppt_mcp_SERVER_COMMAND` — override MCP server command (full command line)
-- `PPT_CLI_COMMAND` — override CLI command (default: `pptcli`)
+- `outlook_mcp_SERVER_COMMAND` — override MCP server command (full command line)
+- `OUTLOOK_CLI_COMMAND` — override CLI command (default: `outlookcli`)
 
 Example:
 
 ```powershell
-$env:ppt_mcp_SERVER_COMMAND = "d:\\source\\mcp-server-ppt\\src\\PptMcp.McpServer\\bin\\Release\\net9.0-windows\\PptMcp.McpServer.exe"
-$env:PPT_CLI_COMMAND = "d:\\source\\mcp-server-ppt\\src\\PptMcp.CLI\\bin\\Release\\net9.0-windows\\pptcli.exe"
+$env:outlook_mcp_SERVER_COMMAND = "d:\\source\\mcp-server-outlook\\src\\OutlookMcp.McpServer\\bin\\Release\\net9.0-windows\\OutlookMcp.McpServer.exe"
+$env:OUTLOOK_CLI_COMMAND = "d:\\source\\mcp-server-outlook\\src\\OutlookMcp.CLI\\bin\\Release\\net9.0-windows\\outlookcli.exe"
 ```
 
 ## Test Structure

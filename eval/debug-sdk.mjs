@@ -34,7 +34,7 @@ async function main() {
   });
 
   // Simple task that requires file reading
-  const prompt = `Read the file C:\\Users\\torstenmahr\\github\\mcp-server-ppt\\skills\\shared\\slide-design-principles.md and tell me how many sections (## headings) are defined in it. Just the count.`;
+  const prompt = `Read the file C:\\Users\\torstenmahr\\github\\mcp-server-outlook\\skills\\shared\\slide-design-principles.md and tell me how many sections (## headings) are defined in it. Just the count.`;
   
   console.log("Sending...");
   session.send({ prompt });

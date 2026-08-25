@@ -1,0 +1,36 @@
+{
+  "name": "outlook-mcp-skill",
+  "version": "1.7.0",
+  "description": "Agent Skill for automating Microsoft Outlook via MCP Server — mailboxes, folders, mail items, drafts, and attachments",
+  "keywords": [
+    "agent-skill",
+    "outlook",
+    "mcp",
+    "mcp-server",
+    "email",
+    "mailbox",
+    "calendar"
+  ],
+  "homepage": "https://github.com/trsdn/mcp-server-outlook",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trsdn/mcp-server-outlook.git",
+    "directory": "packages/outlook-mcp-skill"
+  },
+  "bugs": {
+    "url": "https://github.com/trsdn/mcp-server-outlook/issues"
+  },
+  "author": "trsdn",
+  "license": "MIT",
+  "files": [
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {},
+  "skillpm": {
+    "mcpServers": [
+      "trsdn/mcp-server-outlook"
+    ]
+  }
+}

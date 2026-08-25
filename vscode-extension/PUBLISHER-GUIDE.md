@@ -125,8 +125,8 @@ This guide walks you through publishing your VS Code extension to the marketplac
      - Create unified GitHub release with all artifacts
 
 6. **Verify publication** (takes 5-15 minutes):
-   - VS Code Marketplace: https://marketplace.visualstudio.com/items?itemName=PptMcp
-   - Or search "PptMcp" in VS Code Extensions panel
+   - VS Code Marketplace: https://marketplace.visualstudio.com/items?itemName=OutlookMcp
+   - Or search "OutlookMcp" in VS Code Extensions panel
 
 **✅ Your extension is now live on the marketplace!**
 
@@ -168,7 +168,7 @@ git push origin v1.0.1
 - Any published extensions will appear here
 
 **Check extension page:**
-- Go to https://marketplace.visualstudio.com/items?itemName=PptMcp
+- Go to https://marketplace.visualstudio.com/items?itemName=OutlookMcp
 - Should show your extension (after first publish)
 
 ---

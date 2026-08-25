@@ -4,7 +4,7 @@ applyTo: "src/**/*.cs"
 
 # Architecture Patterns
 
-> **Core patterns for PptMcp development**
+> **Core patterns for OutlookMcp development**
 
 ## .NET Class Design (MANDATORY)
 
@@ -38,7 +38,7 @@ Commands/Range/
 
 ## TWO EQUAL ENTRY POINTS (CRITICAL)
 
-**PptMcp has TWO first-class entry points: MCP Server AND CLI.** Both must have:
+**OutlookMcp has TWO first-class entry points: MCP Server AND CLI.** Both must have:
 - **Feature parity**: Every action in MCP must exist in CLI and vice versa
 - **Parameter parity**: Same parameters, same defaults, same validation
 - **Behavior parity**: Same Core command, same result format
@@ -46,7 +46,7 @@ Commands/Range/
 When adding or changing ANY feature, ALWAYS update BOTH entry points. See Rule 24 (Post-Change Sync).
 
 ```
-MCP Server (MCP tools, JSON-RPC) ──► In-process PptMcpService ──► Core Commands ──► PowerPoint COM
+MCP Server (MCP tools, JSON-RPC) ──► In-process OutlookMcpService ──► Core Commands ──► PowerPoint COM
 CLI (command-line args, console)  ──► CLI Daemon (named pipe) ─────► Core Commands ──► PowerPoint COM
 ```
 
@@ -150,7 +150,7 @@ public async Task<OperationResult> ComplexAsync(IPptBatch batch, string param)
 
 ## MCP Server Resource-Based Tools
 
-**In-Process Architecture**: MCP Server hosts PptMcpService fully in-process with direct method calls (no pipe).
+**In-Process Architecture**: MCP Server hosts OutlookMcpService fully in-process with direct method calls (no pipe).
 ServiceBridge holds the service reference and calls ProcessAsync() directly.
 
 **19 Focused Tools:**

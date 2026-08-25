@@ -27,7 +27,7 @@ From the `mcpb` directory:
 .\Build-McpBundle.ps1
 ```
 
-This creates `mcpb/artifacts/PptMcp.McpServer-win-x64.zip`.
+This creates `mcpb/artifacts/OutlookMcp.McpServer-win-x64.zip`.
 
 ### Build Options
 
@@ -44,8 +44,8 @@ This creates `mcpb/artifacts/PptMcp.McpServer-win-x64.zip`.
 The MCPB zip file contains:
 
 ```
-PptMcp.McpServer-win-x64.zip/
-├── PptMcp.McpServer.exe  # Self-contained executable (~15 MB)
+OutlookMcp.McpServer-win-x64.zip/
+├── OutlookMcp.McpServer.exe  # Self-contained executable (~15 MB)
 ├── .mcp/
 │   └── server.json                   # MCP server configuration
 ├── manifest.json                     # MCPB manifest
@@ -57,11 +57,11 @@ PptMcp.McpServer-win-x64.zip/
 
 1. **Create GitHub Release:**
    - Tag format: `v1.x.x`
-   - Upload `PptMcp.McpServer-win-x64.zip` as release asset
+   - Upload `OutlookMcp.McpServer-win-x64.zip` as release asset
 
 2. **Update manifest.json download URL:**
    - Verify the `install.win32.download` URL points to the release asset
-   - URL format: `https://github.com/trsdn/mcp-server-ppt/releases/latest/download/PptMcp.McpServer-win-x64.zip`
+   - URL format: `https://github.com/trsdn/mcp-server-outlook/releases/latest/download/OutlookMcp.McpServer-win-x64.zip`
 
 3. **Submit to Claude Directory:**
    - Follow Anthropic's submission process
@@ -75,15 +75,15 @@ The manifest follows MCPB version 0.3 specification:
 {
   "manifestVersion": "0.3",
   "server": {
-    "id": "ppt-mcp-server",
+    "id": "outlook-mcp-server",
     "name": "PowerPoint MCP Server",
     "type": "binary",
     "platforms": ["win32"]
   },
   "install": {
     "win32": {
-      "download": "https://github.com/.../PptMcp.McpServer-win-x64.zip",
-      "command": "PptMcp.McpServer.exe"
+      "download": "https://github.com/.../OutlookMcp.McpServer-win-x64.zip",
+      "command": "OutlookMcp.McpServer.exe"
     }
   }
 }
@@ -121,7 +121,7 @@ After building, verify the package:
 
 ```powershell
 # List zip contents
-Expand-Archive ./artifacts/PptMcp.McpServer-win-x64.zip -DestinationPath ./test-extract
+Expand-Archive ./artifacts/OutlookMcp.McpServer-win-x64.zip -DestinationPath ./test-extract
 dir ./test-extract
 Remove-Item -Recurse ./test-extract
 ```

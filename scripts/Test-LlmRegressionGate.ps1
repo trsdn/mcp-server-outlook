@@ -57,39 +57,39 @@ function Find-BuildArtifact {
 
 if (-not $SkipBuild) {
     Write-Host "Building CLI (Release)..." -ForegroundColor Cyan
-    dotnet build (Join-Path $rootDir "src\PptMcp.CLI\PptMcp.CLI.csproj") -c Release
+    dotnet build (Join-Path $rootDir "src\OutlookMcp.CLI\OutlookMcp.CLI.csproj") -c Release
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
 
     Write-Host "Building MCP Server (Release)..." -ForegroundColor Cyan
-    dotnet build (Join-Path $rootDir "src\PptMcp.McpServer\PptMcp.McpServer.csproj") -c Release
+    dotnet build (Join-Path $rootDir "src\OutlookMcp.McpServer\OutlookMcp.McpServer.csproj") -c Release
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
 }
 
 $cliPath = Find-BuildArtifact @(
-    "src\PptMcp.CLI\bin\Release\net9.0-windows\pptcli.exe",
-    "src\PptMcp.CLI\bin\Debug\net9.0-windows\pptcli.exe",
-    "src\PptMcp.CLI\bin\Release\net10.0-windows\pptcli.exe",
-    "src\PptMcp.CLI\bin\Debug\net10.0-windows\pptcli.exe"
+    "src\OutlookMcp.CLI\bin\Release\net9.0-windows\outlookcli.exe",
+    "src\OutlookMcp.CLI\bin\Debug\net9.0-windows\outlookcli.exe",
+    "src\OutlookMcp.CLI\bin\Release\net10.0-windows\outlookcli.exe",
+    "src\OutlookMcp.CLI\bin\Debug\net10.0-windows\outlookcli.exe"
 )
 
 $mcpServerPath = Find-BuildArtifact @(
-    "src\PptMcp.McpServer\bin\Release\net9.0-windows\PptMcp.McpServer.exe",
-    "src\PptMcp.McpServer\bin\Debug\net9.0-windows\PptMcp.McpServer.exe",
-    "src\PptMcp.McpServer\bin\Release\net10.0-windows\PptMcp.McpServer.exe",
-    "src\PptMcp.McpServer\bin\Debug\net10.0-windows\PptMcp.McpServer.exe"
+    "src\OutlookMcp.McpServer\bin\Release\net9.0-windows\OutlookMcp.McpServer.exe",
+    "src\OutlookMcp.McpServer\bin\Debug\net9.0-windows\OutlookMcp.McpServer.exe",
+    "src\OutlookMcp.McpServer\bin\Release\net10.0-windows\OutlookMcp.McpServer.exe",
+    "src\OutlookMcp.McpServer\bin\Debug\net10.0-windows\OutlookMcp.McpServer.exe"
 )
 
 if (-not $cliPath) {
-    Write-Error "Could not find pptcli.exe. Build src\PptMcp.CLI first."
+    Write-Error "Could not find outlookcli.exe. Build src\OutlookMcp.CLI first."
     exit 1
 }
 
 if (-not $mcpServerPath) {
-    Write-Error "Could not find PptMcp.McpServer.exe. Build src\PptMcp.McpServer first."
+    Write-Error "Could not find OutlookMcp.McpServer.exe. Build src\OutlookMcp.McpServer first."
     exit 1
 }
 
@@ -111,11 +111,11 @@ if (-not $CliOnly) {
     )
 }
 
-$previousCliCommand = [Environment]::GetEnvironmentVariable("PPT_CLI_COMMAND", "Process")
-$previousMcpCommand = [Environment]::GetEnvironmentVariable("ppt_mcp_SERVER_COMMAND", "Process")
+$previousCliCommand = [Environment]::GetEnvironmentVariable("OUTLOOK_CLI_COMMAND", "Process")
+$previousMcpCommand = [Environment]::GetEnvironmentVariable("outlook_mcp_SERVER_COMMAND", "Process")
 
-[Environment]::SetEnvironmentVariable("PPT_CLI_COMMAND", $cliPath, "Process")
-[Environment]::SetEnvironmentVariable("ppt_mcp_SERVER_COMMAND", $mcpServerPath, "Process")
+[Environment]::SetEnvironmentVariable("OUTLOOK_CLI_COMMAND", $cliPath, "Process")
+[Environment]::SetEnvironmentVariable("outlook_mcp_SERVER_COMMAND", $mcpServerPath, "Process")
 
 Push-Location $llmTestsDir
 
@@ -140,6 +140,6 @@ try {
 }
 finally {
     Pop-Location
-    [Environment]::SetEnvironmentVariable("PPT_CLI_COMMAND", $previousCliCommand, "Process")
-    [Environment]::SetEnvironmentVariable("ppt_mcp_SERVER_COMMAND", $previousMcpCommand, "Process")
+    [Environment]::SetEnvironmentVariable("OUTLOOK_CLI_COMMAND", $previousCliCommand, "Process")
+    [Environment]::SetEnvironmentVariable("outlook_mcp_SERVER_COMMAND", $previousMcpCommand, "Process")
 }

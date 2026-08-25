@@ -1,4 +1,4 @@
-"""Fixtures and helpers for PptMcp LLM integration tests."""
+"""Fixtures and helpers for OutlookMcp LLM integration tests."""
 
 from __future__ import annotations
 
@@ -117,11 +117,11 @@ def _resolve_mcp_command() -> list[str]:
         return shlex.split(env_command)
 
     # Windows-specific build with COM interop support
-    exe_path = REPO_ROOT / "src/PptMcp.McpServer/bin/Release/net10.0-windows/PptMcp.McpServer.exe"
+    exe_path = REPO_ROOT / "src/OutlookMcp.McpServer/bin/Release/net10.0-windows/OutlookMcp.McpServer.exe"
     if exe_path.exists():
         return [str(exe_path)]
 
-    project_path = REPO_ROOT / "src/PptMcp.McpServer/PptMcp.McpServer.csproj"
+    project_path = REPO_ROOT / "src/OutlookMcp.McpServer/OutlookMcp.McpServer.csproj"
     return [
         "dotnet",
         "run",
@@ -139,16 +139,16 @@ def _resolve_cli_command() -> str:
         return env_command
 
     # Windows-specific build with COM interop support
-    exe_path = REPO_ROOT / "src/PptMcp.CLI/bin/Release/net10.0-windows/pptcli.exe"
+    exe_path = REPO_ROOT / "src/OutlookMcp.CLI/bin/Release/net10.0-windows/outlookcli.exe"
     if exe_path.exists():
         return str(exe_path)
 
-    # Fallback to pptcli in PATH
-    return "pptcli"
+    # Fallback to outlookcli in PATH
+    return "outlookcli"
 
 
 @pytest.fixture(scope="session")
-def ppt_mcp_server() -> MCPServer:
+def outlook_mcp_server() -> MCPServer:
     return MCPServer(
         command=_resolve_mcp_command(),
         wait=Wait.ready(timeout_ms=30000),
@@ -156,29 +156,29 @@ def ppt_mcp_server() -> MCPServer:
 
 
 @pytest.fixture(scope="session")
-def ppt_cli_server() -> CLIServer:
+def outlook_cli_server() -> CLIServer:
     command = _resolve_cli_command()
     temp_dir = Path(os.environ.get("TEMP", tempfile.gettempdir()))
     return CLIServer(
-        name="ppt-cli",
+        name="outlook-cli",
         command=command,
         tool_prefix="ppt",
         shell="none",
         cwd=str(temp_dir),
         discover_help=False,  # Skill Rule 0 requires LLM to run --help first
-        description="PowerPoint CLI automation. Run 'pptcli --help' to discover available commands before use.",
+        description="PowerPoint CLI automation. Run 'outlookcli --help' to discover available commands before use.",
         timeout=120.0,  # PowerPoint COM operations (especially session close) can take >30s
     )
 
 
 @pytest.fixture(scope="session")
-def ppt_mcp_skill() -> Skill:
-    return Skill.from_path(REPO_ROOT / "skills/ppt-mcp")
+def outlook_mcp_skill() -> Skill:
+    return Skill.from_path(REPO_ROOT / "skills/outlook-mcp")
 
 
 @pytest.fixture(scope="session")
-def ppt_cli_skill() -> Skill:
-    return Skill.from_path(REPO_ROOT / "skills/ppt-cli")
+def outlook_cli_skill() -> Skill:
+    return Skill.from_path(REPO_ROOT / "skills/outlook-cli")
 
 
 @pytest.fixture(scope="session")

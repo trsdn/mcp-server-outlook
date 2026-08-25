@@ -68,4 +68,4 @@ Agent Skill for AI assistants using the Outlook MCP Server via the Model Context
 
 ## Transitional naming note
 
-The repository is still migrating from inherited `PptMcp.*` internals. Public guidance should be Outlook-first even when executable or project names still contain `PptMcp`.
+The repository is still migrating from inherited `OutlookMcp.*` internals. Public guidance should be Outlook-first even when executable or project names still contain `OutlookMcp`.

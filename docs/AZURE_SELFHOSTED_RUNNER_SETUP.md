@@ -48,10 +48,10 @@ Recommended practice:
 Before enabling the repository variable, validate on the runner host:
 
 ```powershell
-dotnet build src\PptMcp.CLI\PptMcp.CLI.csproj -c Release
-dotnet build src\PptMcp.McpServer\PptMcp.McpServer.csproj -c Release
+dotnet build src\OutlookMcp.CLI\OutlookMcp.CLI.csproj -c Release
+dotnet build src\OutlookMcp.McpServer\OutlookMcp.McpServer.csproj -c Release
 .\scripts\Test-CliWorkflow.ps1
-dotnet test tests\PptMcp.McpServer.Tests\PptMcp.McpServer.Tests.csproj --filter "FullyQualifiedName~McpServerIntegrationTests.SmokeTest_AllTools_E2EWorkflow"
+dotnet test tests\OutlookMcp.McpServer.Tests\OutlookMcp.McpServer.Tests.csproj --filter "FullyQualifiedName~McpServerIntegrationTests.SmokeTest_AllTools_E2EWorkflow"
 ```
 
 If those pass locally on the runner host, enable `ENABLE_POWERPOINT_INTEGRATION_CI` and trigger `integration-tests.yml` with `workflow_dispatch`.

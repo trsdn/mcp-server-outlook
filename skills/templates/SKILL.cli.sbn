@@ -3,7 +3,7 @@ name: outlook-cli
 description: >
   Automate Microsoft Outlook on Windows via CLI. Use when coding agents prefer short commands
   over MCP schemas for mailbox inspection, draft creation, sending, or attachment export.
-  Triggers: Outlook, email, mailbox, draft, attachment, send, pptcli, CLI automation.
+  Triggers: Outlook, email, mailbox, draft, attachment, send, outlookcli, CLI automation.
 ---
 
 # Outlook automation with the CLI
@@ -11,7 +11,7 @@ description: >
 ## Preconditions
 
 - Windows host with Microsoft Outlook installed
-- CLI naming may still be inherited (`PptMcp.CLI`, `pptcli`) while migration continues
+- CLI naming may still be inherited (`OutlookMcp.CLI`, `outlookcli`) while migration continues
 - Use CLI help to confirm exact arguments for the current generated Outlook seed
 
 ## Recommended workflow

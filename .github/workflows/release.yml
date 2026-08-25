@@ -792,7 +792,7 @@ jobs:
         ### Documentation
         - [Website](https://github.com/trsdn/mcp-server-outlook)
         - [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
-        - [Changelog](https://github.com/trsdn/mcp-server-outlook/blob/main/CHANGELOG.md)
+        - [Changelog](https://github.com/trsdn/mcp-server-outlook/blob/master/CHANGELOG.md)
         NOTES
 
         # Collect all artifacts

@@ -128,7 +128,7 @@ npx add-mcp "mcp-outlook" --name outlook-mcp --all -y
 
 #### Option B: Manual Configuration
 
-**Quick Start:** Ready-to-use config files for all clients are available in [`examples/mcp-configs/`](https://github.com/trsdn/mcp-server-outlook/tree/main/examples/mcp-configs/)
+**Quick Start:** Ready-to-use config files for all clients are available in [`examples/mcp-configs/`](https://github.com/trsdn/mcp-server-outlook/tree/master/examples/mcp-configs/)
 
 **For GitHub Copilot (VS Code):**
 
@@ -317,7 +317,7 @@ outlookcli -q session close --session <session-id> --save
 
 > **💡 Tip:** Use `-q` (quiet mode) to suppress banner and get JSON output only - perfect for scripting and automation.
 
-**CLI Documentation:** [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/main/src/OutlookMcp.CLI/README.md)
+**CLI Documentation:** [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.CLI/README.md)
 
 ---
 
@@ -433,7 +433,7 @@ dotnet tool install --global OutlookMcp.McpServer --version 1.2.3
 
 Before updating, check the release notes:
 - **GitHub Releases:** https://github.com/trsdn/mcp-server-outlook/releases
-- **Changelog:** https://github.com/trsdn/mcp-server-outlook/blob/main/CHANGELOG.md
+- **Changelog:** https://github.com/trsdn/mcp-server-outlook/blob/master/CHANGELOG.md
 
 ---
 
@@ -482,7 +482,7 @@ dotnet tool uninstall --global OutlookMcp.CLI
 
 - **Documentation:** [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
 - **Issues:** [GitHub Issues](https://github.com/trsdn/mcp-server-outlook/issues)
-- **Contributing:** [Contributing Guide](https://github.com/trsdn/mcp-server-outlook/blob/main/docs/CONTRIBUTING.md)
+- **Contributing:** [Contributing Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/docs/CONTRIBUTING.md)
 
 ---
 
@@ -493,9 +493,9 @@ After installation:
 1. **Learn the basics:** Try simple commands like creating slides, setting values
 2. **Explore features:** See [README](https://github.com/trsdn/mcp-server-outlook#readme) for complete feature list
 3. **Read the guides:**
-   - [MCP Server Guide](https://github.com/trsdn/mcp-server-outlook/blob/main/src/OutlookMcp.McpServer/README.md)
-   - [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/main/src/OutlookMcp.CLI/README.md)
-   - [Agent Skills](https://github.com/trsdn/mcp-server-outlook/blob/main/skills/outlook-mcp/SKILL.md) - Cross-platform AI guidance
+   - [MCP Server Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.McpServer/README.md)
+   - [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.CLI/README.md)
+   - [Agent Skills](https://github.com/trsdn/mcp-server-outlook/blob/master/skills/outlook-mcp/SKILL.md) - Cross-platform AI guidance
 4. **Join the community:** Star the repo, report issues, contribute improvements
 
 ---
@@ -549,7 +549,7 @@ npx skills add trsdn/mcp-server-outlook --skill outlook-mcp -a claude-code
    - Claude Code: `.claude/skills/outlook-cli/` or `.claude/skills/outlook-mcp/`
    - Cursor: `.cursor/skills/outlook-cli/` or `.cursor/skills/outlook-mcp/`
 
-**See:** [Agent Skills Documentation](https://github.com/trsdn/mcp-server-outlook/blob/main/skills/README.md)
+**See:** [Agent Skills Documentation](https://github.com/trsdn/mcp-server-outlook/blob/master/skills/README.md)
 
 ---
 

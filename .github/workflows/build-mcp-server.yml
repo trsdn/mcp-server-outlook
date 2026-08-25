@@ -5,7 +5,21 @@ permissions:
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, develop ]
+    paths:
+      - 'src/OutlookMcp.McpServer/**'
+      - 'src/OutlookMcp.Core/**'
+      - 'src/OutlookMcp.ComInterop/**'
+      - 'tests/OutlookMcp.McpServer.Tests/**'
+      - 'tests/OutlookMcp.Core.Tests/**'
+      - 'tests/OutlookMcp.Diagnostics.Tests/**'
+      - 'tests/OutlookMcp.ComInterop.Tests/**'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - '.github/workflows/build-mcp-server.yml'
+  pull_request:
+    branches: [ master ]
     paths:
       - 'src/OutlookMcp.McpServer/**'
       - 'src/OutlookMcp.Core/**'

@@ -105,14 +105,25 @@ public class Program
 
                 // Server-wide instructions for LLMs - helps with tool selection and workflow understanding
                 options.ServerInstructions = """
-                    OutlookMcp is the Outlook migration MCP server surface.
+                    OutlookMcp automates classic Outlook for Windows desktop via COM. It exposes
+                    five tools: application, folder, mail, attachment, and calendar.
 
-                    Outlook-first commands currently include application, folder, mail, and attachment workflows.
+                    Identity model: Outlook items are addressed by entryId (optionally paired with
+                    storeId for multi-store mailboxes), not by a file path or session handle. There
+                    is no "open" or "close" step — pass entryId/storeId directly to the action that
+                    needs the item.
 
-                    Legacy presentation file/session commands still exist during migration:
-                    1. file(action:'open') → returns session_id
-                    2. Use session_id with session-bound legacy tools
-                    3. file(action:'close', save:true/false) → ONLY when completely done
+                    Use useActiveMail/useActiveAppointment (a "read-active" style action) to operate
+                    on whatever mail item or appointment the user currently has selected or open in
+                    Outlook, when no explicit entryId is available. Prefer explicit entryId/storeId
+                    targeting whenever you already have it, since "active item" is ambiguous with
+                    nothing selected or multiple items shown.
+
+                    Destructive actions (deleting items, sending mail, etc.) require confirmation
+                    per the tool's Destructive annotation — do not chain a destructive action
+                    immediately after a read without the user's explicit go-ahead, and never assume
+                    a destructive call can be safely retried without checking whether it already
+                    succeeded.
                     """;
             })
             .WithToolsFromAssembly()

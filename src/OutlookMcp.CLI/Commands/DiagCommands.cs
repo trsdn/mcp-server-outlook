@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using OutlookMcp.CLI.Infrastructure;
+using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Service;
 using Spectre.Console.Cli;
 
@@ -123,5 +124,29 @@ internal sealed class DiagValidateParamsCommand : AsyncCommand<DiagValidateParam
         [Description("Verbose flag")]
         [DefaultValue(false)]
         public bool Verbose { get; init; }
+    }
+}
+
+internal sealed class DiagOutlookCommand : Command
+{
+    public override int Execute(CommandContext context, CancellationToken cancellationToken)
+    {
+        OutlookFlavor flavor = OutlookInstallationDetector.DetectFlavor();
+        bool elevated = OutlookInstallationDetector.IsCurrentProcessElevated();
+
+        var result = new
+        {
+            success = true,
+            action = "outlook",
+            outlookFlavor = flavor.ToString(),
+            supported = flavor == OutlookFlavor.ClassicDesktop,
+            processElevated = elevated,
+            message = flavor == OutlookFlavor.ClassicDesktop
+                ? "Classic Outlook for Windows detected. This server can automate it via COM."
+                : OutlookInstallationDetector.BuildUnavailableMessage(flavor)
+        };
+
+        Console.WriteLine(JsonSerializer.Serialize(result, ServiceProtocol.JsonOptions));
+        return 0;
     }
 }

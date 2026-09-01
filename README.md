@@ -139,7 +139,7 @@ That cleanup is intentional work still to be completed, not hidden compatibility
 ## Requirements
 
 - Windows
-- Microsoft Outlook desktop installed
+- **Classic Outlook for Windows desktop app installed and running** (the app registering the `Outlook.Application` COM ProgID). The new Outlook for Windows (the modern, packaged replacement for Mail & Calendar) has **no COM object model** and cannot be automated by this server; if only new Outlook is present, `application.get-status` / `outlookcli diag outlook` will report `NewOutlookOnly` and every Outlook action will fail with an actionable message telling you to install or switch to classic Outlook.
 - Desktop automation context available
 
 ## Validation status

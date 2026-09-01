@@ -35,6 +35,8 @@ public class ApplicationCommands : IApplicationCommands
                         ExplorerCount = application.Explorers.Count,
                         InspectorCount = application.Inspectors.Count,
                         StoreCount = session.Folders.Count,
+                        OutlookFlavor = "classic-desktop",
+                        ProcessElevated = OutlookInstallationDetector.IsCurrentProcessElevated(),
                         CurrentFolderName = includeActiveContext ? currentFolder?.Name : null,
                         CurrentFolderPath = includeActiveContext ? OutlookInteropRunner.GetFolderPath(currentFolder) : null,
                         HasActiveMailSelection = includeActiveContext && HasActiveMailSelection(activeExplorer)
@@ -47,11 +49,19 @@ public class ApplicationCommands : IApplicationCommands
                     OutlookInteropRunner.ReleaseComObject(ref activeExplorer);
                 }
             },
-            ex => new OutlookApplicationStatusResult
+            ex =>
             {
-                Success = false,
-                Connected = false,
-                ErrorMessage = $"Failed to inspect Outlook application state: {ex.Message}"
+                OutlookFlavor flavor = OutlookInstallationDetector.DetectFlavor();
+                return new OutlookApplicationStatusResult
+                {
+                    Success = false,
+                    Connected = false,
+                    OutlookFlavor = flavor.ToString(),
+                    ProcessElevated = OutlookInstallationDetector.IsCurrentProcessElevated(),
+                    ErrorMessage = flavor == OutlookFlavor.ClassicDesktop
+                        ? $"Classic Outlook is installed but could not be reached (installed but not running, or running at a different integrity level): {ex.Message}"
+                        : $"{OutlookInstallationDetector.BuildUnavailableMessage(flavor)} ({ex.Message})"
+                };
             });
     }
 

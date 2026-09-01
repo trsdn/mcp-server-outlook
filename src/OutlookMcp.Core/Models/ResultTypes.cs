@@ -252,6 +252,15 @@ public class OutlookApplicationStatusResult : ResultBase
     public int InspectorCount { get; set; }
     public int StoreCount { get; set; }
 
+    /// <summary>
+    /// The classic-vs-new Outlook flavour detected on this machine. Only "classic-desktop" is
+    /// supported by this server, since new Outlook for Windows has no COM object model. See #35.
+    /// </summary>
+    public string OutlookFlavor { get; set; } = string.Empty;
+
+    /// <summary>True if this process is running elevated (as Administrator).</summary>
+    public bool ProcessElevated { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CurrentFolderName { get; set; }
 

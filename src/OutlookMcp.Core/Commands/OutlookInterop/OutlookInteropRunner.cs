@@ -33,7 +33,9 @@ internal static class OutlookInteropRunner
                 Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
                 if (outlookType == null)
                 {
-                    completion.TrySetResult(onException(new InvalidOperationException("Microsoft Outlook is not installed on this system.")));
+                    OutlookFlavor flavor = OutlookInstallationDetector.DetectFlavor();
+                    completion.TrySetResult(onException(new InvalidOperationException(
+                        OutlookInstallationDetector.BuildUnavailableMessage(flavor))));
                     return;
                 }
 

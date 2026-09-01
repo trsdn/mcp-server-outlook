@@ -93,13 +93,15 @@ internal sealed class Program
             // Diagnostic commands — infrastructure validation (no Office application required)
             config.AddBranch("diag", branch =>
             {
-                branch.SetDescription("Diagnostic commands: ping, echo, validate-params.");
+                branch.SetDescription("Diagnostic commands: ping, echo, validate-params, outlook.");
                 branch.AddCommand<DiagPingCommand>("ping")
                     .WithDescription("Ping the service to check connectivity.");
                 branch.AddCommand<DiagEchoCommand>("echo")
                     .WithDescription("Echo back a message (tests parameter passing).");
                 branch.AddCommand<DiagValidateParamsCommand>("validate-params")
                     .WithDescription("Validate parameter types and defaults.");
+                branch.AddCommand<DiagOutlookCommand>("outlook")
+                    .WithDescription("Report the detected Outlook flavour (classic desktop vs. new Outlook) and process integrity level.");
             });
 
             // Session commands

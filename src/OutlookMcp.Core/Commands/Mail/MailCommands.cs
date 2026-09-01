@@ -1155,7 +1155,14 @@ public class MailCommands : IMailCommands
         bool includeBodyPreview)
     {
         int boundedMaxCount = Math.Clamp(maxCount, 1, 100);
-        int scanLimit = Math.Clamp(boundedMaxCount * 10, 25, 500);
+        // Safety net only (not a "found" cutoff): protects against pathologically slow scans of
+        // huge folders. Previously this doubled as an undocumented hard cap on how far back
+        // mail.list/search could ever see -- anything beyond it was silently invisible, which an
+        // LLM reads as "no such mail exists" (#27). Restrict() below now does the actual
+        // filtering for unreadOnly at the Outlook/MAPI layer instead of via client-side scanning,
+        // so this cap is only hit for very large folders/queries, and MailListResult.Truncated
+        // makes that explicit instead of silent.
+        const int ScanSafetyLimit = 5000;
 
         return OutlookInteropRunner.Execute(
             operationName,
@@ -1164,6 +1171,7 @@ public class MailCommands : IMailCommands
                 Outlook.Explorer? explorer = null;
                 Outlook.MAPIFolder? resolvedFolder = null;
                 object? items = null;
+                object? restrictedItems = null;
 
                 try
                 {
@@ -1182,6 +1190,30 @@ public class MailCommands : IMailCommands
                     int totalItemCount = SafeGetInt(() => ((dynamic)items).Count);
                     TrySortItemsByReceivedTime(items);
 
+                    // Push the unreadOnly predicate down to Outlook via Items.Restrict (DASL)
+                    // instead of hydrating every item and checking UnRead client-side -- this is
+                    // both faster (Restrict returns a pre-filtered rowset) and correct (an unread
+                    // message far back in a large folder is still found, since Restrict does not
+                    // stop at any client-side scan cap). See #27.
+                    object itemsToScan = items;
+                    int scanCount = totalItemCount;
+                    if (unreadOnly)
+                    {
+                        try
+                        {
+                            restrictedItems = ((dynamic)items).Restrict("[Unread] = true");
+                            itemsToScan = restrictedItems;
+                            scanCount = SafeGetInt(() => ((dynamic)restrictedItems).Count);
+                        }
+                        catch (COMException)
+                        {
+                            // Fall back to the unfiltered folder + client-side UnRead check below
+                            // if Restrict is unavailable for this folder/store type.
+                            itemsToScan = items;
+                            scanCount = totalItemCount;
+                        }
+                    }
+
                     var result = new MailListResult
                     {
                         Success = true,
@@ -1191,8 +1223,9 @@ public class MailCommands : IMailCommands
                         TotalItemCount = totalItemCount
                     };
 
-                    for (int index = 1, scanned = 0;
-                         index <= totalItemCount && scanned < scanLimit && result.Messages.Count < boundedMaxCount;
+                    int scanned = 0;
+                    for (int index = 1;
+                         index <= scanCount && scanned < ScanSafetyLimit && result.Messages.Count < boundedMaxCount;
                          index++)
                     {
                         object? rawItem = null;
@@ -1200,7 +1233,7 @@ public class MailCommands : IMailCommands
 
                         try
                         {
-                            rawItem = ((dynamic)items)[index];
+                            rawItem = ((dynamic)itemsToScan)[index];
                             scanned++;
                             mail = rawItem as Outlook.MailItem;
                             if (mail == null)
@@ -1208,7 +1241,9 @@ public class MailCommands : IMailCommands
                                 continue;
                             }
 
-                            if (unreadOnly && !SafeGetBool(() => mail.UnRead))
+                            // Restrict already filtered on Unread above; this client-side check
+                            // only matters for the fallback path where Restrict was unavailable.
+                            if (unreadOnly && restrictedItems == null && !SafeGetBool(() => mail.UnRead))
                             {
                                 continue;
                             }
@@ -1228,10 +1263,16 @@ public class MailCommands : IMailCommands
                     }
 
                     result.ReturnedCount = result.Messages.Count;
+                    result.ScannedCount = scanned;
+                    // Truncated: there was more to look at than we actually evaluated, whether
+                    // because the result cap (maxCount) was hit first or the safety limit was --
+                    // either way, "no more results" must not be inferred from this response alone.
+                    result.Truncated = scanned < scanCount;
                     return result;
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref restrictedItems);
                     OutlookInteropRunner.ReleaseComObject(ref items);
                     OutlookInteropRunner.ReleaseComObject(ref resolvedFolder);
                     OutlookInteropRunner.ReleaseComObject(ref explorer);

@@ -458,6 +458,23 @@ public class MailListResult : ResultBase
 
     public int TotalItemCount { get; set; }
     public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Number of folder items actually scanned/matched against by this call (i.e. items
+    /// Outlook's index/filter evaluated, not the client-side substring fallback's old fixed cap).
+    /// </summary>
+    public int ScannedCount { get; set; }
+
+    /// <summary>
+    /// True when this call did not exhaustively scan/match every item in
+    /// <see cref="TotalItemCount"/> -- either because the result-count cap (<c>maxCount</c>) was
+    /// reached, or (for <c>mail.search</c>'s client-side body-substring fallback path only) a
+    /// bounded scan limit was hit before exhausting the folder. A client MUST NOT read an empty
+    /// or short <see cref="Messages"/> list as "no such mail exists" when this is true -- there
+    /// may be more matches beyond what was scanned/returned. See #27.
+    /// </summary>
+    public bool Truncated { get; set; }
+
     public List<MailSummaryInfo> Messages { get; set; } = [];
 }
 

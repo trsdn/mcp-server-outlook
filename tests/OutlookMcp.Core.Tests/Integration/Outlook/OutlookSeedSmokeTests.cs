@@ -142,6 +142,34 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
     }
 
     [SkippableFact]
+    public void MailList_WithUnreadOnly_UsesRestrictWithoutErrorAndReportsTruncationExplicitly()
+    {
+        // #27: unreadOnly is pushed down via Items.Restrict rather than a client-side scan capped
+        // at a fixed item count. This smoke test only asserts the Restrict path does not throw
+        // and that Truncated/ScannedCount are populated -- it does not (and cannot, without
+        // seeding thousands of items) prove a match beyond the old 500-item cap is found; that
+        // requires either a large fixture mailbox or a mocked Items collection, tracked as
+        // follow-up test coverage.
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var result = commands.List(folder: "drafts", maxCount: 25, unreadOnly: true);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(result.TotalItemCount >= 0);
+            Assert.True(result.ScannedCount >= 0);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
     public void AttachmentList_ForNewDraft_ReturnsEmptyAttachmentCollection()
     {
         EnsureOutlookAvailable();

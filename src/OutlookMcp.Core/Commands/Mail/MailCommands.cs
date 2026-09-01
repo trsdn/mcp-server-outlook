@@ -250,101 +250,160 @@ public class MailCommands : IMailCommands
             display,
             sourceMail => sourceMail.Forward());
 
+    /// <summary>
+    /// At-most-once idempotency cache for <see cref="Send"/>, keyed by caller-supplied
+    /// <c>operationId</c>. If a caller retries a send with the same <c>operationId</c> (e.g.
+    /// after a client-side timeout with an indeterminate outcome, see #29), the cached result
+    /// from the first attempt is replayed instead of re-invoking <c>MailItem.Send()</c>, which
+    /// would risk sending a duplicate message. Entries are process-lifetime (not persisted); a
+    /// crash/restart loses the cache, which is an accepted tradeoff since operationId reuse is
+    /// only expected within a single client session's short retry window.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, MailSendResult> SendResultCache = new();
+
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailSendResult Send(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = true,
+        bool confirm = false,
+        string? operationId = null)
     {
-        return OutlookInteropRunner.Execute(
-            "OutlookMailSend",
-            (application, session) =>
-            {
-                Outlook.MailItem? mail = null;
-                Outlook.Inspector? inspector = null;
-                Outlook.Explorer? explorer = null;
-                Outlook.Selection? selection = null;
-                object? currentItem = null;
-                object? selectedItem = null;
-                object? resolvedItem = null;
+        if (!string.IsNullOrEmpty(operationId) && SendResultCache.TryGetValue(operationId, out MailSendResult? cached))
+        {
+            // Replay the first attempt's outcome rather than re-sending. See #29: retrying a send
+            // whose true outcome is unknown (e.g. after a timeout) must never risk duplicating it.
+            return cached;
+        }
 
-                try
-                {
-                    mail = OutlookInteropRunner.ResolveMailItem(
-                        application,
-                        session,
-                        entryId,
-                        storeId,
-                        useActiveMail,
-                        out inspector,
-                        out explorer,
-                        out selection,
-                        out currentItem,
-                        out selectedItem,
-                        out resolvedItem);
-
-                    if (mail == null)
-                    {
-                        return new MailSendResult
-                        {
-                            Success = false,
-                            Sent = false,
-                            ErrorMessage = string.IsNullOrWhiteSpace(entryId)
-                                ? "No active Outlook mail item is currently selected or open."
-                                : "The requested Outlook mail item could not be resolved."
-                        };
-                    }
-
-                    if (SafeGetBool(() => mail.Sent))
-                    {
-                        return new MailSendResult
-                        {
-                            Success = false,
-                            Sent = false,
-                            EntryId = SafeGet(() => mail.EntryID),
-                            StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
-                            Subject = SafeGet(() => mail.Subject),
-                            To = SafeGet(() => mail.To),
-                            ErrorMessage = "The selected Outlook mail item has already been sent."
-                        };
-                    }
-
-                    string? subject = SafeGet(() => mail.Subject);
-                    string? recipientTo = SafeGet(() => mail.To);
-                    string? resolvedEntryId = SafeGet(() => mail.EntryID);
-                    string? resolvedStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
-
-                    mail.Send();
-
-                    return new MailSendResult
-                    {
-                        Success = true,
-                        Sent = true,
-                        EntryId = resolvedEntryId,
-                        StoreId = resolvedStoreId,
-                        Subject = subject,
-                        To = recipientTo,
-                        SentOn = SafeGetDateTimeOffset(() => mail.SentOn),
-                        Message = "Sent Outlook mail item."
-                    };
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
-                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
-                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
-                    OutlookInteropRunner.ReleaseComObject(ref selection);
-                    OutlookInteropRunner.ReleaseComObject(ref explorer);
-                    OutlookInteropRunner.ReleaseComObject(ref inspector);
-                    OutlookInteropRunner.ReleaseComObject(ref mail);
-                }
-            },
-            ex => new MailSendResult
+        if (!confirm)
+        {
+            return new MailSendResult
             {
                 Success = false,
                 Sent = false,
-                ErrorMessage = $"Failed to send the Outlook mail item: {ex.Message}"
-            });
+                ErrorMessage = "Sending mail requires confirm=true. This is a deliberate confirmation gate " +
+                               "for a destructive, one-way action (#29) -- call send again with confirm=true " +
+                               "once you have verified the draft's recipients/subject/body are correct."
+            };
+        }
+
+        MailSendResult result;
+        try
+        {
+            result = OutlookInteropRunner.Execute(
+                "OutlookMailSend",
+                (application, session) =>
+                {
+                    Outlook.MailItem? mail = null;
+                    Outlook.Inspector? inspector = null;
+                    Outlook.Explorer? explorer = null;
+                    Outlook.Selection? selection = null;
+                    object? currentItem = null;
+                    object? selectedItem = null;
+                    object? resolvedItem = null;
+
+                    try
+                    {
+                        mail = OutlookInteropRunner.ResolveMailItem(
+                            application,
+                            session,
+                            entryId,
+                            storeId,
+                            useActiveMail,
+                            out inspector,
+                            out explorer,
+                            out selection,
+                            out currentItem,
+                            out selectedItem,
+                            out resolvedItem);
+
+                        if (mail == null)
+                        {
+                            return new MailSendResult
+                            {
+                                Success = false,
+                                Sent = false,
+                                ErrorMessage = string.IsNullOrWhiteSpace(entryId)
+                                    ? "No active Outlook mail item is currently selected or open."
+                                    : "The requested Outlook mail item could not be resolved."
+                            };
+                        }
+
+                        if (SafeGetBool(() => mail.Sent))
+                        {
+                            return new MailSendResult
+                            {
+                                Success = false,
+                                Sent = false,
+                                EntryId = SafeGet(() => mail.EntryID),
+                                StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                                Subject = SafeGet(() => mail.Subject),
+                                To = SafeGet(() => mail.To),
+                                ErrorMessage = "The selected Outlook mail item has already been sent."
+                            };
+                        }
+
+                        string? subject = SafeGet(() => mail.Subject);
+                        string? recipientTo = SafeGet(() => mail.To);
+                        string? resolvedEntryId = SafeGet(() => mail.EntryID);
+                        string? resolvedStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
+
+                        mail.Send();
+
+                        return new MailSendResult
+                        {
+                            Success = true,
+                            Sent = true,
+                            EntryId = resolvedEntryId,
+                            StoreId = resolvedStoreId,
+                            Subject = subject,
+                            To = recipientTo,
+                            SentOn = SafeGetDateTimeOffset(() => mail.SentOn),
+                            Message = "Sent Outlook mail item."
+                        };
+                    }
+                    finally
+                    {
+                        OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                        OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                        OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                        OutlookInteropRunner.ReleaseComObject(ref selection);
+                        OutlookInteropRunner.ReleaseComObject(ref explorer);
+                        OutlookInteropRunner.ReleaseComObject(ref inspector);
+                        OutlookInteropRunner.ReleaseComObject(ref mail);
+                    }
+                },
+                ex => new MailSendResult
+                {
+                    Success = false,
+                    Sent = false,
+                    ErrorMessage = $"Failed to send the Outlook mail item: {ex.Message}"
+                });
+        }
+        catch (TimeoutException ex)
+        {
+            // The dispatcher timed out queuing or running this operation. Since mail.Send() may
+            // already have been issued to Outlook when the timeout fired, we cannot know whether
+            // the message actually sent -- report Indeterminate rather than Success=false so the
+            // caller does not treat this as "definitely not sent" and blindly retry (which risks
+            // a duplicate send). See #29.
+            result = new MailSendResult
+            {
+                Success = false,
+                Sent = false,
+                Indeterminate = true,
+                ErrorMessage = $"Send timed out; the outcome is unknown (the message may have been sent). " +
+                               $"Re-check via mail.read before retrying -- do not blindly resend. {ex.Message}"
+            };
+        }
+
+        if (!string.IsNullOrEmpty(operationId))
+        {
+            SendResultCache.TryAdd(operationId, result);
+        }
+
+        return result;
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]

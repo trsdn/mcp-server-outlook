@@ -516,6 +516,17 @@ public class MailSendResult : ResultBase
 {
     public bool Sent { get; set; }
 
+    /// <summary>
+    /// True when the outcome of this send request could not be determined (e.g. the underlying
+    /// operation timed out while a security prompt was on screen). An indeterminate outcome is
+    /// deliberately NOT the same as <c>Success = false</c>: the mail may have actually sent. A
+    /// client seeing <c>indeterminate: true</c> must not blindly retry -- retrying an
+    /// already-sent message would duplicate it. Re-check via <c>mail.read</c> using
+    /// <see cref="EntryId"/>/<see cref="StoreId"/> (if known) before deciding whether to resend.
+    /// See #29.
+    /// </summary>
+    public bool Indeterminate { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; set; }
 

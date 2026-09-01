@@ -3,52 +3,37 @@ name: outlook-mcp
 description: >
   Automate Microsoft Outlook on Windows via MCP and COM interop. Use when inspecting Outlook
   application state, listing folders, reading active mail, searching mail, creating drafts,
-  replying safely, moving or deleting mail intentionally, updating read state, sending
-  explicitly, or exporting attachments.
+  replying safely, sending explicitly, or exporting attachments.
   Triggers: Outlook, email, mailbox, draft, reply, attachment, send, folder.
 ---
 
 # Outlook MCP Server Skill
 
-Agent Skill for AI assistants using the Outlook MCP Server via the Model Context Protocol.
-
-## Best For
-
-- Conversational AI in VS Code Chat and similar MCP-capable clients
-- Iterative mailbox exploration with rich tool schemas
-- Safe draft-first workflows before explicit send actions
-- Attachment discovery and export workflows
+Provides 248 Outlook operations via Model Context Protocol. The MCP server forwards
+requests to the shared service layer while the repository continues its migration from inherited
+`OutlookMcp.*` internals.
 
 ## Recommended workflow
 
-1. Start with `application.get-status` to confirm Outlook availability.
-2. Use `folder.list-default` to discover useful mailbox anchors like Inbox and Drafts.
-3. Use `mail.list`, `mail.search`, or `mail.read-active` to inspect current context.
-4. Create or derive drafts with `mail.create-draft`, `mail.reply`, `mail.reply-all`, or `mail.forward`.
-5. Use `mail.set-subject`, `mail.set-body`, and `mail.set-recipients` to edit an existing draft before sending.
-6. Use `mail.set-read-state`, `mail.set-categories`, `mail.move`, or `mail.delete` only after you have identified the exact message.
-7. Use `calendar.list` or `calendar.read` before creating a new appointment if the task depends on existing schedule context.
-8. Use `attachment.list` and `attachment.save` when files are part of the task.
-9. Use `folder.resolve-path` and `folder.list-items` to navigate mailbox folders beyond the default set.
-10. Only use `mail.send` as an explicit final action when the draft and recipients are already correct.
+1. `application.get-status`
+2. `folder.list-default`
+3. `mail.list`, `mail.search`, or `mail.read-active`
+4. `mail.create-draft`, `mail.reply`, `mail.reply-all`, or `mail.forward`
+5. `attachment.list` / `attachment.save` when files matter
+6. `mail.send` only as an explicit final action
 
 ## Safety rules
 
-- Prefer draft-producing actions over immediate mailbox mutation.
-- Treat `mail.send` as explicit and intentional.
-- If an item is already selected in Outlook, inspect it first with `mail.read-active` before changing anything.
-- Treat `mail.move` and `mail.delete` as explicit mailbox mutations after confirmation by context.
-- Prefer `attachment.list` before `attachment.save` so you know exactly what will be exported.
+- Prefer draft-producing actions before send.
+- Inspect current context before mutating mailbox state.
+- Treat attachment export destinations as explicit user-controlled paths.
+- End with a short text summary after tool use.
 
 ## Current Outlook seed
 
 - `application.get-status`
 - `folder.list-default`
-- `folder.list-children`
-- `folder.resolve-path`
-- `folder.list-items`
 - `mail.read-active`
-- `mail.read`
 - `mail.list`
 - `mail.search`
 - `mail.create-draft`
@@ -56,23 +41,10 @@ Agent Skill for AI assistants using the Outlook MCP Server via the Model Context
 - `mail.reply-all`
 - `mail.forward`
 - `mail.send`
-- `mail.move`
-- `mail.delete`
-- `mail.set-read-state`
-- `mail.set-categories`
-- `mail.set-subject`
-- `mail.set-body`
-- `mail.set-recipients`
-- `calendar.list`
-- `calendar.read`
-- `calendar.create-appointment`
-- `calendar.update-appointment`
-- `calendar.delete-appointment`
 - `attachment.list`
-- `attachment.add`
-- `attachment.remove`
 - `attachment.save`
 
-## Transitional naming note
+## Transitional note
 
-The repository is still migrating from inherited `OutlookMcp.*` internals. Public guidance should be Outlook-first even when executable or project names still contain `OutlookMcp`.
+The repo is still migrating from copied PowerPoint plumbing, so some executables or project names
+may still contain `OutlookMcp`. Public guidance should nevertheless stay Outlook-first.

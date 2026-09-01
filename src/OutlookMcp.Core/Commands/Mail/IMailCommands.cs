@@ -13,7 +13,9 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use create-draft to create and save a new Outlook draft with optional recipients, subject, and body text. "
     + "Use reply, reply-all, and forward to create saved draft responses from the active mail item without sending them. "
     + "Use set-subject, set-body, and set-recipients to edit an existing draft before sending. "
-    + "Use send to send a saved draft by entry id or the current active draft explicitly. "
+    + "Use send to send a saved draft by entry id or the current active draft explicitly. Send requires confirm=true "
+    + "(it is refused otherwise) and accepts an optional operationId so a retried call with the same operationId after "
+    + "a timeout or crash is answered from a cached result instead of risking a duplicate send. "
     + "Set display=true on draft-producing actions to show the draft inspector after saving.")]
 public interface IMailCommands
 {
@@ -59,11 +61,13 @@ public interface IMailCommands
     [ServiceAction("forward")]
     MailDraftResult Forward(bool display = false);
 
-    [ServiceAction("send")]
+    [ServiceAction("send", Destructive = true)]
     MailSendResult Send(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = true,
+        bool confirm = false,
+        string? operationId = null);
 
     [ServiceAction("move")]
     MailMutationResult Move(

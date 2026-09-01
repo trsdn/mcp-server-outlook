@@ -138,6 +138,17 @@ Specifically:
 - `mail.send` confirmation/idempotency (#29) is implemented as dispatcher-level operation
   tracking (an operation token / at-most-once guard keyed off the dispatched work item), not as
   a `PptBatch`-style batch-scoped concept.
+  **Implemented**: `MailCommands.Send` requires an explicit `confirm=true` (refused otherwise)
+  and accepts an optional caller-supplied `operationId`. Results are cached in-process per
+  `operationId` (a `ConcurrentDictionary`, not persisted across restarts) so a caller retrying
+  after a timeout with the same `operationId` replays the first attempt's outcome rather than
+  re-invoking `MailItem.Send()`. A dispatcher `TimeoutException` during send is surfaced as
+  `Indeterminate = true` (distinct from `Success = false`) since the message may have actually
+  sent when the timeout fired -- callers must re-check via `mail.read` before deciding whether to
+  resend, rather than treating an indeterminate outcome as "definitely not sent". This cache lives
+  at the `MailCommands`/Core layer (keyed by caller-provided ID), not inside `OutlookDispatcher`
+  itself, since idempotency is a `mail.send`-specific concern, not a generic dispatcher concern
+  that every Outlook operation needs.
 - The Outlook Object Model Guard (#30) is modelled as a dispatcher-visible outcome (allowed /
   denied / user-cancelled) rather than a swallowed exception, since the dispatcher is now the
   single choke point through which every Outlook COM call passes.

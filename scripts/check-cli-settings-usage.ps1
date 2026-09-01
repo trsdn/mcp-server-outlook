@@ -63,10 +63,22 @@ function Get-SettingsProperties {
     param([string]$content)
 
     $properties = @()
-    # Match properties in Settings class: public string? PropertyName { get; init; }
-    $settingsMatch = $content -match '(?s)internal sealed class Settings[^{]*\{(.+)$'
-    if ($settingsMatch) {
-        $settingsBlock = $Matches[1]
+    # Locate "internal sealed class Settings" and extract only its own body via brace balancing --
+    # the previous naive regex captured everything to end-of-file (including unrelated sibling
+    # classes like BatchEntry/BatchResult DTOs), producing false positives (#25).
+    $startMatch = [regex]::Match($content, 'internal sealed class Settings[^{]*\{')
+    if ($startMatch.Success) {
+        $bodyStart = $startMatch.Index + $startMatch.Length
+        $depth = 1
+        $i = $bodyStart
+        while ($i -lt $content.Length -and $depth -gt 0) {
+            $ch = $content[$i]
+            if ($ch -eq '{') { $depth++ }
+            elseif ($ch -eq '}') { $depth-- }
+            $i++
+        }
+        $settingsBlock = $content.Substring($bodyStart, ($i - 1) - $bodyStart)
+
         # Extract property names
         $propertyMatches = [regex]::Matches($settingsBlock, 'public\s+\w+\??\s+(\w+)\s*\{')
         foreach ($match in $propertyMatches) {

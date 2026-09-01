@@ -10,7 +10,7 @@ applyTo: "src/OutlookMcp.Core/Commands/**/*.cs,src/OutlookMcp.McpServer/**/*.cs"
 
 | Task | Command | Time |
 |------|---------|------|
-| Check coverage before commit | `.\scripts\audit-core-coverage.ps1` | 30s |
+| Check coverage before commit | `dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"` | 30s |
 | Add new Core method | Follow 8-step workflow below | 5-10 min |
 | Fix pre-commit hook failure | Add missing enum values + mappings | 2-3 min |
 | Verify build | `dotnet build -c Release` | 1-2 min |
@@ -97,25 +97,19 @@ return action switch
 
 ## Pre-Commit Hook (Automatic Check)
 
-**Before every commit**, the pre-commit hook runs `audit-core-coverage.ps1` to verify Core methods match enum values.
+**Before every commit**, the pre-commit hook runs `CoreCommandsCoverageTests` (a reflection-based
+xUnit test, not a PowerShell script -- see #25) to verify Core methods match generated enum
+action values.
 
 **Setup** (one-time):
 ```powershell
 .\scripts\pre-commit.ps1
 ```
 
-**On failure, you see**:
+**On failure, you see an xUnit assertion failure like**:
 ```
-❌ Coverage gaps detected! All Core methods must be exposed via MCP Server.
-
-The following interfaces have fewer enum values than Core methods:
-  - IRangeCommands: Core has 42 methods, RangeAction has 40 values (missing 2)
-
-Action Required:
-  1. Review Core interface for new methods
-  2. Add missing enum values to ToolActions.cs
-  3. Add ToActionString mappings to ActionExtensions.cs
-  4. Add switch cases to appropriate MCP Tools
+IMailCommands_AllMethodsHaveEnumValues [FAIL]
+  IMailCommands has 18 [ServiceAction] methods but MailAction has only 16 enum values.
 ```
 
 **Fix**: Follow 8-step workflow above.
@@ -134,36 +128,14 @@ git commit --no-verify -m "Message"
 **Run anytime** to verify coverage:
 
 ```powershell
-# Check coverage (shows gaps if any)
-.\scripts\audit-core-coverage.ps1
-
-# Check coverage and fail if gaps found (useful in CI/CD)
-.\scripts\audit-core-coverage.ps1 -FailOnGaps
-
-# Verbose output with detailed counts
-.\scripts\audit-core-coverage.ps1 -Verbose
+dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
 ```
 
-**Expected output when 100% coverage**:
-```
-Interface           CoreMethods EnumValues Gap Status
----------           ----------- ---------- --- ------
-ISlideCommands               15         15   0 ✅
-IShapeCommands               20         20   0 ✅
-ITableCommands               12         12   0 ✅
-IChartCommands               18         18   0 ✅
+**Expected output when coverage is complete**: all tests pass (each `I{X}Commands_AllMethodsHaveEnumValues`
+fact asserts `enumValueCount >= coreMethodCount` for one Outlook Core interface).
 
-Summary: 100% coverage ✅ (65 Core methods, 65 enum values)
-```
-
-**When gaps detected**:
-```
-Interface           CoreMethods EnumValues Gap Status
----------           ----------- ---------- --- ------
-IRangeCommands               42         40   2 ❌
-
-Summary: 98.7% coverage (65 Core methods, 63 enum values, 2 gaps)
-```
+**When gaps detected**: the specific interface's fact fails with a message naming the interface,
+its Core method count, and the enum's (smaller) value count.
 
 **Fix**: Follow 8-step workflow.
 

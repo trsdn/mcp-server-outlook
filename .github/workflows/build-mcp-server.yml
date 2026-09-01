@@ -53,13 +53,19 @@ jobs:
 
     - name: Verify Core Commands Coverage
       run: |
-        Write-Output "🔍 Verifying Core Commands coverage..."
-        & scripts/audit-core-coverage.ps1 -FailOnGaps
+        Write-Output "Verifying Core Commands coverage..."
+        # audit-core-coverage.ps1 (regex-scraping a hand-authored ToolActions.cs) predates the
+        # move to Roslyn source generators (#5/#11) -- actions are now generated directly from
+        # [ServiceAction] attributes on Core interfaces, so ToolActions.cs no longer exists and
+        # the script silently reported "0/0 = 100% coverage", a false-green gate (#25). Replaced
+        # with the reflection-based CoreCommandsCoverageTests, which enumerates the live Outlook
+        # Core interfaces/enums and genuinely fails if any method lacks an enum value.
+        dotnet test tests/OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests" --configuration Release
         if ($LASTEXITCODE -ne 0) {
-          Write-Error "❌ Coverage gaps detected! All Core methods must be exposed via MCP Server."
+          Write-Error "Coverage gaps detected! All Core methods must be exposed via MCP Server."
           exit 1
         }
-        Write-Output "✅ Coverage audit passed - 100% coverage maintained"
+        Write-Output "Coverage audit passed - all Core methods have matching enum actions"
       shell: pwsh
 
     - name: Verify MCP Server build

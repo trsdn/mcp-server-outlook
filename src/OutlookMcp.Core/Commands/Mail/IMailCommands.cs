@@ -16,23 +16,23 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Set display=true on draft-producing actions to show the draft inspector after saving.")]
 public interface IMailCommands
 {
-    [ServiceAction("read-active")]
+    [ServiceAction("read-active", Destructive = false)]
     ActiveMailResult ReadActive();
 
-    [ServiceAction("read")]
+    [ServiceAction("read", Destructive = false)]
     ActiveMailResult Read(
         string? entryId = null,
         string? storeId = null,
         bool useActiveMail = true);
 
-    [ServiceAction("list")]
+    [ServiceAction("list", Destructive = false)]
     MailListResult List(
         string? folder = null,
         int maxCount = 25,
         bool unreadOnly = false,
         bool includeBodyPreview = false);
 
-    [ServiceAction("search")]
+    [ServiceAction("search", Destructive = false)]
     MailListResult Search(
         string query,
         string? folder = null,

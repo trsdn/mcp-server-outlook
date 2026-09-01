@@ -127,8 +127,9 @@ Specifically:
 - ✅ Timeouts cancel/quarantine rather than abandon (feeds #29)
 - ✅ Multi-step workflows are expressible via `entryId`/`storeId` parameters without requiring a
   file-like session handle to round-trip through the LLM
-- ✅ We do not own Outlook's lifetime: no create-on-demand beyond the existing
-  `GetOrCreateApplication` fallback, no shutdown-on-idle
+- ✅ We do not own Outlook's lifetime: no create-on-demand (the untrusted
+  `Activator.CreateInstance` fallback was removed in #30 in favor of failing with guidance), no
+  shutdown-on-idle
 
 ## Consequences
 
@@ -140,6 +141,19 @@ Specifically:
 - The Outlook Object Model Guard (#30) is modelled as a dispatcher-visible outcome (allowed /
   denied / user-cancelled) rather than a swallowed exception, since the dispatcher is now the
   single choke point through which every Outlook COM call passes.
+  **Partially implemented**: `OutlookInteropRunner.Execute` now classifies `COMException`s
+  consistent with an OMG denial (`E_ABORT`) and surfaces a distinct, actionable
+  `InvalidOperationException` instead of a generic COM failure; call sites that read
+  security-sensitive properties (`SenderEmailAddress`, `To`/`Cc`/`Bcc`) record which specific
+  property reads were blocked in an `AccessDenied` result field rather than returning an
+  ambiguous `null`. The untrusted `Activator.CreateInstance` fallback was removed — if no
+  running Outlook instance can be reached, the call now fails with guidance instead of creating
+  a fresh (more OMG-prone) instance, and an elevation-mismatch (`GetActiveObject` failing because
+  this process runs at a different integrity level than Outlook) is detected and reported with a
+  specific message. A full dispatcher-level `OperationOutcome` enum (allowed/denied/cancelled)
+  threaded through every command's public result type is **not yet done** and remains a
+  candidate for a follow-up issue if per-outcome-typed results (rather than
+  message-string-based) become necessary.
 - Follow-up implementation issues for #12 should be opened against this decision, scoped as:
   (a) introduce `OutlookDispatcher` and migrate `OutlookInteropRunner.Execute` callers onto it,
   (b) add operation cancellation/quarantine on timeout, (c) wire Guard-outcome modelling (#30)

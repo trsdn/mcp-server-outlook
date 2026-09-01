@@ -143,7 +143,19 @@ internal sealed class DiagOutlookCommand : Command
             processElevated = elevated,
             message = flavor == OutlookFlavor.ClassicDesktop
                 ? "Classic Outlook for Windows detected. This server can automate it via COM."
-                : OutlookInstallationDetector.BuildUnavailableMessage(flavor)
+                : OutlookInstallationDetector.BuildUnavailableMessage(flavor),
+            objectModelGuard = new
+            {
+                note = "Outlook's Object Model Guard (OMG) can raise a modal security prompt for " +
+                       "out-of-process callers reading SenderEmailAddress/Recipients or sending mail. " +
+                       "This server does not answer OMG prompts automatically; a person must approve or " +
+                       "dismiss them in Outlook. See docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md.",
+                elevationMismatchRisk = elevated
+                    ? "This process is running elevated. If classic Outlook is running unelevated, " +
+                      "GetActiveObject cannot see across integrity levels and this server will report " +
+                      "Outlook as unavailable even though it is running."
+                    : "Not elevated; no elevation-mismatch risk from this process."
+            }
         };
 
         Console.WriteLine(JsonSerializer.Serialize(result, ServiceProtocol.JsonOptions));

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Core.Models;
 using Outlook = Microsoft.Office.Interop.Outlook;
@@ -969,6 +970,29 @@ public class MailCommands : IMailCommands
             });
     }
 
+    /// <summary>
+    /// Safely reads a string-valued Outlook property. If the read fails because the Outlook
+    /// Object Model Guard blocked it (see #30), the failure is recorded in
+    /// <paramref name="accessDenied"/> by <paramref name="propertyName"/> instead of being
+    /// silently indistinguishable from "property not present" -- see Rule 22.
+    /// </summary>
+    private static string? SafeGet(Func<string?> getter, string propertyName, List<string> accessDenied)
+    {
+        try
+        {
+            return getter();
+        }
+        catch (COMException ex) when (OutlookInteropRunner.IsObjectModelGuardDenial(ex))
+        {
+            accessDenied.Add(propertyName);
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? SafeGet(Func<string?> getter)
     {
         try
@@ -1027,6 +1051,7 @@ public class MailCommands : IMailCommands
     private static ActiveMailResult CreateActiveMailResult(Outlook.MailItem mail)
     {
         Outlook.MAPIFolder? parentFolder = null;
+        var accessDenied = new List<string>();
 
         try
         {
@@ -1039,14 +1064,15 @@ public class MailCommands : IMailCommands
                 EntryId = SafeGet(() => mail.EntryID),
                 StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
                 Subject = SafeGet(() => mail.Subject),
-                To = SafeGet(() => mail.To),
-                Cc = SafeGet(() => mail.CC),
-                Bcc = SafeGet(() => mail.BCC),
+                To = SafeGet(() => mail.To, nameof(ActiveMailResult.To), accessDenied),
+                Cc = SafeGet(() => mail.CC, nameof(ActiveMailResult.Cc), accessDenied),
+                Bcc = SafeGet(() => mail.BCC, nameof(ActiveMailResult.Bcc), accessDenied),
                 SenderName = SafeGet(() => mail.SenderName),
-                SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress),
+                SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress, nameof(ActiveMailResult.SenderEmailAddress), accessDenied),
                 CurrentFolderPath = OutlookInteropRunner.GetFolderPath(parentFolder),
                 BodyPreview = OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body)),
                 Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                AccessDenied = accessDenied.Count > 0 ? accessDenied : null,
                 Unread = SafeGetBool(() => mail.UnRead),
                 Importance = SafeGetInt(() => (int)mail.Importance),
                 AttachmentCount = SafeGetInt(() => mail.Attachments.Count),
@@ -1329,15 +1355,17 @@ public class MailCommands : IMailCommands
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static MailSummaryInfo CreateMailSummary(Outlook.MailItem mail, bool includeBodyPreview)
     {
-        return new MailSummaryInfo
+        var accessDenied = new List<string>();
+
+        var summary = new MailSummaryInfo
         {
             EntryId = SafeGet(() => mail.EntryID),
             StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
             Subject = SafeGet(() => mail.Subject),
             SenderName = SafeGet(() => mail.SenderName),
-            SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress),
-            To = SafeGet(() => mail.To),
-            Cc = SafeGet(() => mail.CC),
+            SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress, nameof(MailSummaryInfo.SenderEmailAddress), accessDenied),
+            To = SafeGet(() => mail.To, nameof(MailSummaryInfo.To), accessDenied),
+            Cc = SafeGet(() => mail.CC, nameof(MailSummaryInfo.Cc), accessDenied),
             BodyPreview = includeBodyPreview
                 ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body))
                 : null,
@@ -1349,5 +1377,8 @@ public class MailCommands : IMailCommands
             ReceivedTime = SafeGetDateTimeOffset(() => mail.ReceivedTime),
             SentOn = SafeGetDateTimeOffset(() => mail.SentOn)
         };
+
+        summary.AccessDenied = accessDenied.Count > 0 ? accessDenied : null;
+        return summary;
     }
 }

@@ -399,6 +399,13 @@ public class ActiveMailResult : ResultBase
 
     public List<string> Categories { get; set; } = [];
 
+    /// <summary>
+    /// Names of properties whose read was blocked by the Outlook Object Model Guard rather than
+    /// the property simply being absent. See <see cref="MailSummaryInfo.AccessDenied"/>. #30.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? AccessDenied { get; set; }
+
     public bool Unread { get; set; }
     public int Importance { get; set; }
     public int AttachmentCount { get; set; }
@@ -481,6 +488,17 @@ public class MailSummaryInfo
     public string? BodyPreview { get; set; }
 
     public List<string> Categories { get; set; } = [];
+
+    /// <summary>
+    /// Names of properties whose read was blocked by the Outlook Object Model Guard (a security
+    /// prompt was shown and not approved, or Outlook aborted the call outright) rather than the
+    /// property simply being absent. A client seeing e.g. <c>senderEmailAddress: null</c> plus
+    /// <c>"senderEmailAddress"</c> in this list should not treat that as "no sender" -- it means
+    /// access was denied. Empty when no property read was blocked. See #30 (Rule 22: security
+    /// denials must never be silently indistinguishable from "value not present").
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? AccessDenied { get; set; }
 
     public bool Unread { get; set; }
     public bool IsDraft { get; set; }

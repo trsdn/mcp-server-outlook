@@ -43,10 +43,49 @@ internal static class OutlookInteropRunner
                         OutlookInstallationDetector.BuildUnavailableMessage(flavor)));
                 }
 
-                application = GetOrCreateApplication(outlookType);
+                if (!TryGetRunningApplication(out application))
+                {
+                    // Deliberately do NOT fall back to Activator.CreateInstance(outlookType) here
+                    // (see #30). A freshly created Outlook.Application is not the user's trusted,
+                    // already-running session, so it is *more* likely to trigger the Outlook Object
+                    // Model Guard (OMG) than a session obtained via GetActiveObject, and it conflicts
+                    // with Outlook's single-instance-per-user model. Fail with actionable guidance
+                    // instead, distinguishing "not running" from "running at a different integrity
+                    // level than this (possibly elevated) process" -- GetActiveObject fails with
+                    // MK_E_UNAVAILABLE in the latter case and TryGetRunningApplication surfaces that
+                    // as a plain "not running" result, so we check elevation separately to give a
+                    // more specific message.
+                    bool elevated = OutlookInstallationDetector.IsCurrentProcessElevated();
+                    string message = elevated
+                        ? "Outlook.Application COM ProgID is registered, but no running instance could be reached. " +
+                          "This process is running elevated (as Administrator); if Outlook is running unelevated, " +
+                          "COM's GetActiveObject cannot see across integrity levels. Run Outlook and this server at " +
+                          "the same elevation level, or start classic Outlook for Windows and try again."
+                        : "Classic Outlook for Windows is installed but does not appear to be running. " +
+                          "Start Outlook and try again.";
+                    return onException(new InvalidOperationException(message));
+                }
+
                 session = application.GetNamespace("MAPI");
 
                 return action(application, session);
+            }
+            catch (COMException ex) when (IsObjectModelGuardDenial(ex))
+            {
+                // The Outlook Object Model Guard (OMG) raises a modal "an application is trying to
+                // access e-mail addresses" / "trying to send e-mail" dialog for out-of-process,
+                // untrusted callers touching protected members (Recipients, SenderEmailAddress,
+                // MailItem.Send(), AddressEntry.Address, etc.). If the user does not respond, Outlook
+                // eventually aborts the call with E_ABORT / MK_E_UNAVAILABLE-shaped COMExceptions.
+                // Surface this distinctly (Rule 22: never swallow security denials into an ambiguous
+                // null/false/generic-error result) rather than reporting a plain COM failure. See #30.
+                return onException(new InvalidOperationException(
+                    "Outlook blocked this operation with a security prompt (Object Model Guard). " +
+                    "This typically happens when reading a sensitive property (e.g. SenderEmailAddress, " +
+                    "Recipients) or sending mail from an untrusted, out-of-process caller. If a dialog is " +
+                    "visible in Outlook, a person must approve or dismiss it; this server cannot answer it " +
+                    "automatically. See docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md for the documented OMG " +
+                    $"posture and mitigations. Original error: {ex.Message}", ex));
             }
             catch (COMException ex)
             {
@@ -95,19 +134,6 @@ internal static class OutlookInteropRunner
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    internal static Outlook.Application GetOrCreateApplication(Type outlookType)
-    {
-        if (TryGetRunningApplication(out Outlook.Application? runningApplication))
-        {
-            return runningApplication;
-        }
-
-#pragma warning disable IL2072
-        return (Outlook.Application)Activator.CreateInstance(outlookType)!;
-#pragma warning restore IL2072
-    }
-
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     internal static Outlook.MAPIFolder? ResolveFolder(
         Outlook.Application application,
         Outlook.NameSpace session,
@@ -136,7 +162,20 @@ internal static class OutlookInteropRunner
         return FindFolderByPath(session, folder);
     }
 
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    /// <summary>
+    /// Identifies COMExceptions consistent with an Outlook Object Model Guard (OMG) denial: a
+    /// dismissed or unanswered "an application is trying to..." security prompt. OMG-triggered
+    /// failures surface as <c>E_ABORT</c> (0x80004004, "Operation aborted") from the Outlook
+    /// automation surface, since OMG aborts the call rather than returning a normal error result.
+    /// This is a heuristic (Outlook does not expose a dedicated "OMG denied" HRESULT) but is
+    /// specific enough in practice to distinguish from generic COM failures. See #30.
+    /// </summary>
+    internal static bool IsObjectModelGuardDenial(COMException ex)
+    {
+        const int E_ABORT = unchecked((int)0x80004004);
+        return ex.HResult == E_ABORT;
+    }
+
     private static Outlook.MAPIFolder? FindFolderByPath(Outlook.NameSpace session, string folderPath)
     {
         Outlook.Folders? rootFolders = null;

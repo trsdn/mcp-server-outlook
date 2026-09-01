@@ -53,7 +53,12 @@ internal static class OutlookInteropRunner
             finally
             {
                 ReleaseComObject(ref session);
-                ReleaseComObject(ref application);
+                // Do NOT final-release `application`: it is the user's already-running,
+                // shared Outlook.Application instance (obtained via GetActiveObject and
+                // cached per-process by the RCW table). Final-releasing it zeroes the RCW
+                // refcount for every holder in the process, not just this call, and can
+                // invalidate a later operation's reference to the same object. See #19.
+                ReleaseSharedComObject(ref application);
                 OleMessageFilter.Revoke();
             }
         })
@@ -374,6 +379,21 @@ internal static class OutlookInteropRunner
         if (value != null && Marshal.IsComObject(value))
         {
             _ = Marshal.FinalReleaseComObject(value);
+        }
+
+        value = null;
+    }
+
+    /// <summary>
+    /// Releases a COM reference we do NOT own the lifetime of (e.g. the shared, already-running
+    /// Outlook.Application returned by GetActiveObject). Uses a plain ref-count decrement instead
+    /// of FinalReleaseComObject so other holders of the same cached RCW are unaffected. See #19.
+    /// </summary>
+    internal static void ReleaseSharedComObject<T>(ref T? value) where T : class
+    {
+        if (value != null && Marshal.IsComObject(value))
+        {
+            _ = Marshal.ReleaseComObject(value);
         }
 
         value = null;

@@ -599,6 +599,37 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         Assert.False(readResult.HasItem);
     }
 
+    [Fact]
+    public void Execute_AfterPriorCall_SharedApplicationRemainsUsable()
+    {
+        // Regression test for #19: OutlookInteropRunner used to FinalReleaseComObject the
+        // shared, already-running Outlook.Application obtained via GetActiveObject. Because
+        // .NET caches one RCW per process for that COM identity, finalizing it during one
+        // call's cleanup could invalidate every other holder's reference to the same object.
+        // This test issues two sequential Execute() calls and asserts the second one succeeds,
+        // proving the first call's cleanup did not tear down the shared Application RCW.
+        if (!EnsureOutlookAvailable())
+        {
+            return;
+        }
+
+        string firstVersion = OutlookInteropRunner.Execute(
+            "regression-first-call",
+            (application, _) => application.Version,
+            ex => throw new InvalidOperationException("First Execute call failed.", ex));
+
+        Assert.False(string.IsNullOrWhiteSpace(firstVersion));
+
+        // If the shared Application RCW was invalidated by the first call's cleanup, this
+        // second call will throw InvalidComObjectException instead of returning a version.
+        string secondVersion = OutlookInteropRunner.Execute(
+            "regression-second-call",
+            (application, _) => application.Version,
+            ex => throw new InvalidOperationException("Second Execute call failed after first call's cleanup.", ex));
+
+        Assert.Equal(firstVersion, secondVersion);
+    }
+
     private bool EnsureOutlookAvailable()
     {
         if (!OutlookInteropRunner.TryGetRunningApplication(out OutlookInterop.Application? application))
@@ -622,7 +653,7 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         finally
         {
             ReleaseComObject(session);
-            ReleaseComObject(application);
+            ReleaseSharedApplication(application);
         }
 
         return true;
@@ -671,7 +702,7 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             ReleaseComObject(mail);
             ReleaseComObject(item);
             ReleaseComObject(session);
-            ReleaseComObject(application);
+            ReleaseSharedApplication(application);
         }
     }
 
@@ -699,7 +730,19 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             ReleaseComObject(appointment);
             ReleaseComObject(item);
             ReleaseComObject(session);
-            ReleaseComObject(application);
+            ReleaseSharedApplication(application);
+        }
+    }
+
+    private static void ReleaseSharedApplication(object? value)
+    {
+        // The Application obtained via TryGetRunningApplication is the user's shared,
+        // already-running Outlook instance. Use ReleaseComObject (ref-count decrement),
+        // never FinalReleaseComObject, or we invalidate the cached RCW for every other
+        // holder in the process. See #19.
+        if (value != null && Marshal.IsComObject(value))
+        {
+            _ = Marshal.ReleaseComObject(value);
         }
     }
 

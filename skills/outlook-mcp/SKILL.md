@@ -25,10 +25,12 @@ Agent Skill for AI assistants using the Outlook MCP Server via the Model Context
 2. Use `folder.list-default` to discover useful mailbox anchors like Inbox and Drafts.
 3. Use `mail.list`, `mail.search`, or `mail.read-active` to inspect current context.
 4. Create or derive drafts with `mail.create-draft`, `mail.reply`, `mail.reply-all`, or `mail.forward`.
-5. Use `mail.set-read-state`, `mail.set-categories`, `mail.move`, or `mail.delete` only after you have identified the exact message.
-6. Use `calendar.list` or `calendar.read` before creating a new appointment if the task depends on existing schedule context.
-7. Use `attachment.list` and `attachment.save` when files are part of the task.
-8. Only use `mail.send` as an explicit final action when the draft and recipients are already correct.
+5. Use `mail.set-subject`, `mail.set-body`, and `mail.set-recipients` to edit an existing draft before sending.
+6. Use `mail.set-read-state`, `mail.set-categories`, `mail.move`, or `mail.delete` only after you have identified the exact message.
+7. Use `calendar.list` or `calendar.read` before creating a new appointment if the task depends on existing schedule context.
+8. Use `attachment.list` and `attachment.save` when files are part of the task.
+9. Use `folder.resolve-path` and `folder.list-items` to navigate mailbox folders beyond the default set.
+10. Only use `mail.send` as an explicit final action when the draft and recipients are already correct.
 
 ## Safety rules
 
@@ -43,6 +45,8 @@ Agent Skill for AI assistants using the Outlook MCP Server via the Model Context
 - `application.get-status`
 - `folder.list-default`
 - `folder.list-children`
+- `folder.resolve-path`
+- `folder.list-items`
 - `mail.read-active`
 - `mail.read`
 - `mail.list`
@@ -56,6 +60,9 @@ Agent Skill for AI assistants using the Outlook MCP Server via the Model Context
 - `mail.delete`
 - `mail.set-read-state`
 - `mail.set-categories`
+- `mail.set-subject`
+- `mail.set-body`
+- `mail.set-recipients`
 - `calendar.list`
 - `calendar.read`
 - `calendar.create-appointment`

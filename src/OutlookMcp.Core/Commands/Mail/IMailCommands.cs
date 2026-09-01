@@ -12,6 +12,7 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use list and search to inspect the current folder or a default Outlook folder role such as inbox or drafts. "
     + "Use create-draft to create and save a new Outlook draft with optional recipients, subject, and body text. "
     + "Use reply, reply-all, and forward to create saved draft responses from the active mail item without sending them. "
+    + "Use set-subject, set-body, and set-recipients to edit an existing draft before sending. "
     + "Use send to send a saved draft by entry id or the current active draft explicitly. "
     + "Set display=true on draft-producing actions to show the draft inspector after saving.")]
 public interface IMailCommands
@@ -87,6 +88,29 @@ public interface IMailCommands
     [ServiceAction("set-categories")]
     MailMutationResult SetCategories(
         string? categories = null,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true);
+
+    [ServiceAction("set-subject")]
+    MailMutationResult SetSubject(
+        string subject,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true);
+
+    [ServiceAction("set-body")]
+    MailMutationResult SetBody(
+        string body,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true);
+
+    [ServiceAction("set-recipients")]
+    MailMutationResult SetRecipients(
+        string? recipientTo = null,
+        string? cc = null,
+        string? bcc = null,
         string? entryId = null,
         string? storeId = null,
         bool useActiveMail = true);

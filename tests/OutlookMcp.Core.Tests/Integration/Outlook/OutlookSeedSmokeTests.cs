@@ -61,6 +61,40 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
     }
 
     [SkippableFact]
+    public void FolderResolvePath_WhenOutlookAvailable_ResolvesInboxByRole()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new FolderCommands();
+        var result = commands.ResolvePath(folder: "inbox");
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.False(string.IsNullOrWhiteSpace(result.FolderPath));
+    }
+
+    [SkippableFact]
+    public void FolderListItems_WhenOutlookAvailable_ReturnsDraftsFolderItems()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new FolderCommands();
+            var result = commands.ListItems(folder: "drafts", maxCount: 25);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(result.Items);
+            Assert.Contains(result.Items, item => item.EntryId == draft.EntryId);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
     public void CreateMailDraft_WhenOutlookAvailable_CreatesAndDeletesDraft()
     {
         EnsureOutlookAvailable();
@@ -384,6 +418,89 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
 
             Assert.True(readWithoutCategories.Success, readWithoutCategories.ErrorMessage);
             Assert.Empty(readWithoutCategories.Categories);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailSetSubject_WhenDraftResolvedByEntryId_UpdatesSubject()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var result = commands.SetSubject(
+                subject: "Copilot Outlook smoke updated subject",
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("Copilot Outlook smoke updated subject", result.Subject);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailSetBody_WhenDraftResolvedByEntryId_UpdatesBody()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var setResult = commands.SetBody(
+                body: "Copilot Outlook smoke updated body.",
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(setResult.Success, setResult.ErrorMessage);
+
+            var readResult = commands.Read(
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(readResult.Success, readResult.ErrorMessage);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailSetRecipients_WhenDraftResolvedByEntryId_UpdatesToAndCc()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var result = commands.SetRecipients(
+                recipientTo: "copilot-smoke-to@example.com",
+                cc: "copilot-smoke-cc@example.com",
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains("copilot-smoke-to@example.com", result.To);
+            Assert.Contains("copilot-smoke-cc@example.com", result.Cc);
         }
         finally
         {

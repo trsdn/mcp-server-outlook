@@ -18,6 +18,8 @@ The CLI binary naming is still inherited from the copied PowerPoint repo, so som
 - `application.get-status`
 - `folder.list-default`
 - `folder.list-children`
+- `folder.resolve-path`
+- `folder.list-items`
 - `mail.read-active`
 - `mail.read`
 - `mail.list`
@@ -31,6 +33,9 @@ The CLI binary naming is still inherited from the copied PowerPoint repo, so som
 - `mail.delete`
 - `mail.set-read-state`
 - `mail.set-categories`
+- `mail.set-subject`
+- `mail.set-body`
+- `mail.set-recipients`
 - `calendar.list`
 - `calendar.read`
 - `calendar.create-appointment`

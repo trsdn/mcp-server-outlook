@@ -30,6 +30,8 @@ description: >
 - `application.get-status`
 - `folder.list-default`
 - `folder.list-children`
+- `folder.resolve-path`
+- `folder.list-items`
 - `mail.read-active`
 - `mail.read`
 - `mail.list`
@@ -43,6 +45,9 @@ description: >
 - `mail.delete`
 - `mail.set-read-state`
 - `mail.set-categories`
+- `mail.set-subject`
+- `mail.set-body`
+- `mail.set-recipients`
 - `calendar.list`
 - `calendar.read`
 - `calendar.create-appointment`

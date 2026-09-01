@@ -698,6 +698,277 @@ public class MailCommands : IMailCommands
             });
     }
 
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetSubject(
+        string subject,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true)
+    {
+        if (subject == null)
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = "subject is required for mail.set-subject."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetSubject",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    mail.Subject = subject;
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = "Updated Outlook mail subject."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update the Outlook mail subject: {ex.Message}"
+            });
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetBody(
+        string body,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true)
+    {
+        if (body == null)
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = "body is required for mail.set-body."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetBody",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    mail.Body = body;
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = "Updated Outlook mail body."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update the Outlook mail body: {ex.Message}"
+            });
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetRecipients(
+        string? recipientTo = null,
+        string? cc = null,
+        string? bcc = null,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true)
+    {
+        if (recipientTo == null && cc == null && bcc == null)
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = "At least one recipient field must be provided for mail.set-recipients."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetRecipients",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    if (recipientTo != null)
+                    {
+                        mail.To = recipientTo;
+                    }
+
+                    if (cc != null)
+                    {
+                        mail.CC = cc;
+                    }
+
+                    if (bcc != null)
+                    {
+                        mail.BCC = bcc;
+                    }
+
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        To = SafeGet(() => mail.To),
+                        Cc = SafeGet(() => mail.CC),
+                        Bcc = SafeGet(() => mail.BCC),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = "Updated Outlook mail recipients."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update Outlook mail recipients: {ex.Message}"
+            });
+    }
+
     private static string? SafeGet(Func<string?> getter)
     {
         try

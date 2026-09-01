@@ -90,6 +90,12 @@ jobs:
           --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust&Feature!=Screenshot"
           --logger "trx;LogFileName=core-integration.trx"
 
+      - name: Verify Outlook tests were not all skipped
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter "core-integration.trx" | Select-Object -First 1 -ExpandProperty FullName
+          ./scripts/check-outlook-tests-not-all-skipped.ps1 -TrxPath $trx
+
       - name: Run CLI integration suite
         shell: pwsh
         run: >

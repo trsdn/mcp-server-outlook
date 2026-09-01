@@ -227,26 +227,65 @@ public class MailCommands : IMailCommands
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailDraftResult Reply(bool display = false)
-        => ExecuteDraftFromActiveMail(
+    public MailDraftResult Reply(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? body = null,
+        bool display = false)
+        => ExecuteDraftFromMail(
             "OutlookMailReply",
             "Created Outlook reply draft.",
+            entryId,
+            storeId,
+            useActiveMail,
+            recipientTo: null,
+            cc: null,
+            bcc: null,
+            body,
             display,
             sourceMail => sourceMail.Reply());
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailDraftResult ReplyAll(bool display = false)
-        => ExecuteDraftFromActiveMail(
+    public MailDraftResult ReplyAll(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? body = null,
+        bool display = false)
+        => ExecuteDraftFromMail(
             "OutlookMailReplyAll",
             "Created Outlook reply-all draft.",
+            entryId,
+            storeId,
+            useActiveMail,
+            recipientTo: null,
+            cc: null,
+            bcc: null,
+            body,
             display,
             sourceMail => sourceMail.ReplyAll());
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailDraftResult Forward(bool display = false)
-        => ExecuteDraftFromActiveMail(
+    public MailDraftResult Forward(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? recipientTo = null,
+        string? cc = null,
+        string? bcc = null,
+        string? body = null,
+        bool display = false)
+        => ExecuteDraftFromMail(
             "OutlookMailForward",
             "Created Outlook forward draft.",
+            entryId,
+            storeId,
+            useActiveMail,
+            recipientTo,
+            cc,
+            bcc,
+            body,
             display,
             sourceMail => sourceMail.Forward());
 
@@ -1286,9 +1325,16 @@ public class MailCommands : IMailCommands
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static MailDraftResult ExecuteDraftFromActiveMail(
+    private static MailDraftResult ExecuteDraftFromMail(
         string operationName,
         string successMessage,
+        string? entryId,
+        string? storeId,
+        bool useActiveMail,
+        string? recipientTo,
+        string? cc,
+        string? bcc,
+        string? body,
         bool display,
         Func<Outlook.MailItem, Outlook.MailItem> createDraft)
     {
@@ -1303,29 +1349,22 @@ public class MailCommands : IMailCommands
                 Outlook.Selection? selection = null;
                 object? currentItem = null;
                 object? selectedItem = null;
+                object? resolvedItem = null;
 
                 try
                 {
-                    inspector = application.ActiveInspector();
-                    if (inspector != null)
-                    {
-                        currentItem = inspector.CurrentItem;
-                        sourceMail = currentItem as Outlook.MailItem;
-                    }
-
-                    if (sourceMail == null)
-                    {
-                        explorer = application.ActiveExplorer();
-                        if (explorer != null)
-                        {
-                            selection = explorer.Selection;
-                            if (selection != null && selection.Count > 0)
-                            {
-                                selectedItem = selection[1];
-                                sourceMail = selectedItem as Outlook.MailItem;
-                            }
-                        }
-                    }
+                    sourceMail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
 
                     if (sourceMail == null)
                     {
@@ -1334,11 +1373,41 @@ public class MailCommands : IMailCommands
                             Success = false,
                             Saved = false,
                             Displayed = false,
-                            ErrorMessage = "No active Outlook mail item is currently selected or open."
+                            ErrorMessage = string.IsNullOrWhiteSpace(entryId)
+                                // Headless targeting: no active Outlook window/selection is
+                                // required when entryId is supplied. See #36.
+                                ? "No active Outlook mail item is currently selected or open. " +
+                                  "Pass entryId (e.g. from mail.search/mail.list) to target a specific message headlessly."
+                                : "The requested Outlook mail item could not be resolved."
                         };
                     }
 
                     draftMail = createDraft(sourceMail);
+
+                    if (!string.IsNullOrEmpty(recipientTo))
+                    {
+                        draftMail.To = recipientTo;
+                    }
+
+                    if (!string.IsNullOrEmpty(cc))
+                    {
+                        draftMail.CC = cc;
+                    }
+
+                    if (!string.IsNullOrEmpty(bcc))
+                    {
+                        draftMail.BCC = bcc;
+                    }
+
+                    if (body != null)
+                    {
+                        // Reply()/ReplyAll()/Forward() pre-populate Body with the quoted original
+                        // message; prepending the caller's text keeps that quoted context instead
+                        // of destroying it, matching how a person would type above a quoted reply.
+                        string existingBody = SafeGet(() => draftMail.Body) ?? string.Empty;
+                        draftMail.Body = body + Environment.NewLine + Environment.NewLine + existingBody;
+                    }
+
                     draftMail.Save();
 
                     if (display)
@@ -1364,12 +1433,13 @@ public class MailCommands : IMailCommands
                 finally
                 {
                     OutlookInteropRunner.ReleaseComObject(ref draftMail);
-                    OutlookInteropRunner.ReleaseComObject(ref sourceMail);
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
                     OutlookInteropRunner.ReleaseComObject(ref selectedItem);
                     OutlookInteropRunner.ReleaseComObject(ref currentItem);
                     OutlookInteropRunner.ReleaseComObject(ref selection);
                     OutlookInteropRunner.ReleaseComObject(ref explorer);
                     OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref sourceMail);
                 }
             },
             ex => new MailDraftResult
@@ -1377,9 +1447,10 @@ public class MailCommands : IMailCommands
                 Success = false,
                 Saved = false,
                 Displayed = false,
-                ErrorMessage = $"Failed to create a draft from the active Outlook mail item: {ex.Message}"
+                ErrorMessage = $"Failed to create a draft from the Outlook mail item: {ex.Message}"
             });
     }
+
 
     private static Outlook.MAPIFolder? ResolveFolder(
         Outlook.Application application,

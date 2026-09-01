@@ -170,6 +170,99 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
     }
 
     [SkippableFact]
+    public void MailReply_WithExplicitEntryId_WorksHeadlessly()
+    {
+        // #36: reply must be targetable via entryId/storeId without any Outlook window focused
+        // or item selected -- this is what makes "find a message, then reply to it" usable.
+        EnsureOutlookAvailable();
+
+        var sourceDraft = CreateSmokeDraft();
+        MailDraftResult? replyDraft = null;
+
+        try
+        {
+            var commands = new MailCommands();
+            replyDraft = commands.Reply(
+                entryId: sourceDraft.EntryId,
+                storeId: sourceDraft.StoreId,
+                useActiveMail: false,
+                body: "Headless reply body.");
+
+            Assert.True(replyDraft.Success, replyDraft.ErrorMessage);
+            Assert.True(replyDraft.Saved);
+            Assert.False(string.IsNullOrWhiteSpace(replyDraft.EntryId));
+            Assert.StartsWith("RE:", replyDraft.Subject);
+
+            var replyBody = commands.Read(entryId: replyDraft.EntryId, storeId: replyDraft.StoreId, useActiveMail: false);
+            Assert.Contains("Headless reply body.", replyBody.BodyPreview ?? string.Empty);
+        }
+        finally
+        {
+            if (replyDraft?.EntryId != null)
+            {
+                DeleteDraft(replyDraft.EntryId, replyDraft.StoreId);
+            }
+
+            DeleteDraft(sourceDraft.EntryId!, sourceDraft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailForward_WithExplicitEntryIdAndRecipients_WorksHeadlessly()
+    {
+        // #36: forward must accept an explicit recipient, since a forwarded message otherwise has
+        // nobody to send to and no headless way to add one.
+        EnsureOutlookAvailable();
+
+        var sourceDraft = CreateSmokeDraft();
+        MailDraftResult? forwardDraft = null;
+
+        try
+        {
+            var commands = new MailCommands();
+            forwardDraft = commands.Forward(
+                entryId: sourceDraft.EntryId,
+                storeId: sourceDraft.StoreId,
+                useActiveMail: false,
+                recipientTo: "copilot-outlook-smoke@example.com",
+                body: "Headless forward body.");
+
+            Assert.True(forwardDraft.Success, forwardDraft.ErrorMessage);
+            Assert.True(forwardDraft.Saved);
+            Assert.False(string.IsNullOrWhiteSpace(forwardDraft.EntryId));
+            Assert.Equal("copilot-outlook-smoke@example.com", forwardDraft.To);
+            Assert.StartsWith("FW:", forwardDraft.Subject);
+        }
+        finally
+        {
+            if (forwardDraft?.EntryId != null)
+            {
+                DeleteDraft(forwardDraft.EntryId, forwardDraft.StoreId);
+            }
+
+            DeleteDraft(sourceDraft.EntryId!, sourceDraft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailReply_WithNoTargetAndNothingSelected_ReturnsActionableError()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var result = commands.Reply(useActiveMail: true);
+
+        // This assumes no Outlook window has anything selected/open during the test run; if that
+        // assumption doesn't hold the reply will legitimately succeed against whatever is active.
+        // Either outcome is acceptable here -- what matters is Success=false always pairs with a
+        // non-null, actionable ErrorMessage (Rule 1), never a silent/ambiguous failure.
+        if (!result.Success)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
+        }
+    }
+
+    [SkippableFact]
     public void AttachmentList_ForNewDraft_ReturnsEmptyAttachmentCollection()
     {
         EnsureOutlookAvailable();

@@ -11,7 +11,10 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use read to inspect an explicit Outlook mail item by entry id/store id or fall back to the active mail item. "
     + "Use list and search to inspect the current folder or a default Outlook folder role such as inbox or drafts. "
     + "Use create-draft to create and save a new Outlook draft with optional recipients, subject, and body text. "
-    + "Use reply, reply-all, and forward to create saved draft responses from the active mail item without sending them. "
+    + "Use reply, reply-all, and forward to create saved draft responses targeting an explicit mail item by entry id/store id, "
+    + "or fall back to the active mail item; works headlessly with no Outlook window focused when entryId is supplied. "
+    + "forward accepts recipients since a forwarded message otherwise has nobody to send to. All three accept an optional "
+    + "body to prepend above the quoted original message. "
     + "Use set-subject, set-body, and set-recipients to edit an existing draft before sending. "
     + "Use send to send a saved draft by entry id or the current active draft explicitly. Send requires confirm=true "
     + "(it is refused otherwise) and accepts an optional operationId so a retried call with the same operationId after "
@@ -53,13 +56,31 @@ public interface IMailCommands
         bool display = false);
 
     [ServiceAction("reply")]
-    MailDraftResult Reply(bool display = false);
+    MailDraftResult Reply(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? body = null,
+        bool display = false);
 
     [ServiceAction("reply-all")]
-    MailDraftResult ReplyAll(bool display = false);
+    MailDraftResult ReplyAll(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? body = null,
+        bool display = false);
 
     [ServiceAction("forward")]
-    MailDraftResult Forward(bool display = false);
+    MailDraftResult Forward(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? recipientTo = null,
+        string? cc = null,
+        string? bcc = null,
+        string? body = null,
+        bool display = false);
 
     [ServiceAction("send", Destructive = true)]
     MailSendResult Send(

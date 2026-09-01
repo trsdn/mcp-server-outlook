@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Skill generation now writes to `skills/outlook-mcp` and `skills/outlook-cli`; the stale `skills/ppt-mcp` and `skills/ppt-cli` directories were removed
   - Repository self-references updated from `trsdn/mcp-server-ppt` to `trsdn/mcp-server-outlook`
 
+### Added
+
+- **ADR-002: Outlook COM execution model** (#40): recorded the decision to build a purpose-built Outlook STA dispatcher rather than reusing PowerPoint's `PptBatch`/`PptSession` session layer, since Outlook has a single shared always-running `Application` (identified by `entryId`/`storeId`) rather than PowerPoint's per-file open/close model. Documents the fate of `ComInterop/Session/*` (retained for PowerPoint only, deleted alongside the legacy surface in #26) and the naming plan for the new dispatcher.
+
 ### Fixed
 
 - **Shared Outlook `Application` COM object could be invalidated process-wide** (#19): `OutlookInteropRunner` called `Marshal.FinalReleaseComObject` on the Outlook `Application` obtained from `GetActiveObject`, which is the user's already-running, shared instance cached per-process by the RCW table. Final-releasing it zeroed the ref-count for every holder in the process, risking `InvalidComObjectException` on subsequent operations. Now released via `Marshal.ReleaseComObject` (a plain ref-count decrement) instead, added a regression test that issues two sequential `Execute()` calls and asserts the second still succeeds.

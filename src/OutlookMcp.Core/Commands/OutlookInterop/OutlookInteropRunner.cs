@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using OutlookMcp.ComInterop;
+using OutlookMcp.ComInterop.Session;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookMcp.Core.Commands.OutlookInterop;
@@ -13,44 +14,47 @@ internal static class OutlookInteropRunner
     [DllImport("oleaut32.dll")]
     private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object? ppunk);
 
+    /// <summary>
+    /// Dispatches an Outlook COM operation onto the single process-wide
+    /// <see cref="OutlookDispatcher"/> STA thread (see #20 / ADR-002). Resolves the shared
+    /// <c>Outlook.Application</c>/<c>Outlook.NameSpace</c> fresh for every call (Outlook itself is
+    /// a single already-running singleton; resolving it does not create work), runs
+    /// <paramref name="action"/>, and releases the per-call <c>NameSpace</c> — but never
+    /// final-releases the shared <c>Application</c> RCW, per #19.
+    /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     internal static TResult Execute<TResult>(
         string operationName,
         Func<Outlook.Application, Outlook.NameSpace, TResult> action,
         Func<Exception, TResult> onException)
     {
-        var completion = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        var thread = new Thread(() =>
+        return OutlookDispatcher.Shared.Execute(operationName, () =>
         {
             Outlook.Application? application = null;
             Outlook.NameSpace? session = null;
 
             try
             {
-                OleMessageFilter.Register();
-
                 Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
                 if (outlookType == null)
                 {
                     OutlookFlavor flavor = OutlookInstallationDetector.DetectFlavor();
-                    completion.TrySetResult(onException(new InvalidOperationException(
-                        OutlookInstallationDetector.BuildUnavailableMessage(flavor))));
-                    return;
+                    return onException(new InvalidOperationException(
+                        OutlookInstallationDetector.BuildUnavailableMessage(flavor)));
                 }
 
                 application = GetOrCreateApplication(outlookType);
                 session = application.GetNamespace("MAPI");
 
-                completion.TrySetResult(action(application, session));
+                return action(application, session);
             }
             catch (COMException ex)
             {
-                completion.TrySetResult(onException(ex));
+                return onException(ex);
             }
             catch (Exception ex)
             {
-                completion.TrySetResult(onException(ex));
+                return onException(ex);
             }
             finally
             {
@@ -61,24 +65,8 @@ internal static class OutlookInteropRunner
                 // refcount for every holder in the process, not just this call, and can
                 // invalidate a later operation's reference to the same object. See #19.
                 ReleaseSharedComObject(ref application);
-                OleMessageFilter.Revoke();
             }
-        })
-        {
-            IsBackground = true,
-            Name = operationName
-        };
-
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-
-        if (!completion.Task.Wait(ComInteropConstants.DefaultOperationTimeout))
-        {
-            throw new TimeoutException($"{operationName} timed out while waiting for Outlook.");
-        }
-
-        _ = thread.Join(TimeSpan.FromSeconds(10));
-        return completion.Task.GetAwaiter().GetResult();
+        }, ComInteropConstants.DefaultOperationTimeout);
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]

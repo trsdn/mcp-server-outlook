@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Rule 30 / ADR-001 narrowed: the ban is on mocked-COM unit tests, not on all unit tests** (#37):
+  the rule said "NEVER write unit tests" while 16 files sat under `tests/**/Unit/`. A rule that the
+  codebase visibly contradicts gets ignored wholesale rather than obeyed selectively, so #37 asked
+  for an explicit decision. Chose to narrow the rule rather than delete all 16 or retire it. A unit
+  test is now permitted only if it touches no COM object at all (not a real one, not a `null!`
+  stand-in, not a mock), its subject is genuinely pure, it would fail if the logic were wrong rather
+  than only if .NET were broken, and it is traited `Category=Unit` under `tests/**/Unit/`. ADR-001
+  now carries the normative list of permitted files; adding to it requires amending the ADR in the
+  same PR. Stated plainly that a permitted unit test never counts as coverage for a COM operation.
+
+### Removed
+
+- **Three mocked-COM unit tests deleted** (#37): `ComUtilitiesTests`, `ComUtilitiesExtendedTests`,
+  and `PptContextTests`. All three claimed to exercise COM behaviour while passing `null!` or plain
+  strings where a COM object belonged; one test was named `Release_WithComObject_DoesNotThrow`
+  directly above a comment conceding that no COM object was involved. `OleMessageFilterTests` also
+  fails the new test, but is deliberately left in place because it is currently failing on `master`
+  (#59) and deleting a failing test is how real defects get lost.
+
 ### Removed
 
 - **Legacy PowerPoint command surface deleted** (#26): removed all 33 inherited PowerPoint command

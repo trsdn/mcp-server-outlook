@@ -1,9 +1,35 @@
 # ADR-001: Why OutlookMcp Has No Traditional Unit Tests
 
-**Status**: Accepted  
+**Status**: Accepted (amended 2026-09-02)  
 **Date**: 2025-11-02  
 **Decision Makers**: Architecture Team  
 **Stakeholders**: Development Team, Code Reviewers, Contributors
+
+> **Amendment, 2026-09-02 (#37).** As written, this ADR and Rule 30 said "never write unit tests",
+> while the repository contained 16 files under `tests/**/Unit/`. A rule contradicted by the codebase
+> it governs is not enforceable, so #37 asked for an explicit decision between narrowing the rule,
+> deleting all 16 files, or retiring the rule.
+>
+> **Decision: narrow the rule.** The ban is on *mocked-COM* unit tests, which is what the rationale
+> below actually argues against. Tests over genuinely pure logic - enum and action-string mappings,
+> JSON parsing, HRESULT classification, result-type invariants, guard clauses that return before any
+> COM call - are permitted, because they exercise real code paths and would otherwise go unverified.
+> The "Exceptions" section below is now the normative list; it replaces the earlier hypothetical
+> phrasing ("if we had complex calculations independent of PowerPoint (we don't)"), which was simply
+> untrue by the time it was read.
+>
+> Three files were deleted under this decision: `ComUtilitiesTests`, `ComUtilitiesExtendedTests`, and
+> `PptContextTests`. All three claimed to test COM behaviour while passing `null!` or plain strings
+> where a COM object belonged - one test was even named `Release_WithComObject_DoesNotThrow` above a
+> comment admitting no COM object was involved. They are exactly what this ADR was written to prevent.
+>
+> One file is knowingly left in place: `OleMessageFilterTests`, which is **currently failing on
+> `master`** (#59). Deleting it would erase a live signal before anyone has established whether the
+> filter or the test is wrong, so its fate is deferred to #59.
+>
+> This amendment does not weaken the core position: **no test may stand in for an integration test.**
+> A permitted pure test proves only its own narrow claim. It never demonstrates that a COM operation
+> works, and it must not be cited as coverage for one.
 
 ---
 
@@ -287,13 +313,50 @@ public async Task CreateSlide_ValidName_CreatesSheet()
 
 ## Exceptions: When Unit Tests Make Sense
 
-We **would** write unit tests for:
+**This section is normative** (see the 2026-09-02 amendment at the top). A unit test is permitted
+only if it satisfies **all** of the following:
 
-1. **Pure algorithms** - If we had complex calculations independent of PowerPoint (we don't)
-2. **Custom protocols** - If we implemented custom serialization (MCP SDK handles this)
-3. **Complex state machines** - If we had stateful logic beyond COM (we don't)
+1. It touches **no COM object at all** - not a real one, not a `null!` stand-in, not a mock.
+2. Its subject is genuinely pure: a mapping, a parse, a classification, an invariant, or a guard
+   clause that returns before any COM call is reached.
+3. It would fail if the logic under test were wrong. (If it can only fail when .NET itself is
+   broken, it is testing Microsoft's code, not ours - see sections 4 and 5 above.)
+4. It carries `[Trait("Category", "Unit")]` and lives under `tests/**/Unit/`, so it is trivially
+   separable from the integration suite.
 
-**Current reality**: 100% of our logic involves PowerPoint COM interaction, so 100% of our tests are integration tests.
+If a test needs a COM object to mean anything, and you are substituting something for that object
+to make it run, the test is prohibited. Write an integration test instead, or write none.
+
+### Currently permitted under this exception
+
+| Test file | Why it qualifies |
+|---|---|
+| `ActionValidatorTests` | Enum-to-action-string mapping over generated metadata (Rule 15 guard) |
+| `CoreCommandsCoverageTests` | Reflection over `[ServiceCategory]`; guards MCP/CLI surface coverage |
+| `ResultTypeInvariantTests` | Enforces the Rule 1 `Success`/`ErrorMessage` invariant by reflection |
+| `ResultTypeSerializationTests` | JSON shape of result contracts |
+| `ServiceRegistryJsonParsingTests` | Parsing of generated registry JSON |
+| `ParameterTransformsFileTests` | Pure parameter transformation |
+| `McpServerVersionCheckerTests` | Version comparison logic |
+| `OutlookInteropRunnerTests` | HRESULT classification for Object Model Guard denials (#30) |
+| `MailCommandsSendTests` | Send confirmation gate and idempotency cache; returns before COM (#29) |
+| `OutlookDispatcherTests` | STA queue/serialization mechanics with plain delegates (#20) |
+| `StreamJsonRpcTests` | Real in-process duplex streams; no COM in the RPC layer |
+| `OutlookMcpServiceErrorTests` | Error-message formatting regression guard |
+| `ConfigurationReloadTests` | `reloadOnChange` configuration regression guard |
+
+Two entries deserve their caveats stated rather than buried:
+
+- **`OutlookDispatcherTests`** is the weakest entry here. It proves the dispatcher serializes work
+  onto one STA thread, which is real and worth guarding, but it cannot prove that Outlook COM calls
+  made *through* that thread behave correctly. It is a placeholder for the real regression test that
+  #20 asked for, which stays blocked until CI has an Outlook-capable runner (#31).
+- **`OleMessageFilterTests`** is *not* in the table. It tests COM plumbing without COM, so it does
+  not qualify - but it is currently failing on `master`, and deleting a failing test is how real
+  defects get lost. Resolution is deferred to #59.
+
+**The standing expectation is unchanged**: nearly all logic in this repository involves COM
+interaction, so nearly all tests must be integration tests.
 
 ---
 

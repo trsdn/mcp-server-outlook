@@ -88,7 +88,7 @@ Discovered while debugging a slide shape that referenced an embedded object
 | Rule | Action | Why Critical |
 |------|--------|--------------|
 | 29. TDD | Write test FIRST → RED → implement → GREEN | Proves tests catch real bugs |
-| 30. Integration tests | NEVER write unit tests — integration tests only | Unit tests prove nothing for COM interop |
+| 30. Integration tests | No mocked-COM unit tests; narrow pure-logic exception only | Unit tests prove nothing for COM interop |
 | 22. COM cleanup | ALWAYS use try-finally, NEVER swallow exceptions | Prevents leaks and silent failures |
 | 7. COM API | Use PowerPoint COM first, validate docs | Prevents wrong dependencies |
 | 9. GitHub search | Search OTHER repos for VBA/COM examples FIRST | Learn from working code |
@@ -100,7 +100,7 @@ Discovered while debugging a slide shape that referenced an embedded object
 | Rule | Action | Why Critical |
 |------|--------|--------------|
 | 2. Tests | Fail loudly, never silent | Silent failures waste hours |
-| 30. Integration tests | NEVER write unit tests — integration tests only | Unit tests prove nothing for COM interop |
+| 30. Integration tests | No mocked-COM unit tests; narrow pure-logic exception only | Unit tests prove nothing for COM interop |
 | 15. No Save | Remove unless testing persistence | Makes tests 50% faster |
 | 11. Test debugging | Run tests one by one | Isolates actual failure |
 | 13. Test compliance | Pass checklist before PR submission | Prevents test pollution |
@@ -476,7 +476,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 | 24. Post-change sync | Verify ALL sync points (CLI, SKILLs, READMEs, counts) before commit | 5-10 min |
 | 28. COM API naming | Match COM param names when clear in flat schema | Always |
 | 29. TDD | Write test FIRST → RED → implement → GREEN | Always |
-| 30. Integration tests | NEVER write unit tests — integration tests only | Always |
+| 30. Integration tests | No mocked-COM unit tests; narrow pure-logic exception only | Always |
 
 
 
@@ -1077,7 +1077,7 @@ public void ProgressAdapter_Maps_Current_To_Progress()
 
 ## Rule 30: Integration Tests Over Unit Tests (CRITICAL)
 
-**NEVER write unit tests. Unit tests that mock COM objects, fake contexts, or test adapter mappings in isolation prove NOTHING. Write integration tests that exercise real PowerPoint COM automation.**
+**NEVER write unit tests that mock COM objects, fake contexts, or test adapter mappings in isolation — they prove NOTHING. Write integration tests that exercise real COM automation. A narrow exception for genuinely pure logic is defined below and enumerated in ADR-001.**
 
 **Why Critical:** OutlookMcp is a COM interop project. The bugs that matter — STA threading deadlocks, COM object leaks, OleMessageFilter re-entrancy, type conversion failures (`double` vs `int`), shape persistence — **only manifest when real PowerPoint is running**. A unit test that verifies an adapter maps field A to field B catches zero real bugs. An integration test that opens a presentation, adds a shape, and verifies the result catches ALL of them.
 
@@ -1121,9 +1121,23 @@ public void AddShape_ReportsProgress_DuringExecution()
 
 **Enforcement:**
 - Code review MUST reject unit tests for COM-dependent features
-- All new tests MUST have `[Trait("Category", "Integration")]`
-- If a test doesn't require PowerPoint, question whether it tests anything meaningful
-- The only acceptable non-integration tests are for pure algorithmic utilities with zero COM dependency (e.g., string parsing, enum mapping validation)
+- Any test of COM-dependent behaviour MUST have `[Trait("Category", "Integration")]`
+- If a test doesn't require Outlook, question whether it tests anything meaningful
+
+**The narrow exception (amended 2026-09-02, #37).** A unit test is permitted only if it meets **all four** conditions:
+
+1. It touches **no COM object at all** — not a real one, not a `null!` stand-in, not a mock
+2. Its subject is genuinely pure: a mapping, parse, classification, invariant, or a guard clause that returns before any COM call
+3. It would fail if the logic under test were wrong (not merely if .NET itself were broken)
+4. It carries `[Trait("Category", "Unit")]` and lives under `tests/**/Unit/`
+
+If a test needs a COM object to mean anything and you are substituting something for that object to make it run, it is prohibited. Write an integration test, or write none.
+
+**A permitted unit test never counts as coverage for a COM operation.** It proves only its own narrow claim.
+
+`docs/ADR-001-NO-UNIT-TESTS.md` holds the normative list of files currently permitted under this exception. Adding to that list requires updating the ADR in the same PR.
 
 **Historical Lesson:** 10 unit tests were written for the MCP progress feature (McpProgressAdapter mapping, ProgressContext AsyncLocal). All 10 passed. Zero of them would have caught the real bugs: STA thread affinity issues, COM callback re-entrancy during shape operations, or progress notifications not flowing through the generated code pipeline. The unit tests tested the unit tests.
+
+**Second lesson (#37):** the rule as originally written said "never", while 16 unit test files sat in the repository. Three of them mocked COM outright — one was named `Release_WithComObject_DoesNotThrow` above a comment conceding no COM object was used. An absolute rule that the codebase visibly contradicts gets ignored wholesale rather than obeyed selectively, which is why the exception is now stated explicitly and its members enumerated.
 

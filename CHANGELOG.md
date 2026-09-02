@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **Last PowerPoint residue in build and repo config** (#70 follow-up). `dotnet build` no longer
+  makes the `Microsoft.Office.Interop.PowerPoint` PIA available at all: its `PackageVersion` entry
+  is gone from `Directory.Packages.props` (no project had referenced it since #73). Also deleted
+  `scripts/build_complex_test.py`, a dead harness that drove the MCP server against a `.pptx` on
+  the desktop through a hard-coded path to a checkout that no longer exists, plus the `*.pptx` /
+  `*.pptm` rules in `.gitattributes` and the stale Excel/PowerPoint test-asset exceptions in
+  `.gitignore` that pointed at directories deleted in #73.
+
+### Fixed
+
+- **`scripts/Stop-OutlookMcpProcesses.ps1` never found the CLI.** It probed
+  `bin\{Debug,Release}\net10.0-windows\outlookcli.exe`, but the projects target `net9.0-windows`,
+  so the pre-build cleanup always fell through to the named-pipe fallback instead of asking the
+  service to shut down cleanly.
+
 - **The inherited PowerPoint session/batch layer is gone** (#12, #65, #70). The product owner
   directed that nothing PowerPoint remain, which overrules ADR-002's earlier decision to retain the
   layer as dormant infrastructure. ADR-002 has been amended to record the reversal and its reasons.

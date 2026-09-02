@@ -1,0 +1,106 @@
+name: Feature request
+description: Propose a capability OutlookMcp does not have yet
+title: "[FEATURE] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The MCP and CLI surfaces are source-generated from the same `[ServiceCategory]` interfaces
+        in Core, so a new action lands on **both** automatically. Please do not propose a feature
+        for only one of them.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: >-
+        Describe the situation you are stuck in, not the solution. What are you trying to get done,
+        and what stops you today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should be true after this ships?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Outlook domain
+      options:
+        - Mail (read, list, search, draft, reply, send, move, flag, categorise)
+        - Calendar (appointments, meetings, attendees)
+        - Folders (navigation, resolution, item listing)
+        - Attachments (list, save, add, remove)
+        - Contacts (not exposed at all today)
+        - Tasks and follow-up (not exposed at all today)
+        - Rules, categories or account configuration (not exposed at all today)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: Proposed shape
+      description: >-
+        Which tool and action, and what parameters? Existing tools are mail, calendar, folder,
+        attachment and application. Proposing a new tool is fine, say so.
+      placeholder: |
+        Tool:       mail
+        Action:     list-conversation
+        Parameters: entryId (required), maxCount (default 20)
+
+        CLI equivalent:
+        outlookcli mail list-conversation --entry-id <id> --max-count 20
+    validations:
+      required: false
+
+  - type: dropdown
+    id: safety
+    attributes:
+      label: Safety class
+      description: >-
+        Outlook automation acts on a real mailbox and is frequently irreversible. If this is not
+        read-only, say in the field below what confirmation or idempotency it needs. For reference,
+        `mail.send` requires explicit confirmation and is idempotent per operation ID.
+      options:
+        - Read-only
+        - Modifies items the user explicitly named
+        - Modifies items the user did not explicitly name
+        - Can send mail
+        - Can delete items
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety_notes
+    attributes:
+      label: Confirmation and idempotency
+      description: Required if the safety class above is anything other than read-only.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including doing nothing, or scripting it yourself outside OutlookMcp.
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation notes
+      description: >-
+        Optional. Outlook COM runs through `OutlookDispatcher` on a dedicated STA thread; see
+        docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md.
+    validations:
+      required: false

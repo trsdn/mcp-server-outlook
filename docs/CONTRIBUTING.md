@@ -234,27 +234,41 @@ AnsiConsole.MarkupLine($"[dim]{message.EscapeMarkup()}[/]");
 
 ## Bug Reports
 
-When reporting bugs, include:
+Open a bug through the **Bug report** form. It requires the fields that make a report actionable:
+`application.get-status` output, reproduction steps, expected and actual behaviour, and your
+environment. Blank issues are disabled, so pick the form that matches what you are reporting - use
+**MCP Server issue** when an AI assistant is driving the server, since that form also asks for your
+client configuration and the exact tool and action.
 
-- Windows version.
-- Outlook version and whether it is classic Outlook or new Outlook.
-- Command or MCP tool call used.
-- Expected behavior and actual behavior.
-- Full error message.
-- Whether Outlook was running and signed in.
-- Whether the process was elevated.
+Do not attach or paste private mailbox data. Redact subjects, addresses, bodies, attachment names,
+and entry IDs.
 
-Do not attach or paste private mailbox data. Redact subjects, addresses, bodies, attachment names, and entry IDs when needed.
+Never open a public issue for a security vulnerability. Follow [SECURITY.md](../SECURITY.md).
 
 ## Feature Requests
 
-Great feature requests include:
+Use the **Feature request** form. It asks for the problem before the solution, the Outlook domain,
+and a safety class, because Outlook automation acts on a real mailbox and is frequently
+irreversible. If a proposal is not read-only, say what confirmation or idempotency it needs.
 
-- Use case description.
-- Proposed tool and action structure.
-- Outlook COM object model APIs involved, if known.
-- Whether the operation is read-only or destructive.
-- Target users: MCP clients, CLI scripts, or both.
+Remember that the MCP and CLI surfaces are generated from the same interfaces, so a feature reaches
+both. Proposals for only one surface will be sent back.
+
+## Dependency Updates
+
+Dependabot is configured in [`.github/dependabot.yml`](../.github/dependabot.yml) for the three
+ecosystems that actually exist here: NuGet at the repo root, GitHub Actions, and npm under
+`vscode-extension/`. If you add a manifest for a new ecosystem, add it to that file in the same PR -
+otherwise Dependabot will raise alerts for it that no update PR ever arrives to fix.
+
+@trsdn triages and merges Dependabot PRs. Security updates are merged as soon as CI is green;
+grouped minor and patch updates are reviewed weekly. A Dependabot PR must pass the same checks as
+any other PR.
+
+Do not hand-edit `package-lock.json` to bump a transitive dependency, and be careful running
+`npm install` behind a corporate registry mirror: it rewrites `resolved` URLs to the mirror and can
+downgrade `integrity` from sha512 to sha1, which breaks installs for everyone else. Let Dependabot
+produce the lockfile change.
 
 ## Learning Resources
 

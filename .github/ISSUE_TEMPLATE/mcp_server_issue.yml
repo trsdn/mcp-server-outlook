@@ -1,0 +1,143 @@
+name: MCP Server issue
+description: The MCP Server misbehaves when driven by an AI assistant
+title: "[MCP] "
+labels:
+  - mcp-server
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Read this first
+
+        Ask your assistant to call `application.get-status` before filing.
+
+        If it reports **`NewOutlookOnly`, this is not a bug.** The new Outlook for Windows exposes
+        no COM object model and cannot be automated at all. Install or switch to the classic
+        Outlook for Windows desktop app.
+
+        **Never paste real mailbox content**, and no screenshots of your inbox.
+
+  - type: textarea
+    id: status
+    attributes:
+      label: application.get-status result
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What is wrong
+    validations:
+      required: true
+
+  - type: dropdown
+    id: assistant
+    attributes:
+      label: AI assistant
+      options:
+        - GitHub Copilot (VS Code or Visual Studio)
+        - Claude Desktop
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: tool_action
+    attributes:
+      label: Tool and action
+      description: Tools are mail, calendar, folder, attachment and application.
+      placeholder: mail / search
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Include what you asked the assistant, since the request the server receives depends on how
+        the assistant interpreted it.
+      placeholder: |
+        1. Configure the assistant with the MCP Server
+        2. Ask: "Show me my unread mail from this week"
+        3. Assistant calls mail / list with unreadOnly=true
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual response
+      description: >-
+        The full JSON response, carrying `success`, `errorMessage` and `suggestedNextActions`.
+        Redact mailbox content first.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Server configuration
+      description: >-
+        Your MCP client config block for this server, plus where the file lives. Remove any tokens
+        or paths that identify you.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Windows version:
+        - Outlook edition (classic desktop only):
+        - OutlookMcp version:
+        - .NET version (`dotnet --version`):
+        - Installation method (MCPB bundle / VS Code extension / global .NET tool / source):
+        - Mailbox type (Exchange / Microsoft 365 / IMAP / POP / local PST):
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server logs
+      description: Redact mailbox content and addresses.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: preconditions
+    attributes:
+      label: Preconditions
+      options:
+        - label: Classic Outlook was installed and **already running**
+          required: true
+        - label: Outlook had no modal dialog open (a dialog blocks every COM call)
+          required: true
+        - label: >-
+            Outlook and the MCP Server run as the **same Windows user**, at the same elevation
+          required: true
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: >-
+            I have removed real mailbox content, addresses, entry IDs and file paths from
+            everything above
+          required: true

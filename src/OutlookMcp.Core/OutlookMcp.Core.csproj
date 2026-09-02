@@ -58,13 +58,6 @@
     <InternalsVisibleTo Include="OutlookMcp.McpServer.Tests" />
   </ItemGroup>
 
-  <!-- Embedded design catalog data files -->
-  <ItemGroup>
-    <EmbeddedResource Include="Data\*.json" />
-    <EmbeddedResource Include="Data\*.md" />
-    <EmbeddedResource Include="Data\archetypes\*.md" />
-  </ItemGroup>
-
   <ItemGroup>
     <!-- Include README and LICENSE in package -->
     <None Include="README.md" Pack="true" PackagePath="\" />

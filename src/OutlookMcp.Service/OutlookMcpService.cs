@@ -1,34 +1,11 @@
 using System.IO.Pipes;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using OutlookMcp.ComInterop.Session;
 using OutlookMcp.Core.Commands.Attachment;
 using OutlookMcp.Core.Commands.Application;
-using OutlookMcp.Core.Commands.Accessibility;
-using OutlookMcp.Core.Commands.Animation;
 using OutlookMcp.Core.Commands.Calendar;
-using OutlookMcp.Core.Commands.Chart;
-using OutlookMcp.Core.Commands.Design;
-using OutlookMcp.Core.Commands.DocumentProperty;
-using OutlookMcp.Core.Commands.Export;
-using OutlookMcp.Core.Commands.File;
 using OutlookMcp.Core.Commands.Folder;
-using OutlookMcp.Core.Commands.Hyperlink;
-using OutlookMcp.Core.Commands.Image;
-using OutlookMcp.Core.Commands.Master;
 using OutlookMcp.Core.Commands.Mail;
-using OutlookMcp.Core.Commands.Media;
-using OutlookMcp.Core.Commands.Notes;
-using OutlookMcp.Core.Commands.Proofing;
-using OutlookMcp.Core.Commands.Section;
-using OutlookMcp.Core.Commands.Shape;
-using OutlookMcp.Core.Commands.Slide;
-using OutlookMcp.Core.Commands.SlideTable;
-using OutlookMcp.Core.Commands.Slideshow;
-using OutlookMcp.Core.Commands.Text;
-using OutlookMcp.Core.Commands.Transition;
-using OutlookMcp.Core.Commands.Vba;
-using OutlookMcp.Core.Commands.Window;
 using OutlookMcp.Service.Rpc;
 using StreamJsonRpc;
 using OutlookMcp.Generated;
@@ -38,8 +15,8 @@ namespace OutlookMcp.Service;
 /// <summary>
 /// Main service host for the migration stack.
 /// Runs in-process within the host (MCP Server or CLI), accepting commands via named pipe.
-/// Outlook-first commands now coexist with an inherited legacy PowerPoint session/file stack
-/// that is still present while the migration is being completed.
+/// Exposes the Outlook command surface plus the retained presentation session/batch
+/// infrastructure (see ADR-002), which no command category currently routes to.
 /// </summary>
 public sealed class OutlookMcpService : IDisposable
 {
@@ -51,36 +28,12 @@ public sealed class OutlookMcpService : IDisposable
     private DateTime _lastActivityTime = DateTime.UtcNow;
     private bool _disposed;
 
-    // Outlook-first command instances
+    // Outlook command instances
     private readonly ApplicationCommands _applicationCommands = new();
     private readonly FolderCommands _folderCommands = new();
     private readonly AttachmentCommands _attachmentCommands = new();
     private readonly MailCommands _mailCommands = new();
     private readonly CalendarCommands _calendarCommands = new();
-
-    // Inherited legacy PowerPoint/session command instances
-    private readonly FileCommands _fileCommands = new();
-    private readonly SlideCommands _slideCommands = new();
-    private readonly ShapeCommands _shapeCommands = new();
-    private readonly TextCommands _textCommands = new();
-    private readonly NotesCommands _notesCommands = new();
-    private readonly MasterCommands _masterCommands = new();
-    private readonly ExportCommands _exportCommands = new();
-    private readonly TransitionCommands _transitionCommands = new();
-    private readonly ImageCommands _imageCommands = new();
-    private readonly SlideTableCommands _slideTableCommands = new();
-    private readonly ChartCommands _chartCommands = new();
-    private readonly AnimationCommands _animationCommands = new();
-    private readonly DesignCommands _designCommands = new();
-    private readonly SlideshowCommands _slideshowCommands = new();
-    private readonly VbaCommands _vbaCommands = new();
-    private readonly WindowCommands _windowCommands = new();
-    private readonly HyperlinkCommands _hyperlinkCommands = new();
-    private readonly SectionCommands _sectionCommands = new();
-    private readonly DocumentPropertyCommands _documentPropertyCommands = new();
-    private readonly MediaCommands _mediaCommands = new();
-    private readonly ProofingCommands _proofingCommands = new();
-    private readonly AccessibilityCommands _accessibilityCommands = new();
 
     public OutlookMcpService()
     {
@@ -214,7 +167,13 @@ public sealed class OutlookMcpService : IDisposable
     /// Processes a service request directly (in-process, no pipe).
     /// Used by the MCP Server for direct in-process communication.
     /// </summary>
-    public async Task<ServiceResponse> ProcessAsync(ServiceRequest request)
+    /// <remarks>
+    /// Every remaining command category dispatches synchronously, so this no longer awaits
+    /// anything. The <see cref="Task{TResult}"/> signature is kept deliberately: it is the
+    /// in-process entry point callers already await, and the asynchrony is expected to return
+    /// once dispatcher-backed categories land.
+    /// </remarks>
+    public Task<ServiceResponse> ProcessAsync(ServiceRequest request)
     {
         try
         {
@@ -223,7 +182,7 @@ public sealed class OutlookMcpService : IDisposable
             var category = parts[0];
             var action = parts.Length > 1 ? parts[1] : "";
 
-            return category switch
+            return Task.FromResult(category switch
             {
                 "service" => HandleServiceCommand(action),
                 "diag" => HandleDiagCommand(action, request),
@@ -233,77 +192,13 @@ public sealed class OutlookMcpService : IDisposable
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
                 "session" => HandleSessionCommand(action, request),
-                "file" => DispatchSessionless(action, request),
-                "slide" => await DispatchSimpleAsync<SlideAction>(action, request,
-                    ServiceRegistry.Slide.TryParseAction,
-                    (a, batch) => ServiceRegistry.Slide.DispatchToCore(_slideCommands, a, batch, request.Args)),
-                "shape" => await DispatchSimpleAsync<ShapeAction>(action, request,
-                    ServiceRegistry.Shape.TryParseAction,
-                    (a, batch) => ServiceRegistry.Shape.DispatchToCore(_shapeCommands, a, batch, request.Args)),
-                "text" => await DispatchSimpleAsync<TextAction>(action, request,
-                    ServiceRegistry.Text.TryParseAction,
-                    (a, batch) => ServiceRegistry.Text.DispatchToCore(_textCommands, a, batch, request.Args)),
-                "notes" => await DispatchSimpleAsync<NotesAction>(action, request,
-                    ServiceRegistry.Notes.TryParseAction,
-                    (a, batch) => ServiceRegistry.Notes.DispatchToCore(_notesCommands, a, batch, request.Args)),
-                "master" => await DispatchSimpleAsync<MasterAction>(action, request,
-                    ServiceRegistry.Master.TryParseAction,
-                    (a, batch) => ServiceRegistry.Master.DispatchToCore(_masterCommands, a, batch, request.Args)),
-                "export" => await DispatchSimpleAsync<ExportAction>(action, request,
-                    ServiceRegistry.Export.TryParseAction,
-                    (a, batch) => ServiceRegistry.Export.DispatchToCore(_exportCommands, a, batch, request.Args)),
-                "transition" => await DispatchSimpleAsync<TransitionAction>(action, request,
-                    ServiceRegistry.Transition.TryParseAction,
-                    (a, batch) => ServiceRegistry.Transition.DispatchToCore(_transitionCommands, a, batch, request.Args)),
-                "image" => await DispatchSimpleAsync<ImageAction>(action, request,
-                    ServiceRegistry.Image.TryParseAction,
-                    (a, batch) => ServiceRegistry.Image.DispatchToCore(_imageCommands, a, batch, request.Args)),
-                "slidetable" => await DispatchSimpleAsync<SlidetableAction>(action, request,
-                    ServiceRegistry.Slidetable.TryParseAction,
-                    (a, batch) => ServiceRegistry.Slidetable.DispatchToCore(_slideTableCommands, a, batch, request.Args)),
-                "chart" => await DispatchSimpleAsync<ChartAction>(action, request,
-                    ServiceRegistry.Chart.TryParseAction,
-                    (a, batch) => ServiceRegistry.Chart.DispatchToCore(_chartCommands, a, batch, request.Args)),
-                "animation" => await DispatchSimpleAsync<AnimationAction>(action, request,
-                    ServiceRegistry.Animation.TryParseAction,
-                    (a, batch) => ServiceRegistry.Animation.DispatchToCore(_animationCommands, a, batch, request.Args)),
-                "design" => await DispatchSimpleAsync<DesignAction>(action, request,
-                    ServiceRegistry.Design.TryParseAction,
-                    (a, batch) => ServiceRegistry.Design.DispatchToCore(_designCommands, a, batch, request.Args)),
-                "slideshow" => await DispatchSimpleAsync<SlideshowAction>(action, request,
-                    ServiceRegistry.Slideshow.TryParseAction,
-                    (a, batch) => ServiceRegistry.Slideshow.DispatchToCore(_slideshowCommands, a, batch, request.Args)),
-                "vba" => await DispatchSimpleAsync<VbaAction>(action, request,
-                    ServiceRegistry.Vba.TryParseAction,
-                    (a, batch) => ServiceRegistry.Vba.DispatchToCore(_vbaCommands, a, batch, request.Args)),
-                "window" => await DispatchSimpleAsync<WindowAction>(action, request,
-                    ServiceRegistry.Window.TryParseAction,
-                    (a, batch) => ServiceRegistry.Window.DispatchToCore(_windowCommands, a, batch, request.Args)),
-                "hyperlink" => await DispatchSimpleAsync<HyperlinkAction>(action, request,
-                    ServiceRegistry.Hyperlink.TryParseAction,
-                    (a, batch) => ServiceRegistry.Hyperlink.DispatchToCore(_hyperlinkCommands, a, batch, request.Args)),
-                "section" => await DispatchSimpleAsync<SectionAction>(action, request,
-                    ServiceRegistry.Section.TryParseAction,
-                    (a, batch) => ServiceRegistry.Section.DispatchToCore(_sectionCommands, a, batch, request.Args)),
-                "docproperty" => await DispatchSimpleAsync<DocpropertyAction>(action, request,
-                    ServiceRegistry.Docproperty.TryParseAction,
-                    (a, batch) => ServiceRegistry.Docproperty.DispatchToCore(_documentPropertyCommands, a, batch, request.Args)),
-                "media" => await DispatchSimpleAsync<MediaAction>(action, request,
-                    ServiceRegistry.Media.TryParseAction,
-                    (a, batch) => ServiceRegistry.Media.DispatchToCore(_mediaCommands, a, batch, request.Args)),
-                "proofing" => await DispatchSimpleAsync<ProofingAction>(action, request,
-                    ServiceRegistry.Proofing.TryParseAction,
-                    (a, batch) => ServiceRegistry.Proofing.DispatchToCore(_proofingCommands, a, batch, request.Args)),
-                "accessibility" => await DispatchSimpleAsync<AccessibilityAction>(action, request,
-                    ServiceRegistry.Accessibility.TryParseAction,
-                    (a, batch) => ServiceRegistry.Accessibility.DispatchToCore(_accessibilityCommands, a, batch, request.Args)),
                 _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown command category: {category}" }
-            };
+            });
         }
         catch (Exception ex)
         {
             // Include type name so callers can distinguish exception kinds (GitHub #482, Bug 5)
-            return new ServiceResponse { Success = false, ErrorMessage = $"{ex.GetType().Name}: {ex.Message}" };
+            return Task.FromResult(new ServiceResponse { Success = false, ErrorMessage = $"{ex.GetType().Name}: {ex.Message}" });
         }
     }
 
@@ -589,7 +484,7 @@ public sealed class OutlookMcpService : IDisposable
 
 
 
-    private delegate bool TryParseDelegate<TAction>(string action, out TAction result);
+
 
 
 
@@ -606,38 +501,6 @@ public sealed class OutlookMcpService : IDisposable
     }
 
 
-
-    private async Task<ServiceResponse> DispatchSimpleAsync<TAction>(
-
-        string actionString, ServiceRequest request,
-
-        TryParseDelegate<TAction> tryParse,
-
-        Func<TAction, IPptBatch, string?> dispatch) where TAction : struct
-
-    {
-
-        if (!tryParse(actionString, out var action))
-
-            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
-
-
-
-        return await WithSessionAsync(request.SessionId, batch => WrapResult(dispatch(action, batch)));
-
-    }
-
-    /// <summary>
-    /// Dispatches a session-less command with no legacy presentation batch required.
-    /// Used for [NoSession] categories like file.
-    /// </summary>
-    private ServiceResponse DispatchSessionless(string actionString, ServiceRequest request)
-    {
-        if (!ServiceRegistry.File.TryParseAction(actionString, out var action))
-            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
-
-        return WrapResult(ServiceRegistry.File.DispatchToCore(_fileCommands, action, request.Args));
-    }
 
     private ServiceResponse DispatchApplicationSessionless(string actionString, ServiceRequest request)
     {
@@ -677,92 +540,6 @@ public sealed class OutlookMcpService : IDisposable
             return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
 
         return WrapResult(ServiceRegistry.Mail.DispatchToCore(_mailCommands, action, request.Args));
-    }
-
-    private Task<ServiceResponse> WithSessionAsync(string? sessionId, Func<IPptBatch, ServiceResponse> action)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return Task.FromResult(new ServiceResponse { Success = false, ErrorMessage = "sessionId is required" });
-        }
-
-        var batch = _sessionManager.GetSession(sessionId);
-        if (batch == null)
-        {
-            return Task.FromResult(new ServiceResponse { Success = false, ErrorMessage = $"Session '{sessionId}' not found" });
-        }
-
-        // Check if the legacy presentation process is still alive before attempting operation
-        if (!batch.IsPowerPointProcessAlive())
-        {
-            // Legacy presentation process died - clean up the dead session
-            _sessionManager.CloseSession(sessionId, save: false, force: true);
-            return Task.FromResult(new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Legacy presentation process for session '{sessionId}' has died. Session has been closed. Please create a new session."
-            });
-        }
-
-        try
-        {
-            var response = action(batch);
-            return Task.FromResult(response);
-        }
-        catch (TimeoutException ex)
-        {
-            // Operation timed out — the legacy COM call is hung.
-            // Force-close the session to trigger the force-kill path in PptBatch.Dispose().
-            _sessionManager.CloseSession(sessionId, save: false, force: true);
-            return Task.FromResult(new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Legacy presentation operation timed out and the session has been closed: {ex.Message} " +
-                               "Please reopen the file with a new session."
-            });
-        }
-        catch (OperationCanceledException)
-        {
-            // Caller cancelled while a COM operation may still be running on the STA thread.
-            _sessionManager.CloseSession(sessionId, save: false, force: true);
-            return Task.FromResult(new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Operation was cancelled and the session has been closed. " +
-                               "The legacy presentation COM thread may have been unresponsive. " +
-                               "Please reopen the file with a new session."
-            });
-        }
-        catch (COMException ex) when (
-            ex.HResult == ResiliencePipelines.RPC_S_SERVER_UNAVAILABLE ||
-            ex.HResult == ResiliencePipelines.RPC_E_CALL_FAILED)
-        {
-            // Legacy presentation process died during the operation — clean up the dead session
-            _sessionManager.CloseSession(sessionId, save: false, force: true);
-            return Task.FromResult(new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Legacy presentation process for session '{sessionId}' has died. " +
-                               "Session has been cleaned up. Please reopen the file with a new session."
-            });
-        }
-        catch (InvalidOperationException ex) when (
-            ex.Message.Contains("no longer running", StringComparison.OrdinalIgnoreCase) ||
-            ex.Message.Contains("process", StringComparison.OrdinalIgnoreCase))
-        {
-            // Legacy presentation process detected as dead before COM call (PptBatch pre-check)
-            _sessionManager.CloseSession(sessionId, save: false, force: true);
-            return Task.FromResult(new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Legacy presentation process for session '{sessionId}' is no longer running. " +
-                               "Session has been cleaned up. Please reopen the file with a new session."
-            });
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(new ServiceResponse { Success = false, ErrorMessage = $"{ex.GetType().Name}: {ex.Message}" });
-        }
     }
 
     public void Dispose()

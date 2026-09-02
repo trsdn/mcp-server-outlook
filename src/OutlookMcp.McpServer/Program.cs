@@ -9,7 +9,7 @@ namespace OutlookMcp.McpServer;
 
 /// <summary>
 /// OutlookMcp Model Context Protocol (MCP) Server.
-/// Hosts the Outlook migration surface plus inherited legacy presentation tools that still remain in the repo.
+/// Hosts the Outlook tool surface (application, attachment, calendar, folder, mail).
 /// </summary>
 public class Program
 {

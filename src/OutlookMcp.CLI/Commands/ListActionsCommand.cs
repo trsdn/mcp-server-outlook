@@ -52,8 +52,8 @@ internal sealed class ListActionsCommand : Command<ListActionsCommand.Settings>
         var payload = new
         {
             success = true,
-            workflow = "REQUIRED FOR LEGACY PRESENTATION COMMANDS ONLY: 1) session open/create <file> → get sessionId, 2) session-bound commands need --session <id>, 3) session close --save to persist",
-            example = "session create file.pptx → returns {sessionId:'abc'} → slide list --session abc → session close --save --session abc",
+            workflow = "Outlook commands (application, attachment, calendar, folder, mail) run directly with no session. The session commands manage the retained presentation-session layer and are not required by any Outlook command.",
+            example = "mail list --folder Inbox",
             commands = all
         };
         Console.WriteLine(JsonSerializer.Serialize(payload, ServiceProtocol.JsonOptions));

@@ -34,10 +34,6 @@
     <ProjectReference Include="..\..\src\OutlookMcp.CLI\OutlookMcp.CLI.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\OutlookMcp.Core.Tests\Helpers\ReferenceCatalogFixture.cs" Link="Helpers\ReferenceCatalogFixture.cs" />
-  </ItemGroup>
-
   <!-- Golden files for API contract tests -->
   <ItemGroup>
     <None Include="TestData\**\*.json">

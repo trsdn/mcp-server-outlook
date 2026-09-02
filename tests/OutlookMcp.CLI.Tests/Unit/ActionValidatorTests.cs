@@ -7,46 +7,59 @@ using Xunit;
 
 namespace OutlookMcp.CLI.Tests.Unit;
 
+/// <summary>
+/// Verifies that the generated <c>ServiceRegistry.{Category}.ValidActions</c> arrays stay in sync
+/// with the corresponding <c>ToActionString</c> mappings, and that <see cref="ListActionsCommand"/>
+/// surfaces every generated CLI category.
+/// </summary>
+/// <remarks>
+/// These are pure reflection assertions over generated metadata with no COM dependency, which is the
+/// documented exception to the integration-tests-only rule. The category list is discovered from
+/// <c>_CliCategoryMetadata</c> rather than hand-maintained, so adding or removing a
+/// <c>[ServiceCategory]</c> interface cannot silently drop coverage.
+/// </remarks>
 [Trait("Layer", "CLI")]
 [Trait("Category", "Unit")]
 [Trait("Feature", "ActionValidation")]
 [Trait("Speed", "Fast")]
 public sealed class ActionValidatorTests
 {
-    public static IEnumerable<object[]> ActionEnumTypes =>
-    [
-        [typeof(SlideAction), typeof(ServiceRegistry.Slide)],
-        [typeof(ShapeAction), typeof(ServiceRegistry.Shape)],
-        [typeof(TextAction), typeof(ServiceRegistry.Text)],
-        [typeof(NotesAction), typeof(ServiceRegistry.Notes)]
-    ];
+    /// <summary>Every generated ServiceRegistry category type, discovered at runtime.</summary>
+    public static TheoryData<string> RegistryCategoryNames
+    {
+        get
+        {
+            var data = new TheoryData<string>();
+            foreach (var (cliCommandName, _, _) in _CliCategoryMetadata.Categories)
+            {
+                data.Add(cliCommandName);
+            }
 
-    private static readonly string[] ExpectedCommands =
-    [
-        "session",
-        "slide",
-        "shape",
-        "text",
-        "notes",
-        "master",
-        "export",
-        "transition",
-        "image",
-        "file"
-    ];
+            return data;
+        }
+    }
+
+    [Fact]
+    public void Generator_EmitsAtLeastOneCliCategory()
+    {
+        // Guards against the theories below passing vacuously if generation breaks.
+        Assert.NotEmpty(_CliCategoryMetadata.Categories);
+    }
 
     [Theory]
-    [MemberData(nameof(ActionEnumTypes))]
-    public void GetValidActions_ReturnsAllActionStrings(Type enumType, Type registryType)
+    [MemberData(nameof(RegistryCategoryNames))]
+    public void ValidActions_MatchesToActionStringMapping(string cliCommandName)
     {
-        var expected = GetExpectedActions(enumType, registryType);
+        var registryType = ResolveRegistryType(cliCommandName);
+
+        var expected = GetExpectedActions(registryType);
         var actual = GetActualActions(registryType);
 
         Assert.Equal(expected, actual);
     }
 
     [Fact]
-    public void ListActionsCommand_AllCommands_ReturnsExpectedKeys()
+    public void ListActionsCommand_AllCommands_ReturnsEveryGeneratedCategory()
     {
         var command = new ListActionsCommand();
         var settings = new ListActionsCommand.Settings();
@@ -62,19 +75,34 @@ public sealed class ActionValidatorTests
         Assert.True(document.RootElement.GetProperty("success").GetBoolean());
         var commands = document.RootElement.GetProperty("commands");
 
-        foreach (var expected in ExpectedCommands)
+        foreach (var (cliCommandName, _, _) in _CliCategoryMetadata.Categories)
         {
-            Assert.True(commands.TryGetProperty(expected, out _), $"Missing command '{expected}'.");
+            Assert.True(commands.TryGetProperty(cliCommandName, out _), $"Missing command '{cliCommandName}'.");
         }
     }
 
-    private static string[] GetExpectedActions(Type enumType, Type registryType)
+    private static Type ResolveRegistryType(string cliCommandName)
     {
-        // Find ToActionString method in the ServiceRegistry nested type (e.g., ServiceRegistry.Range.ToActionString)
+        var entry = _CliCategoryMetadata.Categories.First(c =>
+            string.Equals(c.CliCommandName, cliCommandName, StringComparison.OrdinalIgnoreCase));
+
+        // RegistryTypeName is emitted as "ServiceRegistry.Mail"; reflection needs "ServiceRegistry+Mail".
+        var nestedName = entry.RegistryTypeName.Replace('.', '+');
+        var type = typeof(_CliCategoryMetadata).Assembly.GetType($"OutlookMcp.Generated.{nestedName}");
+
+        Assert.NotNull(type);
+        return type!;
+    }
+
+    private static string[] GetExpectedActions(Type registryType)
+    {
         var actionMethod = registryType
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .First(m => m.Name == "ToActionString" && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == enumType);
+            .First(m => m.Name == "ToActionString"
+                && m.GetParameters().Length == 1
+                && m.GetParameters()[0].ParameterType.IsEnum);
 
+        var enumType = actionMethod.GetParameters()[0].ParameterType;
         var values = Enum.GetValues(enumType);
         var results = new List<string>(values.Length);
 
@@ -89,7 +117,6 @@ public sealed class ActionValidatorTests
 
     private static string[] GetActualActions(Type registryType)
     {
-        // Get ValidActions field from the ServiceRegistry nested type (e.g., ServiceRegistry.Range.ValidActions)
         var validActionsField = registryType
             .GetFields(BindingFlags.Public | BindingFlags.Static)
             .First(f => f.Name == "ValidActions");
@@ -123,7 +150,3 @@ public sealed class ActionValidatorTests
         public IReadOnlyList<string> Raw { get; } = Array.Empty<string>();
     }
 }
-
-
-
-

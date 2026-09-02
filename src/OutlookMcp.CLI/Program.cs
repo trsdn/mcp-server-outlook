@@ -69,8 +69,30 @@ internal sealed class Program
         {
             config.SetApplicationName("outlookcli");
             config.SetApplicationVersion(GetCurrentVersion());
+
+            // Reject unrecognised options instead of silently collecting them into the remaining
+            // arguments, which is Spectre.Console.Cli's default. Without this, `mail list --limit 3`
+            // (the real option is --max-count) silently returned the default 25 messages, reported
+            // success and exited 0. This CLI is documented as a surface for coding agents, which
+            // guess plausible option names; handing one a confidently wrong answer instead of an
+            // error it could correct is worse than failing. It also violates Rule 1, since the exit
+            // code and the payload claimed success for a command line that was not fully understood.
+            config.UseStrictParsing();
+
             config.SetExceptionHandler((ex, _) =>
             {
+                // Distinguish a usage error from a genuine fault. Spectre routes parse failures --
+                // unknown option, missing value, bad enum -- through this same handler, and labelling
+                // a simple typo "Unhandled error" reads like a crash. That matters most for the
+                // coding agents this CLI targets: a caller that believes the tool crashed retries or
+                // gives up, whereas one told the option is unknown can correct itself.
+                if (ex is CommandParseException or CommandRuntimeException)
+                {
+                    AnsiConsole.MarkupLine($"[red]Command error:[/] {ex.Message.EscapeMarkup()}");
+                    AnsiConsole.MarkupLine("[dim]Run the command with [green]--help[/] to see the available options.[/]");
+                    return;
+                }
+
                 AnsiConsole.MarkupLine($"[red]Unhandled error:[/] {ex.Message.EscapeMarkup()}");
             });
 

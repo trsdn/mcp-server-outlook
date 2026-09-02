@@ -16,7 +16,7 @@ Get-ChildItem -Path (Join-Path $rootDir "src") -Recurse -Filter "*.cs" | ForEach
     # Legacy code may still use `dynamic` locals cleaned up via ComUtilities.Release.
     # Outlook COM interop (OutlookInteropRunner.cs and callers) uses strongly-typed
     # `Outlook.*` locals cleaned up via OutlookInteropRunner.ReleaseComObject /
-    # ReleaseSharedComObject. Both patterns must be detected — see #21.
+    # ReleaseSharedComObject. Both patterns must be detected - see #21.
     $hasDynamic = $content -match "dynamic\s+\w+\s*=.*\."
     $hasComUtilRelease = $content -match "ComUtilities\.Release"
 

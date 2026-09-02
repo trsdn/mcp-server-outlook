@@ -227,4 +227,45 @@ public sealed class DiagCommandTests
         Assert.False(json.RootElement.TryGetProperty("error", out _),
             "Success response must not contain 'error' property (Rule 1: Success flag must match reality)");
     }
+
+    // ============================================
+    // UNKNOWN OPTIONS - must be rejected, not ignored
+    // ============================================
+
+    [Fact]
+    public async Task UnknownOption_IsRejectedWithNonZeroExitCode()
+    {
+        // Spectre.Console.Cli defaults to non-strict parsing: an unrecognised option is silently
+        // collected into the remaining arguments instead of failing. Discovered by running the CLI
+        // against a live mailbox, where `mail list --limit 3` (the real option is --max-count)
+        // returned the default 25 messages, reported success and exited 0.
+        //
+        // That failure mode is specifically dangerous for this project: the CLI is documented as a
+        // surface for coding agents, which guess plausible option names. Silently ignoring one
+        // hands the agent a confidently wrong answer instead of an error it could correct.
+        var result = await CliProcessHelper.RunAsync("diag echo --message hi --no-such-option value");
+
+        Assert.NotEqual(0, result.ExitCode);
+    }
+
+    [Fact]
+    public async Task UnknownOption_DoesNotReportSuccess()
+    {
+        // The exit code and the payload must agree (Rule 1). Returning a success payload for a
+        // command line the CLI did not fully understand is exactly the mismatch Rule 1 forbids.
+        var result = await CliProcessHelper.RunAsync("diag echo --message hi --no-such-option value");
+
+        Assert.DoesNotContain("\"success\":true", result.Stdout.Replace(" ", string.Empty), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task KnownOptions_StillParseAfterStrictParsingIsEnabled()
+    {
+        // Guard against the fix over-reaching: legitimate options must keep working.
+        var (result, json) = await CliProcessHelper.RunJsonAsync("diag echo --message \"strict parsing ok\"");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("strict parsing ok", json.RootElement.GetProperty("message").GetString());
+    }
 }

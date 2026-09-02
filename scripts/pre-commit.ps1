@@ -89,8 +89,12 @@ try {
     Write-Host "COM leak check passed" -ForegroundColor Green
 }
 catch {
-    Write-Host "Error running COM leak check: $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host "   Continuing with coverage audit..." -ForegroundColor Gray
+    # A gate that cannot run is a failed gate, not a warning. Downgrading this to
+    # "continuing" is how check-dynamic-casts.ps1 silently stopped running for every
+    # commit made through Windows PowerShell 5.1 (see #82).
+    Write-Host "Error running COM leak check: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "   This check is mandatory and could not be completed." -ForegroundColor Red
+    exit 1
 }
 
 Write-Host ""
@@ -307,8 +311,10 @@ try {
     Write-Host "Dynamic cast check passed - all casts are documented" -ForegroundColor Green
 }
 catch {
-    Write-Host "Error running dynamic cast check: $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host "   Continuing..." -ForegroundColor Gray
+    # See the COM leak check above: a gate that errors out has not passed.
+    Write-Host "Error running dynamic cast check: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "   This check is mandatory and could not be completed." -ForegroundColor Red
+    exit 1
 }
 
 Write-Host ""

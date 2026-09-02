@@ -6,10 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- **VS Code extension lockfile pinned an unpublished `markdown-it` version**: Dependabot (#49) bumped `markdown-it` to `14.3.1`, but that version is not present in the npm registry (published versions go `14.3.0` → `15.0.0`), so `npm ci` in `vscode-extension/` failed with a 404 on the tarball. Re-pinned to `14.3.0`, which has identical declared dependencies and `bin` entries. Verified by `npm ci` (exit 0) and `tsc -p ./` (exit 0); the tarball's SHA-1 matches the registry's published shasum, confirming the recomputed SHA-512 integrity is authentic.
-  - Not caught by CI because no workflow installs `vscode-extension/` dependencies on pull requests -- only the manually dispatched `release.yml` does, so this would first have surfaced during a release.
+- **`VS Code Extension CI` workflow**: runs `npm ci` and `tsc` for `vscode-extension/` on pull requests. Previously nothing installed those dependencies on a PR -- only the manually dispatched `release.yml` did -- so an uninstallable lockfile would first have surfaced mid-release.
 
 ### Changed
 

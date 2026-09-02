@@ -1,0 +1,68 @@
+name: VS Code Extension CI
+
+permissions:
+  contents: read
+
+# Validates that vscode-extension/ dependencies actually resolve and that the
+# extension's TypeScript compiles. Before this workflow existed, nothing installed
+# these dependencies on a pull request -- only the manually dispatched release.yml
+# did -- so a lockfile that could not be installed would first surface mid-release.
+on:
+  push:
+    branches: [ master, develop ]
+    paths:
+      - 'vscode-extension/package.json'
+      - 'vscode-extension/package-lock.json'
+      - 'vscode-extension/tsconfig.json'
+      - 'vscode-extension/src/**'
+      - '.github/workflows/vscode-extension-ci.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'vscode-extension/package.json'
+      - 'vscode-extension/package-lock.json'
+      - 'vscode-extension/tsconfig.json'
+      - 'vscode-extension/src/**'
+      - '.github/workflows/vscode-extension-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vscode-extension-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Install and compile
+    # windows-latest is required: vscode-extension/package.json declares
+    # "os": ["win32"], so npm ci fails with EBADPLATFORM on Linux runners.
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      # npm ci (not npm install) so the lockfile is validated exactly as committed:
+      # it fails if the lockfile is out of sync with package.json or references a
+      # version whose tarball cannot be fetched.
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: vscode-extension
+        run: npx tsc -p ./
+
+      # Informational only: the extension ships no runtime dependencies today, so a
+      # dev-only advisory must not block a pull request.
+      - name: Audit production dependencies
+        working-directory: vscode-extension
+        continue-on-error: true
+        run: npm audit --omit=dev

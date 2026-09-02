@@ -51,7 +51,7 @@ jobs:
       version: ${{ steps.calculate_version.outputs.version }}
       tag: ${{ steps.calculate_version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Fetch all history and tags
 
@@ -116,10 +116,10 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -139,13 +139,13 @@ jobs:
       run: dotnet pack src/OutlookMcp.CLI/OutlookMcp.CLI.csproj --configuration Release --no-build --output ./cli-nupkg -p:Version=${{ env.VERSION }}
 
     - name: Upload CLI Build Output
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: cli-build
         path: src/OutlookMcp.CLI/bin/Release/net9.0-windows/
 
     - name: Upload CLI NuGet Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: cli-nupkg
         path: cli-nupkg/*.nupkg
@@ -162,15 +162,15 @@ jobs:
       packages: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Download CLI Build
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: cli-build
         path: src/OutlookMcp.CLI/bin/Release/net9.0-windows/
@@ -214,13 +214,13 @@ jobs:
       shell: pwsh
 
     - name: Upload ZIP Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: mcp-server-zip
         path: OutlookMcp-MCP-Server-*-windows.zip
 
     - name: Upload NuGet Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: mcp-server-nupkg
         path: nupkg/*.nupkg
@@ -236,15 +236,15 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ env.NODE_VERSION }}
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -301,7 +301,7 @@ jobs:
       shell: pwsh
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: vscode-vsix
         path: vscode-extension/OutlookMcp-*.vsix
@@ -317,10 +317,10 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -337,7 +337,7 @@ jobs:
       shell: pwsh
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: mcpb-bundle
         path: mcpb/artifacts/outlook-mcp-*.mcpb
@@ -353,10 +353,10 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         global-json-file: global.json
 
@@ -454,7 +454,7 @@ jobs:
       shell: pwsh
 
     - name: Upload Skills Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: agent-skills
         path: artifacts/skills/outlook-skills-*.zip
@@ -486,7 +486,7 @@ jobs:
       shell: pwsh
 
     - name: Upload npm Skill Packages
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: npm-skill-packages
         path: packages/
@@ -502,7 +502,7 @@ jobs:
       id-token: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set Version
       run: |
@@ -575,7 +575,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -608,15 +608,15 @@ jobs:
       id-token: write  # Required for NuGet OIDC
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ env.NODE_VERSION }}
 
@@ -627,25 +627,25 @@ jobs:
       shell: pwsh
 
     - name: Download NuGet Package
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: mcp-server-nupkg
         path: nupkg
 
     - name: Download CLI NuGet Package
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: cli-nupkg
         path: cli-nupkg
 
     - name: Download VS Code VSIX
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: vscode-vsix
         path: vscode-vsix
 
     - name: Download npm Skill Packages
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: npm-skill-packages
         path: npm-packages
@@ -673,6 +673,10 @@ jobs:
       shell: pwsh
 
     - name: Publish to VS Code Marketplace
+      # NOTE: v2 is the latest release and still declares runs.using: node20.
+      # GitHub forces it onto Node 24, which emits a deprecation warning we
+      # cannot silence until upstream ships a node24 major. Tracked upstream at
+      # HaaLeo/publish-vscode-extension; this step is also continue-on-error.
       uses: HaaLeo/publish-vscode-extension@v2
       with:
         pat: ${{ secrets.VSCE_TOKEN }}
@@ -681,7 +685,7 @@ jobs:
       continue-on-error: true
 
     - name: Setup npm registry
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ env.NODE_VERSION }}
         registry-url: https://registry.npmjs.org
@@ -710,14 +714,14 @@ jobs:
       pull-requests: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set Version
       run: |
         echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
 
     - name: Download All Artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         path: artifacts
 

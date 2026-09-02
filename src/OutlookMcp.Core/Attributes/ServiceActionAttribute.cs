@@ -18,6 +18,16 @@ public sealed class ServiceActionAttribute : Attribute
     public string Action { get; }
 
     /// <summary>
+    /// Overrides the tool-level [McpTool] Destructive default for this specific action.
+    /// Use this when a tool exposes a mix of read-only and mutating actions (action-dispatch
+    /// tools cannot be described by a single tool-level boolean). The generator computes the
+    /// tool's overall Destructive hint as true if ANY action is destructive.
+    /// Attribute parameters cannot be nullable, so absence of this named argument (not whether
+    /// it equals a particular value) is what signals "no override" to the generator.
+    /// </summary>
+    public bool Destructive { get; set; }
+
+    /// <summary>
     /// Creates a new ServiceActionAttribute.
     /// </summary>
     /// <param name="action">The action name in kebab-case (e.g., "get-load-config")</param>

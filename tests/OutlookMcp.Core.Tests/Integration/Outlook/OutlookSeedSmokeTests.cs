@@ -19,13 +19,10 @@ namespace OutlookMcp.Core.Tests.Integration.Outlook;
 [Collection("Sequential")]
 public class OutlookSeedSmokeTests(ITestOutputHelper output)
 {
-    [Fact]
+    [SkippableFact]
     public void ApplicationGetStatus_WhenOutlookAvailable_ReturnsSuccess()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var commands = new ApplicationCommands();
         var result = commands.GetStatus();
@@ -35,13 +32,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         Assert.False(string.IsNullOrWhiteSpace(result.Version));
     }
 
-    [Fact]
+    [SkippableFact]
     public void FolderListDefault_WhenOutlookAvailable_ReturnsCommonFolderRoles()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var commands = new FolderCommands();
         var result = commands.ListDefault();
@@ -53,13 +47,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         Assert.Contains(result.Folders, folder => folder.Available);
     }
 
-    [Fact]
+    [SkippableFact]
     public void FolderListChildren_WhenOutlookAvailable_ReturnsInboxChildFolders()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var commands = new FolderCommands();
         var result = commands.ListChildren(parentFolder: "inbox");
@@ -69,13 +60,44 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         Assert.All(result.Folders, folder => Assert.True(folder.Available));
     }
 
-    [Fact]
+    [SkippableFact]
+    public void FolderResolvePath_WhenOutlookAvailable_ResolvesInboxByRole()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new FolderCommands();
+        var result = commands.ResolvePath(folder: "inbox");
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.False(string.IsNullOrWhiteSpace(result.FolderPath));
+    }
+
+    [SkippableFact]
+    public void FolderListItems_WhenOutlookAvailable_ReturnsDraftsFolderItems()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new FolderCommands();
+            var result = commands.ListItems(folder: "drafts", maxCount: 25);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(result.Items);
+            Assert.Contains(result.Items, item => item.EntryId == draft.EntryId);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
     public void CreateMailDraft_WhenOutlookAvailable_CreatesAndDeletesDraft()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var result = CreateSmokeDraft();
 
@@ -92,13 +114,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void MailRead_WhenDraftResolvedByEntryId_ReturnsRequestedMail()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
 
@@ -122,13 +141,131 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
+    public void MailList_WithUnreadOnly_UsesRestrictWithoutErrorAndReportsTruncationExplicitly()
+    {
+        // #27: unreadOnly is pushed down via Items.Restrict rather than a client-side scan capped
+        // at a fixed item count. This smoke test only asserts the Restrict path does not throw
+        // and that Truncated/ScannedCount are populated -- it does not (and cannot, without
+        // seeding thousands of items) prove a match beyond the old 500-item cap is found; that
+        // requires either a large fixture mailbox or a mocked Items collection, tracked as
+        // follow-up test coverage.
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var result = commands.List(folder: "drafts", maxCount: 25, unreadOnly: true);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(result.TotalItemCount >= 0);
+            Assert.True(result.ScannedCount >= 0);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailReply_WithExplicitEntryId_WorksHeadlessly()
+    {
+        // #36: reply must be targetable via entryId/storeId without any Outlook window focused
+        // or item selected -- this is what makes "find a message, then reply to it" usable.
+        EnsureOutlookAvailable();
+
+        var sourceDraft = CreateSmokeDraft();
+        MailDraftResult? replyDraft = null;
+
+        try
+        {
+            var commands = new MailCommands();
+            replyDraft = commands.Reply(
+                entryId: sourceDraft.EntryId,
+                storeId: sourceDraft.StoreId,
+                useActiveMail: false,
+                body: "Headless reply body.");
+
+            Assert.True(replyDraft.Success, replyDraft.ErrorMessage);
+            Assert.True(replyDraft.Saved);
+            Assert.False(string.IsNullOrWhiteSpace(replyDraft.EntryId));
+            Assert.StartsWith("RE:", replyDraft.Subject);
+
+            var replyBody = commands.Read(entryId: replyDraft.EntryId, storeId: replyDraft.StoreId, useActiveMail: false);
+            Assert.Contains("Headless reply body.", replyBody.BodyPreview ?? string.Empty);
+        }
+        finally
+        {
+            if (replyDraft?.EntryId != null)
+            {
+                DeleteDraft(replyDraft.EntryId, replyDraft.StoreId);
+            }
+
+            DeleteDraft(sourceDraft.EntryId!, sourceDraft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailForward_WithExplicitEntryIdAndRecipients_WorksHeadlessly()
+    {
+        // #36: forward must accept an explicit recipient, since a forwarded message otherwise has
+        // nobody to send to and no headless way to add one.
+        EnsureOutlookAvailable();
+
+        var sourceDraft = CreateSmokeDraft();
+        MailDraftResult? forwardDraft = null;
+
+        try
+        {
+            var commands = new MailCommands();
+            forwardDraft = commands.Forward(
+                entryId: sourceDraft.EntryId,
+                storeId: sourceDraft.StoreId,
+                useActiveMail: false,
+                recipientTo: "copilot-outlook-smoke@example.com",
+                body: "Headless forward body.");
+
+            Assert.True(forwardDraft.Success, forwardDraft.ErrorMessage);
+            Assert.True(forwardDraft.Saved);
+            Assert.False(string.IsNullOrWhiteSpace(forwardDraft.EntryId));
+            Assert.Equal("copilot-outlook-smoke@example.com", forwardDraft.To);
+            Assert.StartsWith("FW:", forwardDraft.Subject);
+        }
+        finally
+        {
+            if (forwardDraft?.EntryId != null)
+            {
+                DeleteDraft(forwardDraft.EntryId, forwardDraft.StoreId);
+            }
+
+            DeleteDraft(sourceDraft.EntryId!, sourceDraft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailReply_WithNoTargetAndNothingSelected_ReturnsActionableError()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var result = commands.Reply(useActiveMail: true);
+
+        // This assumes no Outlook window has anything selected/open during the test run; if that
+        // assumption doesn't hold the reply will legitimately succeed against whatever is active.
+        // Either outcome is acceptable here -- what matters is Success=false always pairs with a
+        // non-null, actionable ErrorMessage (Rule 1), never a silent/ambiguous failure.
+        if (!result.Success)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
+        }
+    }
+
+    [SkippableFact]
     public void AttachmentList_ForNewDraft_ReturnsEmptyAttachmentCollection()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
 
@@ -152,13 +289,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void AttachmentSave_ForNewDraftWithNoAttachments_ReturnsZeroSavedFiles()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
         string destinationDirectory = Path.Combine(Path.GetTempPath(), $"OutlookSeedSmoke_{Guid.NewGuid():N}");
@@ -191,13 +325,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void AttachmentAddAndRemove_ForDraft_UpdatesAttachmentCollection()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
         string tempFile = Path.Combine(Path.GetTempPath(), $"OutlookSeedAttachment_{Guid.NewGuid():N}.txt");
@@ -247,13 +378,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void MailSetReadState_WhenDraftResolvedByEntryId_UpdatesUnreadState()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
 
@@ -303,13 +431,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void MailMove_WhenDraftResolvedByEntryId_MovesToDeletedItems()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
         string? cleanupEntryId = draft.EntryId;
@@ -351,13 +476,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void MailDelete_WhenDraftResolvedByEntryId_ReturnsDeletedResult()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
         var commands = new MailCommands();
@@ -372,13 +494,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         Assert.Equal(draft.Subject, result.Subject);
     }
 
-    [Fact]
+    [SkippableFact]
     public void MailSetCategories_WhenDraftResolvedByEntryId_UpdatesAndClearsCategories()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         var draft = CreateSmokeDraft();
 
@@ -427,13 +546,93 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
+    public void MailSetSubject_WhenDraftResolvedByEntryId_UpdatesSubject()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var result = commands.SetSubject(
+                subject: "Copilot Outlook smoke updated subject",
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("Copilot Outlook smoke updated subject", result.Subject);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailSetBody_WhenDraftResolvedByEntryId_UpdatesBody()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var setResult = commands.SetBody(
+                body: "Copilot Outlook smoke updated body.",
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(setResult.Success, setResult.ErrorMessage);
+
+            var readResult = commands.Read(
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(readResult.Success, readResult.ErrorMessage);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailSetRecipients_WhenDraftResolvedByEntryId_UpdatesToAndCc()
+    {
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+            var result = commands.SetRecipients(
+                recipientTo: "copilot-smoke-to@example.com",
+                cc: "copilot-smoke-cc@example.com",
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains("copilot-smoke-to@example.com", result.To);
+            Assert.Contains("copilot-smoke-cc@example.com", result.Cc);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
     public void CalendarCreateAndRead_WhenOutlookAvailable_CreatesAndReadsAppointment()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         string start = DateTimeOffset.Now.AddHours(1).ToString("o");
         string endTime = DateTimeOffset.Now.AddHours(2).ToString("o");
@@ -469,13 +668,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void CalendarList_WhenCreatedAppointmentFallsInRange_ReturnsMatchingItem()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         DateTimeOffset startTime = DateTimeOffset.Now.AddHours(3);
         DateTimeOffset endTime = startTime.AddMinutes(30);
@@ -507,13 +703,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void CalendarUpdateAppointment_WhenOutlookAvailable_PersistsChanges()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         DateTimeOffset startTime = DateTimeOffset.Now.AddHours(4);
         DateTimeOffset endTime = startTime.AddMinutes(30);
@@ -560,13 +753,10 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void CalendarDeleteAppointment_WhenOutlookAvailable_RemovesAppointment()
     {
-        if (!EnsureOutlookAvailable())
-        {
-            return;
-        }
+        EnsureOutlookAvailable();
 
         DateTimeOffset startTime = DateTimeOffset.Now.AddHours(5);
         DateTimeOffset endTime = startTime.AddMinutes(45);
@@ -599,12 +789,45 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         Assert.False(readResult.HasItem);
     }
 
-    private bool EnsureOutlookAvailable()
+    [SkippableFact]
+    public void Execute_AfterPriorCall_SharedApplicationRemainsUsable()
+    {
+        // Regression test for #19: OutlookInteropRunner used to FinalReleaseComObject the
+        // shared, already-running Outlook.Application obtained via GetActiveObject. Because
+        // .NET caches one RCW per process for that COM identity, finalizing it during one
+        // call's cleanup could invalidate every other holder's reference to the same object.
+        // This test issues two sequential Execute() calls and asserts the second one succeeds,
+        // proving the first call's cleanup did not tear down the shared Application RCW.
+        EnsureOutlookAvailable();
+
+        string firstVersion = OutlookInteropRunner.Execute(
+            "regression-first-call",
+            (application, _) => application.Version,
+            ex => throw new InvalidOperationException("First Execute call failed.", ex));
+
+        Assert.False(string.IsNullOrWhiteSpace(firstVersion));
+
+        // If the shared Application RCW was invalidated by the first call's cleanup, this
+        // second call will throw InvalidComObjectException instead of returning a version.
+        string secondVersion = OutlookInteropRunner.Execute(
+            "regression-second-call",
+            (application, _) => application.Version,
+            ex => throw new InvalidOperationException("Second Execute call failed after first call's cleanup.", ex));
+
+        Assert.Equal(firstVersion, secondVersion);
+    }
+
+    /// <summary>
+    /// Skips the calling test (via Xunit.SkippableFact) unless a running classic Outlook desktop
+    /// instance with a usable MAPI session is available. Regression guard for #22: this MUST
+    /// report tests as Skipped, never silently Passed, when Outlook is unavailable.
+    /// </summary>
+    private void EnsureOutlookAvailable()
     {
         if (!OutlookInteropRunner.TryGetRunningApplication(out OutlookInterop.Application? application))
         {
             output.WriteLine("Skipping Outlook smoke test: no running classic Outlook desktop instance is available.");
-            return false;
+            throw new SkipException("No running classic Outlook desktop instance is available.");
         }
 
         OutlookInterop.NameSpace? session = null;
@@ -617,15 +840,13 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         catch (Exception ex)
         {
             output.WriteLine($"Skipping Outlook smoke test: {ex.Message}");
-            return false;
+            throw new SkipException($"Outlook MAPI session is not usable: {ex.Message}", ex);
         }
         finally
         {
             ReleaseComObject(session);
-            ReleaseComObject(application);
+            ReleaseSharedApplication(application);
         }
-
-        return true;
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -671,7 +892,7 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             ReleaseComObject(mail);
             ReleaseComObject(item);
             ReleaseComObject(session);
-            ReleaseComObject(application);
+            ReleaseSharedApplication(application);
         }
     }
 
@@ -699,7 +920,19 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             ReleaseComObject(appointment);
             ReleaseComObject(item);
             ReleaseComObject(session);
-            ReleaseComObject(application);
+            ReleaseSharedApplication(application);
+        }
+    }
+
+    private static void ReleaseSharedApplication(object? value)
+    {
+        // The Application obtained via TryGetRunningApplication is the user's shared,
+        // already-running Outlook instance. Use ReleaseComObject (ref-count decrement),
+        // never FinalReleaseComObject, or we invalidate the cached RCW for every other
+        // holder in the process. See #19.
+        if (value != null && Marshal.IsComObject(value))
+        {
+            _ = Marshal.ReleaseComObject(value);
         }
     }
 

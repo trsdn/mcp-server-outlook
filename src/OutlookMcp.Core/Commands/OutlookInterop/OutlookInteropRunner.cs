@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using OutlookMcp.ComInterop;
+using OutlookMcp.ComInterop.Session;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookMcp.Core.Commands.OutlookInterop;
@@ -13,65 +14,98 @@ internal static class OutlookInteropRunner
     [DllImport("oleaut32.dll")]
     private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object? ppunk);
 
+    /// <summary>
+    /// Dispatches an Outlook COM operation onto the single process-wide
+    /// <see cref="OutlookDispatcher"/> STA thread (see #20 / ADR-002). Resolves the shared
+    /// <c>Outlook.Application</c>/<c>Outlook.NameSpace</c> fresh for every call (Outlook itself is
+    /// a single already-running singleton; resolving it does not create work), runs
+    /// <paramref name="action"/>, and releases the per-call <c>NameSpace</c> — but never
+    /// final-releases the shared <c>Application</c> RCW, per #19.
+    /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     internal static TResult Execute<TResult>(
         string operationName,
         Func<Outlook.Application, Outlook.NameSpace, TResult> action,
         Func<Exception, TResult> onException)
     {
-        var completion = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        var thread = new Thread(() =>
+        return OutlookDispatcher.Shared.Execute(operationName, () =>
         {
             Outlook.Application? application = null;
             Outlook.NameSpace? session = null;
 
             try
             {
-                OleMessageFilter.Register();
-
                 Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
                 if (outlookType == null)
                 {
-                    completion.TrySetResult(onException(new InvalidOperationException("Microsoft Outlook is not installed on this system.")));
-                    return;
+                    OutlookFlavor flavor = OutlookInstallationDetector.DetectFlavor();
+                    return onException(new InvalidOperationException(
+                        OutlookInstallationDetector.BuildUnavailableMessage(flavor)));
                 }
 
-                application = GetOrCreateApplication(outlookType);
+                if (!TryGetRunningApplication(out application))
+                {
+                    // Deliberately do NOT fall back to Activator.CreateInstance(outlookType) here
+                    // (see #30). A freshly created Outlook.Application is not the user's trusted,
+                    // already-running session, so it is *more* likely to trigger the Outlook Object
+                    // Model Guard (OMG) than a session obtained via GetActiveObject, and it conflicts
+                    // with Outlook's single-instance-per-user model. Fail with actionable guidance
+                    // instead, distinguishing "not running" from "running at a different integrity
+                    // level than this (possibly elevated) process" -- GetActiveObject fails with
+                    // MK_E_UNAVAILABLE in the latter case and TryGetRunningApplication surfaces that
+                    // as a plain "not running" result, so we check elevation separately to give a
+                    // more specific message.
+                    bool elevated = OutlookInstallationDetector.IsCurrentProcessElevated();
+                    string message = elevated
+                        ? "Outlook.Application COM ProgID is registered, but no running instance could be reached. " +
+                          "This process is running elevated (as Administrator); if Outlook is running unelevated, " +
+                          "COM's GetActiveObject cannot see across integrity levels. Run Outlook and this server at " +
+                          "the same elevation level, or start classic Outlook for Windows and try again."
+                        : "Classic Outlook for Windows is installed but does not appear to be running. " +
+                          "Start Outlook and try again.";
+                    return onException(new InvalidOperationException(message));
+                }
+
                 session = application.GetNamespace("MAPI");
 
-                completion.TrySetResult(action(application, session));
+                return action(application, session);
+            }
+            catch (COMException ex) when (IsObjectModelGuardDenial(ex))
+            {
+                // The Outlook Object Model Guard (OMG) raises a modal "an application is trying to
+                // access e-mail addresses" / "trying to send e-mail" dialog for out-of-process,
+                // untrusted callers touching protected members (Recipients, SenderEmailAddress,
+                // MailItem.Send(), AddressEntry.Address, etc.). If the user does not respond, Outlook
+                // eventually aborts the call with E_ABORT / MK_E_UNAVAILABLE-shaped COMExceptions.
+                // Surface this distinctly (Rule 22: never swallow security denials into an ambiguous
+                // null/false/generic-error result) rather than reporting a plain COM failure. See #30.
+                return onException(new InvalidOperationException(
+                    "Outlook blocked this operation with a security prompt (Object Model Guard). " +
+                    "This typically happens when reading a sensitive property (e.g. SenderEmailAddress, " +
+                    "Recipients) or sending mail from an untrusted, out-of-process caller. If a dialog is " +
+                    "visible in Outlook, a person must approve or dismiss it; this server cannot answer it " +
+                    "automatically. See docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md for the documented OMG " +
+                    $"posture and mitigations. Original error: {ex.Message}", ex));
             }
             catch (COMException ex)
             {
-                completion.TrySetResult(onException(ex));
+                return onException(ex);
             }
             catch (Exception ex)
             {
-                completion.TrySetResult(onException(ex));
+                return onException(ex);
             }
             finally
             {
                 ReleaseComObject(ref session);
-                ReleaseComObject(ref application);
-                OleMessageFilter.Revoke();
+                // Do NOT final-release `application`: it is the user's already-running,
+                // shared Outlook.Application instance (obtained via GetActiveObject and
+                // cached per-process by the RCW table). Final-releasing it zeroes the RCW
+                // refcount for every holder in the process, not just this call, and can
+                // invalidate a later operation's reference to the same object. See #19.
+                ReleaseSharedComObject(ref application);
             }
-        })
-        {
-            IsBackground = true,
-            Name = operationName
-        };
-
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-
-        if (!completion.Task.Wait(ComInteropConstants.DefaultOperationTimeout))
-        {
-            throw new TimeoutException($"{operationName} timed out while waiting for Outlook.");
-        }
-
-        _ = thread.Join(TimeSpan.FromSeconds(10));
-        return completion.Task.GetAwaiter().GetResult();
+        }, ComInteropConstants.DefaultOperationTimeout);
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -97,19 +131,6 @@ internal static class OutlookInteropRunner
         }
 
         return application != null;
-    }
-
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    internal static Outlook.Application GetOrCreateApplication(Type outlookType)
-    {
-        if (TryGetRunningApplication(out Outlook.Application? runningApplication))
-        {
-            return runningApplication;
-        }
-
-#pragma warning disable IL2072
-        return (Outlook.Application)Activator.CreateInstance(outlookType)!;
-#pragma warning restore IL2072
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -141,7 +162,20 @@ internal static class OutlookInteropRunner
         return FindFolderByPath(session, folder);
     }
 
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    /// <summary>
+    /// Identifies COMExceptions consistent with an Outlook Object Model Guard (OMG) denial: a
+    /// dismissed or unanswered "an application is trying to..." security prompt. OMG-triggered
+    /// failures surface as <c>E_ABORT</c> (0x80004004, "Operation aborted") from the Outlook
+    /// automation surface, since OMG aborts the call rather than returning a normal error result.
+    /// This is a heuristic (Outlook does not expose a dedicated "OMG denied" HRESULT) but is
+    /// specific enough in practice to distinguish from generic COM failures. See #30.
+    /// </summary>
+    internal static bool IsObjectModelGuardDenial(COMException ex)
+    {
+        const int E_ABORT = unchecked((int)0x80004004);
+        return ex.HResult == E_ABORT;
+    }
+
     private static Outlook.MAPIFolder? FindFolderByPath(Outlook.NameSpace session, string folderPath)
     {
         Outlook.Folders? rootFolders = null;
@@ -374,6 +408,21 @@ internal static class OutlookInteropRunner
         if (value != null && Marshal.IsComObject(value))
         {
             _ = Marshal.FinalReleaseComObject(value);
+        }
+
+        value = null;
+    }
+
+    /// <summary>
+    /// Releases a COM reference we do NOT own the lifetime of (e.g. the shared, already-running
+    /// Outlook.Application returned by GetActiveObject). Uses a plain ref-count decrement instead
+    /// of FinalReleaseComObject so other holders of the same cached RCW are unaffected. See #19.
+    /// </summary>
+    internal static void ReleaseSharedComObject<T>(ref T? value) where T : class
+    {
+        if (value != null && Marshal.IsComObject(value))
+        {
+            _ = Marshal.ReleaseComObject(value);
         }
 
         value = null;

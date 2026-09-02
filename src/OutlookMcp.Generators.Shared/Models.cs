@@ -62,9 +62,16 @@ public sealed class MethodInfo
     /// <summary>Whether the original interface method has an IProgress&lt;T&gt; parameter.</summary>
     public bool HasProgressParameter { get; }
 
+    /// <summary>
+    /// Resolved destructive classification for this specific action: the action's
+    /// [ServiceAction(Destructive=...)] override if present, otherwise the tool-level
+    /// [McpTool(Destructive=...)] default.
+    /// </summary>
+    public bool IsDestructive { get; }
+
     public MethodInfo(string methodName, string actionName, string returnType, string mcpTool,
         List<ParameterInfo> parameters, string? xmlDocSummary = null, bool hasBatchParameter = true,
-        bool hasProgressParameter = false)
+        bool hasProgressParameter = false, bool isDestructive = true)
     {
         MethodName = methodName;
         ActionName = actionName;
@@ -74,6 +81,7 @@ public sealed class MethodInfo
         XmlDocSummary = xmlDocSummary;
         HasBatchParameter = hasBatchParameter;
         HasProgressParameter = hasProgressParameter;
+        IsDestructive = isDestructive;
     }
 }
 

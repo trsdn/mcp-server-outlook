@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           # Fail the build if vulnerabilities are found
           fail-on-severity: moderate
@@ -54,6 +54,12 @@ jobs:
           # StreamJsonRpc declares the compound expression
           # "Apache-2.0 AND MIT AND MS-PL". All three are load-bearing for a
           # Windows COM automation server and cannot be swapped out.
+          #
+          # Xunit.SkippableFact is MS-PL (the same OSI-approved permissive
+          # license already accepted transitively via StreamJsonRpc). It is a
+          # test-only dependency that is never redistributed, and it is what
+          # lets the Outlook integration tests skip loudly instead of passing
+          # silently when classic Outlook is unavailable (#22).
           allow-dependencies-licenses: >-
             pkg:npm/%40github/copilot,
             pkg:npm/%40github/copilot-darwin-arm64,
@@ -66,7 +72,8 @@ jobs:
             pkg:npm/%40github/copilot-win32-x64,
             pkg:nuget/Microsoft.Office.Interop.Outlook,
             pkg:nuget/Microsoft.Office.Interop.PowerPoint,
-            pkg:nuget/StreamJsonRpc
+            pkg:nuget/StreamJsonRpc,
+            pkg:nuget/Xunit.SkippableFact
           
       - name: Dependency Review Summary
         if: always()

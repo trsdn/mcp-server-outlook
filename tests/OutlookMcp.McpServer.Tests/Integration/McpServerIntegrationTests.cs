@@ -20,7 +20,7 @@ namespace OutlookMcp.McpServer.Tests.Integration;
 /// Integration tests that exercise the full MCP protocol using in-memory transport.
 /// These tests use the official MCP SDK client to connect to our server, ensuring:
 /// - DI pipeline is correctly configured
-/// - Tool discovery via WithToolsFromAssembly() works
+/// - Tool discovery via the explicit Outlook-only allow-list in Program.cs works (#23)
 /// - Tool schemas are correctly generated
 /// - Tools execute properly through the MCP protocol
 ///
@@ -43,54 +43,18 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
 
     /// <summary>
     /// Expected tool names from our assembly - the source of truth.
-    /// Generated MCP Server tools:
-    /// - file: Session management (hand-coded PptFileTool)
-    /// - application, attachment, folder, mail: Outlook seed tools generated from Core interfaces
-    /// - slide, shape, text, notes, master, export, transition, image: Inherited PowerPoint tools generated from Core interfaces
-    /// - slidetable, chart, animation, design, slideshow, vba, window: Generated from Core interfaces
-    /// - hyperlink, section, docproperty, media: Generated from Core interfaces
-    /// - comment, placeholder, background, headerfooter, smartart, shapealign: Generated from Core interfaces
+    /// Program.cs registers only these five Outlook tools via an explicit allow-list (#23); the
+    /// assembly still contains 33 generated legacy PowerPoint tool types plus the hand-written
+    /// "file" tool, but they are deliberately not registered with the MCP server and so must not
+    /// appear here or in tools/list. This test is the regression guard for that allow-list.
     /// </summary>
     private static readonly HashSet<string> ExpectedToolNames =
     [
         "application",
         "attachment",
-        "accessibility",
-        "animation",
-        "background",
         "calendar",
-        "chart",
-        "comment",
-        "customshow",
-        "design",
-        "docproperty",
-        "export",
-        "file",
         "folder",
-        "headerfooter",
-        "hyperlink",
-        "image",
         "mail",
-        "master",
-        "media",
-        "notes",
-        "pagesetup",
-        "placeholder",
-        "printoptions",
-        "proofing",
-        "section",
-        "shape",
-        "shapealign",
-        "slide",
-        "slideimport",
-        "slideshow",
-        "slidetable",
-        "smartart",
-        "tag",
-        "text",
-        "transition",
-        "vba",
-        "window"
     ];
 
     /// <summary>
@@ -113,7 +77,18 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
             .WithStreamServerTransport(
                 _clientToServerPipe.Reader.AsStream(),
                 _serverToClientPipe.Writer.AsStream())
-            .WithToolsFromAssembly(typeof(PptFileTool).Assembly);
+            // Mirror Program.cs's explicit Outlook-only allow-list (#23) instead of
+            // WithToolsFromAssembly(), so this test genuinely exercises (and guards) the same
+            // registration surface real clients see.
+            .WithTools(
+            [
+                typeof(PptApplicationTool),
+                typeof(PptAttachmentTool),
+                typeof(PptCalendarTool),
+                typeof(PptFolderTool),
+                typeof(PptMailTool),
+            ])
+            .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.PptSkillPrompts)]);
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
 
@@ -188,7 +163,7 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
     /// Verifies that all expected tools are discoverable through the real MCP protocol surface.
     /// This is THE definitive test - it uses client.ListToolsAsync() which exercises:
     /// - DI pipeline
-    /// - WithToolsFromAssembly() discovery
+    /// - Explicit Outlook-only tool allow-list (#23) discovery
     /// - MCP protocol serialization
     /// - Tool schema generation
     /// </summary>
@@ -259,25 +234,23 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
     }
 
     /// <summary>
-    /// Tests that file tool's Test action works via MCP protocol.
-    /// This exercises the complete tool invocation path.
+    /// Tests that the application tool's get-status action works via MCP protocol.
+    /// This exercises the complete tool invocation path for an Outlook tool (#23: the legacy
+    /// PowerPoint "file" tool this test previously called is no longer registered).
     /// </summary>
     [Fact]
-    public async Task CallTool_PptFileTest_ReturnsSuccess()
+    public async Task CallTool_ApplicationGetStatus_ReturnsSuccess()
     {
         output.WriteLine("=== TOOL INVOCATION VIA MCP PROTOCOL ===\n");
 
-        // Arrange - Test action doesn't require an actual file
-        // Parameter names shortened for token optimization: presentationPath -> path
         var arguments = new Dictionary<string, object?>
         {
-            ["action"] = "test",
-            ["path"] = "C:\\fake\\test.pptx"
+            ["action"] = "get-status"
         };
 
         // Act - Call tool via MCP protocol
         var result = await _client!.CallToolAsync(
-            "file",
+            "application",
             arguments,
             cancellationToken: _cts.Token);
 
@@ -293,10 +266,7 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
         var textPreview = textBlock.Text.Length > 200 ? textBlock.Text[..200] + "..." : textBlock.Text;
         output.WriteLine($"Tool response: {textPreview}");
 
-        // The test action should return success (property name is "success" in success responses)
-        Assert.Contains("success", textBlock.Text.ToLowerInvariant());
-
-        output.WriteLine("\n✓ file Test action executed successfully via MCP protocol");
+        output.WriteLine("\n✓ application get-status action executed successfully via MCP protocol");
     }
 
     /// <summary>
@@ -364,6 +334,43 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
         output.WriteLine($"✓ ListChanged: {capabilities.Tools?.ListChanged}");
 
         output.WriteLine("\n✓ Server capabilities correctly exposed");
+    }
+
+    /// <summary>
+    /// Regression guard for #23's prompts/list acceptance criterion: only Outlook-relevant
+    /// prompts should be discoverable, not the PowerPoint-only skill docs (slide-design-*,
+    /// generation-pipeline) that remain on disk for the legacy eval/ harness.
+    /// </summary>
+    [Fact]
+    public async Task ListPrompts_ReturnsOnlyOutlookPrompts()
+    {
+        output.WriteLine("=== PROMPT DISCOVERY VIA MCP PROTOCOL ===\n");
+
+        var expectedPromptNames = new HashSet<string>
+        {
+            "behavioral_rules_guide",
+            "outlook_agent_mode_guide",
+        };
+
+        var prompts = await _client!.ListPromptsAsync(cancellationToken: _cts.Token);
+        var actualPromptNames = prompts.Select(p => p.Name).ToHashSet();
+
+        foreach (var prompt in prompts.OrderBy(p => p.Name))
+        {
+            output.WriteLine($"  • {prompt.Name}");
+        }
+
+        var missingPrompts = expectedPromptNames.Except(actualPromptNames).ToList();
+        Assert.Empty(missingPrompts);
+
+        var unexpectedPrompts = actualPromptNames.Except(expectedPromptNames).ToList();
+        if (unexpectedPrompts.Count > 0)
+        {
+            output.WriteLine($"\n❌ Unexpected prompts (likely leaked PowerPoint prompts): {string.Join(", ", unexpectedPrompts)}");
+        }
+        Assert.Empty(unexpectedPrompts);
+
+        output.WriteLine($"\n✓ All {expectedPromptNames.Count} Outlook prompts discovered, no legacy PowerPoint prompts leaked");
     }
 }
 

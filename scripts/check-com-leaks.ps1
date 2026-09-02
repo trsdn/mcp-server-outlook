@@ -12,16 +12,28 @@ $cleanFiles = @()
 
 Get-ChildItem -Path (Join-Path $rootDir "src") -Recurse -Filter "*.cs" | ForEach-Object {
     $content = Get-Content $_.FullName -Raw
+
+    # PowerPoint COM interop uses `dynamic` locals cleaned up via ComUtilities.Release.
+    # Outlook COM interop (OutlookInteropRunner.cs and callers) uses strongly-typed
+    # `Outlook.*` locals cleaned up via OutlookInteropRunner.ReleaseComObject /
+    # ReleaseSharedComObject. Both patterns must be detected — see #21.
     $hasDynamic = $content -match "dynamic\s+\w+\s*=.*\."
-    $hasRelease = $content -match "ComUtilities\.Release"
+    $hasPptRelease = $content -match "ComUtilities\.Release"
+
+    $hasOutlookComLocal = $content -match "Outlook(Interop)?\.\w+\??\s+\w+\s*="
+    $hasOutlookRelease = $content -match "OutlookInteropRunner\.Release(Shared)?ComObject|Marshal\.(Final)?ReleaseComObject"
+
+    $hasComObjects = $hasDynamic -or $hasOutlookComLocal
+    $hasRelease = $hasPptRelease -or $hasOutlookRelease
+
     $isSessionFile = $_.FullName -match "PptBatch\.cs|PptSession\.cs"
 
     $relativePath = $_.FullName.Replace("$rootDir\", "")
 
-    if ($hasDynamic -and -not $hasRelease -and -not $isSessionFile) {
+    if ($hasComObjects -and -not $hasRelease -and -not $isSessionFile) {
         $leakFiles += $_
         Write-Host "$relativePath - HAS COM objects but NO cleanup" -ForegroundColor Red
-    } elseif ($hasDynamic -and $hasRelease) {
+    } elseif ($hasComObjects -and $hasRelease) {
         $cleanFiles += $_
         Write-Host "$relativePath - Proper COM cleanup" -ForegroundColor Green
     }

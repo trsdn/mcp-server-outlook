@@ -105,18 +105,47 @@ public class Program
 
                 // Server-wide instructions for LLMs - helps with tool selection and workflow understanding
                 options.ServerInstructions = """
-                    OutlookMcp is the Outlook migration MCP server surface.
+                    OutlookMcp automates classic Outlook for Windows desktop via COM. It exposes
+                    five tools: application, folder, mail, attachment, and calendar.
 
-                    Outlook-first commands currently include application, folder, mail, and attachment workflows.
+                    Identity model: Outlook items are addressed by entryId (optionally paired with
+                    storeId for multi-store mailboxes), not by a file path or session handle. There
+                    is no "open" or "close" step — pass entryId/storeId directly to the action that
+                    needs the item.
 
-                    Legacy presentation file/session commands still exist during migration:
-                    1. file(action:'open') → returns session_id
-                    2. Use session_id with session-bound legacy tools
-                    3. file(action:'close', save:true/false) → ONLY when completely done
+                    Use useActiveMail/useActiveAppointment (a "read-active" style action) to operate
+                    on whatever mail item or appointment the user currently has selected or open in
+                    Outlook, when no explicit entryId is available. Prefer explicit entryId/storeId
+                    targeting whenever you already have it, since "active item" is ambiguous with
+                    nothing selected or multiple items shown.
+
+                    Destructive actions (deleting items, sending mail, etc.) require confirmation
+                    per the tool's Destructive annotation — do not chain a destructive action
+                    immediately after a read without the user's explicit go-ahead, and never assume
+                    a destructive call can be safely retried without checking whether it already
+                    succeeded.
                     """;
             })
-            .WithToolsFromAssembly()
-            .WithPromptsFromAssembly(); // Auto-discover prompts marked with [McpServerPromptType]
+            // #23: explicit allow-list of Outlook-only types via the reflection-based WithTools/
+            // WithPrompts(IEnumerable<Type>) overloads, instead of .WithToolsFromAssembly()/
+            // .WithPromptsFromAssembly(). The assembly still carries 33 generated legacy
+            // PowerPoint tool types (plus the hand-written file tool) that compile but must not
+            // be offered to MCP clients -- an unfiltered scan would flood tools/list, waste LLM
+            // context, and invite mis-selection (see #11 for the broader legacy-removal plan;
+            // deleting those types is a later step). The generic WithTools<T>/WithPrompts<T>
+            // overloads require a non-static T, but the generated tool/prompt classes are static,
+            // so the non-generic Type-list overloads are used instead.
+            // PptSkillPrompts.g.cs is itself narrowed to only Outlook-relevant prompts (see
+            // GenerateSkillPrompts target in the .csproj), so registering the whole type is safe.
+            .WithTools(
+            [
+                typeof(OutlookMcp.McpServer.Tools.PptApplicationTool),
+                typeof(OutlookMcp.McpServer.Tools.PptAttachmentTool),
+                typeof(OutlookMcp.McpServer.Tools.PptCalendarTool),
+                typeof(OutlookMcp.McpServer.Tools.PptFolderTool),
+                typeof(OutlookMcp.McpServer.Tools.PptMailTool),
+            ])
+            .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.PptSkillPrompts)]);
 
         if (_testInputPipe != null && _testOutputPipe != null)
         {

@@ -160,14 +160,13 @@ Pre-commit runs `scripts/pre-commit.ps1` which blocks commits if any check fails
 |---|-------|--------|-------------------|
 | 1 | Branch | (inline) | Never commit to `main` directly (Rule 6) |
 | 2 | COM Leaks | `check-com-leaks.ps1` | All `dynamic` COM objects have `ComUtilities.Release()` in finally |
-| 3 | Coverage Audit | `audit-core-coverage.ps1` | 100% Core methods exposed via MCP Server |
-| 4 | MCP-Core Implementation | `check-mcp-core-implementations.ps1` | All enum actions have Core method implementations |
-| 5 | Success Flag | `check-success-flag.ps1` | Rule 0: Never `Success=true` with `ErrorMessage` |
-| 6 | CLI Coverage | `check-cli-coverage.ps1` | All action enums have CLI commands |
-| 7 | CLI Action Switch | `check-cli-action-coverage.ps1` | Actions requiring args have explicit switch cases |
-| 8 | CLI Settings Usage | `check-cli-settings-usage.ps1` | All Settings properties used in args |
-| 9 | CLI Workflow Test | `Test-CliWorkflow.ps1` | E2E CLI workflow smoke test |
-| 10 | MCP Smoke Test | `dotnet test --filter "...SmokeTest..."` | All MCP tools functional |
+| 3 | Coverage | `CoreCommandsCoverageTests` (dotnet test) | Core methods exposed via MCP Server with a matching enum action |
+| 4 | Success Flag | `check-success-flag.ps1` | Rule 0: Never `Success=true` with `ErrorMessage` |
+| 5 | CLI Settings Usage | `check-cli-settings-usage.ps1` | All Settings properties used in args |
+| 6 | CLI Workflow Test | `Test-CliWorkflow.ps1` | E2E CLI workflow smoke test |
+| 7 | MCP Smoke Test | `dotnet test --filter "...SmokeTest..."` | All MCP tools functional |
+
+**Note (#25):** `audit-core-coverage.ps1`, `check-mcp-core-implementations.ps1`, `check-cli-coverage.ps1`, and `check-cli-action-coverage.ps1` were removed -- they regex-scraped a hand-authored `ToolActions.cs` that predates the move to Roslyn source generators (#5/#11) and no longer exists (actions are generated directly from `[ServiceAction]` attributes), so they either false-greened ("0/0 = 100% coverage") or hard-failed on a missing file. `CoreCommandsCoverageTests` (a reflection-based xUnit test enumerating the live Outlook Core interfaces/generated enums) replaces their role and is wired into both the pre-commit hook and CI (`build-cli.yml`/`build-mcp-server.yml`).
 
 **Install hook:**
 ```powershell

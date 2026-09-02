@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -87,6 +88,7 @@ public static class ServiceInfoExtractor
                 var actionName = GetActionName(method);
                 var methodMcpTool = GetMethodMcpTool(method) ?? mcpTool;
                 var xmlDoc = ExtractXmlDocumentation(method);
+                var isDestructive = GetActionDestructive(method) ?? mcpToolDestructive;
 
                 var hasBatchParameter = method.Parameters.Any(p => p.Type.Name == "IPptBatch");
                 var hasProgressParameter = method.Parameters.Any(p => p.Type.Name == "IProgress");
@@ -103,12 +105,22 @@ public static class ServiceInfoExtractor
                     parameters,
                     xmlDoc?.Summary,
                     hasBatchParameter,
-                    hasProgressParameter));
+                    hasProgressParameter,
+                    isDestructive));
             }
         }
 
         // Use explicit pascalName if provided, otherwise derive from category
         var categoryPascal = pascalName ?? StringHelper.ToPascalCase(category);
+
+        // Tool-level Destructive hint must reflect ALL actions the tool exposes, not just the
+        // interface-level default. Action-dispatch tools mix read-only and mutating actions
+        // (e.g. calendar's list/read vs delete-appointment), so one static boolean on [McpTool]
+        // cannot describe them accurately. Compute the effective tool hint as true if ANY
+        // resolved action is destructive.
+        var effectiveToolDestructive = methods.Count > 0
+            ? methods.Any(m => m.IsDestructive)
+            : mcpToolDestructive;
 
         return new ServiceInfo(
             category,
@@ -118,7 +130,7 @@ public static class ServiceInfoExtractor
             methods,
             interfaceSummary,
             mcpToolTitle,
-            mcpToolDestructive,
+            effectiveToolDestructive,
             mcpToolCategory,
             mcpToolDescription,
             hasMcpToolAttribute: mcpTool != null);
@@ -161,6 +173,27 @@ public static class ServiceInfoExtractor
 
         // Default: derive from method name
         return StringHelper.ToKebabCase(method.Name);
+    }
+
+    /// <summary>
+    /// Reads the per-action [ServiceAction(Destructive = ...)] override, if present.
+    /// Returns null when the action does not override the tool-level default.
+    /// </summary>
+    private static bool? GetActionDestructive(IMethodSymbol method)
+    {
+        foreach (var attr in method.GetAttributes())
+        {
+            if (attr.AttributeClass?.Name != "ServiceActionAttribute")
+                continue;
+
+            foreach (var namedArg in attr.NamedArguments)
+            {
+                if (namedArg.Key == "Destructive" && namedArg.Value.Value is bool destructive)
+                    return destructive;
+            }
+        }
+
+        return null;
     }
 
     private static string? GetMethodMcpTool(IMethodSymbol method)

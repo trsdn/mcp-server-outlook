@@ -1,14 +1,14 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Git pre-commit hook to check for COM object leaks, Core Commands coverage, naming consistency, Success flag violations, CLI workflow, and MCP Server functionality
+    Git pre-commit hook to check for COM object leaks, Core Commands coverage, CLI Settings usage, Success flag violations, CLI workflow, and MCP Server functionality
 
 .DESCRIPTION
     Runs checks before allowing commits:
     0. Process cleanup - kills stale PowerPoint, outlookcli, and MCP server processes to prevent file locks
-    1. COM leak checker - ensures no PowerPoint COM objects are leaked
-    2. Coverage audit - ensures 100% Core Commands are exposed via MCP Server
-    3. Naming consistency - ensures enum names match Core method names exactly
+    1. COM leak checker - ensures no Outlook COM objects are leaked
+    2. Coverage check - ensures Core Commands are exposed via MCP Server (CoreCommandsCoverageTests)
+    3. CLI Settings usage check - ensures every CLI Settings property is actually passed to the daemon
     4. Success flag validation - ensures Success=true never paired with ErrorMessage (Rule 0)
     5. CLI workflow smoke test - validates end-to-end CLI functionality
     6. MCP Server smoke test - validates all MCP tools work correctly
@@ -94,48 +94,61 @@ catch {
 }
 
 Write-Host ""
-Write-Host "Checking Core Commands coverage and naming..." -ForegroundColor Cyan
+Write-Host "Checking Core Commands coverage (Outlook surface)..." -ForegroundColor Cyan
 
 try {
-    $auditScript = Join-Path $rootDir "scripts\audit-core-coverage.ps1"
-    & $auditScript -CheckNaming -FailOnGaps
+    # audit-core-coverage.ps1 (regex-scraping a hand-authored ToolActions.cs) predates the move
+    # to Roslyn source generators (#5/#11) -- actions are now generated directly from
+    # [ServiceAction] attributes on Core interfaces, so ToolActions.cs no longer exists and the
+    # old script silently reported "0/0 = 100% coverage", a false-green gate (#25). This runs the
+    # reflection-based CoreCommandsCoverageTests instead, which enumerates the live Outlook Core
+    # interfaces/generated enums and genuinely fails if any [ServiceAction] method lacks a
+    # matching enum value.
+    $coverageOutput = dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests" --verbosity minimal 2>&1 | Out-String
+    $coverageExitCode = $LASTEXITCODE
 
-    if ($LASTEXITCODE -ne 0) {
+    if (-not ($coverageOutput -match "Passed!.*Passed:\s*[1-9]")) {
         Write-Host ""
-        Write-Host "Coverage or naming issues detected!" -ForegroundColor Red
-        Write-Host "   All Core methods must be exposed via MCP Server with matching names." -ForegroundColor Red
-        Write-Host "   Fix the issues before committing (add/rename enum values and mappings)." -ForegroundColor Red
+        Write-Host "CRITICAL: No coverage tests passed! Filter may have matched zero tests." -ForegroundColor Red
+        Write-Host $coverageOutput -ForegroundColor Gray
         exit 1
     }
 
-    Write-Host "Coverage and naming checks passed - 100% coverage with consistent names" -ForegroundColor Green
+    if ($coverageExitCode -ne 0) {
+        Write-Host ""
+        Write-Host "Coverage issues detected!" -ForegroundColor Red
+        Write-Host "   All Core methods must be exposed via MCP Server with a matching enum action." -ForegroundColor Red
+        Write-Host $coverageOutput -ForegroundColor Gray
+        exit 1
+    }
+
+    Write-Host "Coverage check passed - Core methods have matching enum actions" -ForegroundColor Green
 }
 catch {
     Write-Host ""
-    Write-Host "Error running coverage audit: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Error running coverage check: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
 Write-Host ""
-Write-Host "Checking MCP actions have Core implementations..." -ForegroundColor Cyan
+Write-Host "Checking CLI Settings property usage..." -ForegroundColor Cyan
 
 try {
-    $mcpCoreScript = Join-Path $rootDir "scripts\check-mcp-core-implementations.ps1"
-    & $mcpCoreScript
+    $cliSettingsScript = Join-Path $rootDir "scripts\check-cli-settings-usage.ps1"
+    & $cliSettingsScript
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
-        Write-Host "MCP actions without Core implementations detected!" -ForegroundColor Red
-        Write-Host "   All enum actions must have matching Core Command methods." -ForegroundColor Red
-        Write-Host "   Fix the issues before committing (remove enum or implement method)." -ForegroundColor Red
+        Write-Host "CLI Settings property usage issues detected!" -ForegroundColor Red
+        Write-Host "   A Settings property is defined but not passed to the daemon -- user values would be silently dropped." -ForegroundColor Red
         exit 1
     }
 
-    Write-Host "MCP-Core implementation check passed" -ForegroundColor Green
+    Write-Host "CLI Settings usage check passed" -ForegroundColor Green
 }
 catch {
     Write-Host ""
-    Write-Host "Error running MCP-Core implementation check: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Error running CLI Settings usage check: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 

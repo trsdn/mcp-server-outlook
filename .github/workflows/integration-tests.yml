@@ -56,15 +56,15 @@ jobs:
     runs-on: [self-hosted, windows, powerpoint]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 9.0.x
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Build CLI and MCP Server
         shell: pwsh
@@ -89,6 +89,12 @@ jobs:
           dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj
           --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust&Feature!=Screenshot"
           --logger "trx;LogFileName=core-integration.trx"
+
+      - name: Verify Outlook tests were not all skipped
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter "core-integration.trx" | Select-Object -First 1 -ExpandProperty FullName
+          ./scripts/check-outlook-tests-not-all-skipped.ps1 -TrxPath $trx
 
       - name: Run CLI integration suite
         shell: pwsh
@@ -119,7 +125,7 @@ jobs:
 
       - name: Upload integration test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: powerpoint-integration-${{ github.run_id }}
           path: |

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Core.Models;
 using Outlook = Microsoft.Office.Interop.Outlook;
@@ -226,124 +227,222 @@ public class MailCommands : IMailCommands
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailDraftResult Reply(bool display = false)
-        => ExecuteDraftFromActiveMail(
+    public MailDraftResult Reply(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? body = null,
+        bool display = false)
+        => ExecuteDraftFromMail(
             "OutlookMailReply",
             "Created Outlook reply draft.",
+            entryId,
+            storeId,
+            useActiveMail,
+            recipientTo: null,
+            cc: null,
+            bcc: null,
+            body,
             display,
             sourceMail => sourceMail.Reply());
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailDraftResult ReplyAll(bool display = false)
-        => ExecuteDraftFromActiveMail(
+    public MailDraftResult ReplyAll(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? body = null,
+        bool display = false)
+        => ExecuteDraftFromMail(
             "OutlookMailReplyAll",
             "Created Outlook reply-all draft.",
+            entryId,
+            storeId,
+            useActiveMail,
+            recipientTo: null,
+            cc: null,
+            bcc: null,
+            body,
             display,
             sourceMail => sourceMail.ReplyAll());
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailDraftResult Forward(bool display = false)
-        => ExecuteDraftFromActiveMail(
+    public MailDraftResult Forward(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string? recipientTo = null,
+        string? cc = null,
+        string? bcc = null,
+        string? body = null,
+        bool display = false)
+        => ExecuteDraftFromMail(
             "OutlookMailForward",
             "Created Outlook forward draft.",
+            entryId,
+            storeId,
+            useActiveMail,
+            recipientTo,
+            cc,
+            bcc,
+            body,
             display,
             sourceMail => sourceMail.Forward());
+
+    /// <summary>
+    /// At-most-once idempotency cache for <see cref="Send"/>, keyed by caller-supplied
+    /// <c>operationId</c>. If a caller retries a send with the same <c>operationId</c> (e.g.
+    /// after a client-side timeout with an indeterminate outcome, see #29), the cached result
+    /// from the first attempt is replayed instead of re-invoking <c>MailItem.Send()</c>, which
+    /// would risk sending a duplicate message. Entries are process-lifetime (not persisted); a
+    /// crash/restart loses the cache, which is an accepted tradeoff since operationId reuse is
+    /// only expected within a single client session's short retry window.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, MailSendResult> SendResultCache = new();
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailSendResult Send(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = true,
+        bool confirm = false,
+        string? operationId = null)
     {
-        return OutlookInteropRunner.Execute(
-            "OutlookMailSend",
-            (application, session) =>
-            {
-                Outlook.MailItem? mail = null;
-                Outlook.Inspector? inspector = null;
-                Outlook.Explorer? explorer = null;
-                Outlook.Selection? selection = null;
-                object? currentItem = null;
-                object? selectedItem = null;
-                object? resolvedItem = null;
+        if (!string.IsNullOrEmpty(operationId) && SendResultCache.TryGetValue(operationId, out MailSendResult? cached))
+        {
+            // Replay the first attempt's outcome rather than re-sending. See #29: retrying a send
+            // whose true outcome is unknown (e.g. after a timeout) must never risk duplicating it.
+            return cached;
+        }
 
-                try
-                {
-                    mail = OutlookInteropRunner.ResolveMailItem(
-                        application,
-                        session,
-                        entryId,
-                        storeId,
-                        useActiveMail,
-                        out inspector,
-                        out explorer,
-                        out selection,
-                        out currentItem,
-                        out selectedItem,
-                        out resolvedItem);
-
-                    if (mail == null)
-                    {
-                        return new MailSendResult
-                        {
-                            Success = false,
-                            Sent = false,
-                            ErrorMessage = string.IsNullOrWhiteSpace(entryId)
-                                ? "No active Outlook mail item is currently selected or open."
-                                : "The requested Outlook mail item could not be resolved."
-                        };
-                    }
-
-                    if (SafeGetBool(() => mail.Sent))
-                    {
-                        return new MailSendResult
-                        {
-                            Success = false,
-                            Sent = false,
-                            EntryId = SafeGet(() => mail.EntryID),
-                            StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
-                            Subject = SafeGet(() => mail.Subject),
-                            To = SafeGet(() => mail.To),
-                            ErrorMessage = "The selected Outlook mail item has already been sent."
-                        };
-                    }
-
-                    string? subject = SafeGet(() => mail.Subject);
-                    string? recipientTo = SafeGet(() => mail.To);
-                    string? resolvedEntryId = SafeGet(() => mail.EntryID);
-                    string? resolvedStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
-
-                    mail.Send();
-
-                    return new MailSendResult
-                    {
-                        Success = true,
-                        Sent = true,
-                        EntryId = resolvedEntryId,
-                        StoreId = resolvedStoreId,
-                        Subject = subject,
-                        To = recipientTo,
-                        SentOn = SafeGetDateTimeOffset(() => mail.SentOn),
-                        Message = "Sent Outlook mail item."
-                    };
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
-                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
-                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
-                    OutlookInteropRunner.ReleaseComObject(ref selection);
-                    OutlookInteropRunner.ReleaseComObject(ref explorer);
-                    OutlookInteropRunner.ReleaseComObject(ref inspector);
-                    OutlookInteropRunner.ReleaseComObject(ref mail);
-                }
-            },
-            ex => new MailSendResult
+        if (!confirm)
+        {
+            return new MailSendResult
             {
                 Success = false,
                 Sent = false,
-                ErrorMessage = $"Failed to send the Outlook mail item: {ex.Message}"
-            });
+                ErrorMessage = "Sending mail requires confirm=true. This is a deliberate confirmation gate " +
+                               "for a destructive, one-way action (#29) -- call send again with confirm=true " +
+                               "once you have verified the draft's recipients/subject/body are correct."
+            };
+        }
+
+        MailSendResult result;
+        try
+        {
+            result = OutlookInteropRunner.Execute(
+                "OutlookMailSend",
+                (application, session) =>
+                {
+                    Outlook.MailItem? mail = null;
+                    Outlook.Inspector? inspector = null;
+                    Outlook.Explorer? explorer = null;
+                    Outlook.Selection? selection = null;
+                    object? currentItem = null;
+                    object? selectedItem = null;
+                    object? resolvedItem = null;
+
+                    try
+                    {
+                        mail = OutlookInteropRunner.ResolveMailItem(
+                            application,
+                            session,
+                            entryId,
+                            storeId,
+                            useActiveMail,
+                            out inspector,
+                            out explorer,
+                            out selection,
+                            out currentItem,
+                            out selectedItem,
+                            out resolvedItem);
+
+                        if (mail == null)
+                        {
+                            return new MailSendResult
+                            {
+                                Success = false,
+                                Sent = false,
+                                ErrorMessage = string.IsNullOrWhiteSpace(entryId)
+                                    ? "No active Outlook mail item is currently selected or open."
+                                    : "The requested Outlook mail item could not be resolved."
+                            };
+                        }
+
+                        if (SafeGetBool(() => mail.Sent))
+                        {
+                            return new MailSendResult
+                            {
+                                Success = false,
+                                Sent = false,
+                                EntryId = SafeGet(() => mail.EntryID),
+                                StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                                Subject = SafeGet(() => mail.Subject),
+                                To = SafeGet(() => mail.To),
+                                ErrorMessage = "The selected Outlook mail item has already been sent."
+                            };
+                        }
+
+                        string? subject = SafeGet(() => mail.Subject);
+                        string? recipientTo = SafeGet(() => mail.To);
+                        string? resolvedEntryId = SafeGet(() => mail.EntryID);
+                        string? resolvedStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
+
+                        mail.Send();
+
+                        return new MailSendResult
+                        {
+                            Success = true,
+                            Sent = true,
+                            EntryId = resolvedEntryId,
+                            StoreId = resolvedStoreId,
+                            Subject = subject,
+                            To = recipientTo,
+                            SentOn = SafeGetDateTimeOffset(() => mail.SentOn),
+                            Message = "Sent Outlook mail item."
+                        };
+                    }
+                    finally
+                    {
+                        OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                        OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                        OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                        OutlookInteropRunner.ReleaseComObject(ref selection);
+                        OutlookInteropRunner.ReleaseComObject(ref explorer);
+                        OutlookInteropRunner.ReleaseComObject(ref inspector);
+                        OutlookInteropRunner.ReleaseComObject(ref mail);
+                    }
+                },
+                ex => new MailSendResult
+                {
+                    Success = false,
+                    Sent = false,
+                    ErrorMessage = $"Failed to send the Outlook mail item: {ex.Message}"
+                });
+        }
+        catch (TimeoutException ex)
+        {
+            // The dispatcher timed out queuing or running this operation. Since mail.Send() may
+            // already have been issued to Outlook when the timeout fired, we cannot know whether
+            // the message actually sent -- report Indeterminate rather than Success=false so the
+            // caller does not treat this as "definitely not sent" and blindly retry (which risks
+            // a duplicate send). See #29.
+            result = new MailSendResult
+            {
+                Success = false,
+                Sent = false,
+                Indeterminate = true,
+                ErrorMessage = $"Send timed out; the outcome is unknown (the message may have been sent). " +
+                               $"Re-check via mail.read before retrying -- do not blindly resend. {ex.Message}"
+            };
+        }
+
+        if (!string.IsNullOrEmpty(operationId))
+        {
+            SendResultCache.TryAdd(operationId, result);
+        }
+
+        return result;
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -698,6 +797,300 @@ public class MailCommands : IMailCommands
             });
     }
 
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetSubject(
+        string subject,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true)
+    {
+        if (subject == null)
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = "subject is required for mail.set-subject."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetSubject",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    mail.Subject = subject;
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = "Updated Outlook mail subject."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update the Outlook mail subject: {ex.Message}"
+            });
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetBody(
+        string body,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true)
+    {
+        if (body == null)
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = "body is required for mail.set-body."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetBody",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    mail.Body = body;
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = "Updated Outlook mail body."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update the Outlook mail body: {ex.Message}"
+            });
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetRecipients(
+        string? recipientTo = null,
+        string? cc = null,
+        string? bcc = null,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true)
+    {
+        if (recipientTo == null && cc == null && bcc == null)
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = "At least one recipient field must be provided for mail.set-recipients."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetRecipients",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    if (recipientTo != null)
+                    {
+                        mail.To = recipientTo;
+                    }
+
+                    if (cc != null)
+                    {
+                        mail.CC = cc;
+                    }
+
+                    if (bcc != null)
+                    {
+                        mail.BCC = bcc;
+                    }
+
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        To = SafeGet(() => mail.To),
+                        Cc = SafeGet(() => mail.CC),
+                        Bcc = SafeGet(() => mail.BCC),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = "Updated Outlook mail recipients."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update Outlook mail recipients: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Safely reads a string-valued Outlook property. If the read fails because the Outlook
+    /// Object Model Guard blocked it (see #30), the failure is recorded in
+    /// <paramref name="accessDenied"/> by <paramref name="propertyName"/> instead of being
+    /// silently indistinguishable from "property not present" -- see Rule 22.
+    /// </summary>
+    private static string? SafeGet(Func<string?> getter, string propertyName, List<string> accessDenied)
+    {
+        try
+        {
+            return getter();
+        }
+        catch (COMException ex) when (OutlookInteropRunner.IsObjectModelGuardDenial(ex))
+        {
+            accessDenied.Add(propertyName);
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? SafeGet(Func<string?> getter)
     {
         try
@@ -756,6 +1149,7 @@ public class MailCommands : IMailCommands
     private static ActiveMailResult CreateActiveMailResult(Outlook.MailItem mail)
     {
         Outlook.MAPIFolder? parentFolder = null;
+        var accessDenied = new List<string>();
 
         try
         {
@@ -768,14 +1162,15 @@ public class MailCommands : IMailCommands
                 EntryId = SafeGet(() => mail.EntryID),
                 StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
                 Subject = SafeGet(() => mail.Subject),
-                To = SafeGet(() => mail.To),
-                Cc = SafeGet(() => mail.CC),
-                Bcc = SafeGet(() => mail.BCC),
+                To = SafeGet(() => mail.To, nameof(ActiveMailResult.To), accessDenied),
+                Cc = SafeGet(() => mail.CC, nameof(ActiveMailResult.Cc), accessDenied),
+                Bcc = SafeGet(() => mail.BCC, nameof(ActiveMailResult.Bcc), accessDenied),
                 SenderName = SafeGet(() => mail.SenderName),
-                SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress),
+                SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress, nameof(ActiveMailResult.SenderEmailAddress), accessDenied),
                 CurrentFolderPath = OutlookInteropRunner.GetFolderPath(parentFolder),
                 BodyPreview = OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body)),
                 Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                AccessDenied = accessDenied.Count > 0 ? accessDenied : null,
                 Unread = SafeGetBool(() => mail.UnRead),
                 Importance = SafeGetInt(() => (int)mail.Importance),
                 AttachmentCount = SafeGetInt(() => mail.Attachments.Count),
@@ -799,7 +1194,14 @@ public class MailCommands : IMailCommands
         bool includeBodyPreview)
     {
         int boundedMaxCount = Math.Clamp(maxCount, 1, 100);
-        int scanLimit = Math.Clamp(boundedMaxCount * 10, 25, 500);
+        // Safety net only (not a "found" cutoff): protects against pathologically slow scans of
+        // huge folders. Previously this doubled as an undocumented hard cap on how far back
+        // mail.list/search could ever see -- anything beyond it was silently invisible, which an
+        // LLM reads as "no such mail exists" (#27). Restrict() below now does the actual
+        // filtering for unreadOnly at the Outlook/MAPI layer instead of via client-side scanning,
+        // so this cap is only hit for very large folders/queries, and MailListResult.Truncated
+        // makes that explicit instead of silent.
+        const int ScanSafetyLimit = 5000;
 
         return OutlookInteropRunner.Execute(
             operationName,
@@ -808,6 +1210,7 @@ public class MailCommands : IMailCommands
                 Outlook.Explorer? explorer = null;
                 Outlook.MAPIFolder? resolvedFolder = null;
                 object? items = null;
+                object? restrictedItems = null;
 
                 try
                 {
@@ -826,6 +1229,30 @@ public class MailCommands : IMailCommands
                     int totalItemCount = SafeGetInt(() => ((dynamic)items).Count);
                     TrySortItemsByReceivedTime(items);
 
+                    // Push the unreadOnly predicate down to Outlook via Items.Restrict (DASL)
+                    // instead of hydrating every item and checking UnRead client-side -- this is
+                    // both faster (Restrict returns a pre-filtered rowset) and correct (an unread
+                    // message far back in a large folder is still found, since Restrict does not
+                    // stop at any client-side scan cap). See #27.
+                    object itemsToScan = items;
+                    int scanCount = totalItemCount;
+                    if (unreadOnly)
+                    {
+                        try
+                        {
+                            restrictedItems = ((dynamic)items).Restrict("[Unread] = true");
+                            itemsToScan = restrictedItems;
+                            scanCount = SafeGetInt(() => ((dynamic)restrictedItems).Count);
+                        }
+                        catch (COMException)
+                        {
+                            // Fall back to the unfiltered folder + client-side UnRead check below
+                            // if Restrict is unavailable for this folder/store type.
+                            itemsToScan = items;
+                            scanCount = totalItemCount;
+                        }
+                    }
+
                     var result = new MailListResult
                     {
                         Success = true,
@@ -835,8 +1262,9 @@ public class MailCommands : IMailCommands
                         TotalItemCount = totalItemCount
                     };
 
-                    for (int index = 1, scanned = 0;
-                         index <= totalItemCount && scanned < scanLimit && result.Messages.Count < boundedMaxCount;
+                    int scanned = 0;
+                    for (int index = 1;
+                         index <= scanCount && scanned < ScanSafetyLimit && result.Messages.Count < boundedMaxCount;
                          index++)
                     {
                         object? rawItem = null;
@@ -844,7 +1272,7 @@ public class MailCommands : IMailCommands
 
                         try
                         {
-                            rawItem = ((dynamic)items)[index];
+                            rawItem = ((dynamic)itemsToScan)[index];
                             scanned++;
                             mail = rawItem as Outlook.MailItem;
                             if (mail == null)
@@ -852,7 +1280,9 @@ public class MailCommands : IMailCommands
                                 continue;
                             }
 
-                            if (unreadOnly && !SafeGetBool(() => mail.UnRead))
+                            // Restrict already filtered on Unread above; this client-side check
+                            // only matters for the fallback path where Restrict was unavailable.
+                            if (unreadOnly && restrictedItems == null && !SafeGetBool(() => mail.UnRead))
                             {
                                 continue;
                             }
@@ -872,10 +1302,16 @@ public class MailCommands : IMailCommands
                     }
 
                     result.ReturnedCount = result.Messages.Count;
+                    result.ScannedCount = scanned;
+                    // Truncated: there was more to look at than we actually evaluated, whether
+                    // because the result cap (maxCount) was hit first or the safety limit was --
+                    // either way, "no more results" must not be inferred from this response alone.
+                    result.Truncated = scanned < scanCount;
                     return result;
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref restrictedItems);
                     OutlookInteropRunner.ReleaseComObject(ref items);
                     OutlookInteropRunner.ReleaseComObject(ref resolvedFolder);
                     OutlookInteropRunner.ReleaseComObject(ref explorer);
@@ -889,9 +1325,16 @@ public class MailCommands : IMailCommands
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static MailDraftResult ExecuteDraftFromActiveMail(
+    private static MailDraftResult ExecuteDraftFromMail(
         string operationName,
         string successMessage,
+        string? entryId,
+        string? storeId,
+        bool useActiveMail,
+        string? recipientTo,
+        string? cc,
+        string? bcc,
+        string? body,
         bool display,
         Func<Outlook.MailItem, Outlook.MailItem> createDraft)
     {
@@ -906,29 +1349,22 @@ public class MailCommands : IMailCommands
                 Outlook.Selection? selection = null;
                 object? currentItem = null;
                 object? selectedItem = null;
+                object? resolvedItem = null;
 
                 try
                 {
-                    inspector = application.ActiveInspector();
-                    if (inspector != null)
-                    {
-                        currentItem = inspector.CurrentItem;
-                        sourceMail = currentItem as Outlook.MailItem;
-                    }
-
-                    if (sourceMail == null)
-                    {
-                        explorer = application.ActiveExplorer();
-                        if (explorer != null)
-                        {
-                            selection = explorer.Selection;
-                            if (selection != null && selection.Count > 0)
-                            {
-                                selectedItem = selection[1];
-                                sourceMail = selectedItem as Outlook.MailItem;
-                            }
-                        }
-                    }
+                    sourceMail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
 
                     if (sourceMail == null)
                     {
@@ -937,11 +1373,41 @@ public class MailCommands : IMailCommands
                             Success = false,
                             Saved = false,
                             Displayed = false,
-                            ErrorMessage = "No active Outlook mail item is currently selected or open."
+                            ErrorMessage = string.IsNullOrWhiteSpace(entryId)
+                                // Headless targeting: no active Outlook window/selection is
+                                // required when entryId is supplied. See #36.
+                                ? "No active Outlook mail item is currently selected or open. " +
+                                  "Pass entryId (e.g. from mail.search/mail.list) to target a specific message headlessly."
+                                : "The requested Outlook mail item could not be resolved."
                         };
                     }
 
                     draftMail = createDraft(sourceMail);
+
+                    if (!string.IsNullOrEmpty(recipientTo))
+                    {
+                        draftMail.To = recipientTo;
+                    }
+
+                    if (!string.IsNullOrEmpty(cc))
+                    {
+                        draftMail.CC = cc;
+                    }
+
+                    if (!string.IsNullOrEmpty(bcc))
+                    {
+                        draftMail.BCC = bcc;
+                    }
+
+                    if (body != null)
+                    {
+                        // Reply()/ReplyAll()/Forward() pre-populate Body with the quoted original
+                        // message; prepending the caller's text keeps that quoted context instead
+                        // of destroying it, matching how a person would type above a quoted reply.
+                        string existingBody = SafeGet(() => draftMail.Body) ?? string.Empty;
+                        draftMail.Body = body + Environment.NewLine + Environment.NewLine + existingBody;
+                    }
+
                     draftMail.Save();
 
                     if (display)
@@ -967,12 +1433,13 @@ public class MailCommands : IMailCommands
                 finally
                 {
                     OutlookInteropRunner.ReleaseComObject(ref draftMail);
-                    OutlookInteropRunner.ReleaseComObject(ref sourceMail);
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
                     OutlookInteropRunner.ReleaseComObject(ref selectedItem);
                     OutlookInteropRunner.ReleaseComObject(ref currentItem);
                     OutlookInteropRunner.ReleaseComObject(ref selection);
                     OutlookInteropRunner.ReleaseComObject(ref explorer);
                     OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref sourceMail);
                 }
             },
             ex => new MailDraftResult
@@ -980,9 +1447,10 @@ public class MailCommands : IMailCommands
                 Success = false,
                 Saved = false,
                 Displayed = false,
-                ErrorMessage = $"Failed to create a draft from the active Outlook mail item: {ex.Message}"
+                ErrorMessage = $"Failed to create a draft from the Outlook mail item: {ex.Message}"
             });
     }
+
 
     private static Outlook.MAPIFolder? ResolveFolder(
         Outlook.Application application,
@@ -1058,15 +1526,17 @@ public class MailCommands : IMailCommands
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static MailSummaryInfo CreateMailSummary(Outlook.MailItem mail, bool includeBodyPreview)
     {
-        return new MailSummaryInfo
+        var accessDenied = new List<string>();
+
+        var summary = new MailSummaryInfo
         {
             EntryId = SafeGet(() => mail.EntryID),
             StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
             Subject = SafeGet(() => mail.Subject),
             SenderName = SafeGet(() => mail.SenderName),
-            SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress),
-            To = SafeGet(() => mail.To),
-            Cc = SafeGet(() => mail.CC),
+            SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress, nameof(MailSummaryInfo.SenderEmailAddress), accessDenied),
+            To = SafeGet(() => mail.To, nameof(MailSummaryInfo.To), accessDenied),
+            Cc = SafeGet(() => mail.CC, nameof(MailSummaryInfo.Cc), accessDenied),
             BodyPreview = includeBodyPreview
                 ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body))
                 : null,
@@ -1078,5 +1548,8 @@ public class MailCommands : IMailCommands
             ReceivedTime = SafeGetDateTimeOffset(() => mail.ReceivedTime),
             SentOn = SafeGetDateTimeOffset(() => mail.SentOn)
         };
+
+        summary.AccessDenied = accessDenied.Count > 0 ? accessDenied : null;
+        return summary;
     }
 }

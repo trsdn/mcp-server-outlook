@@ -252,6 +252,15 @@ public class OutlookApplicationStatusResult : ResultBase
     public int InspectorCount { get; set; }
     public int StoreCount { get; set; }
 
+    /// <summary>
+    /// The classic-vs-new Outlook flavour detected on this machine. Only "classic-desktop" is
+    /// supported by this server, since new Outlook for Windows has no COM object model. See #35.
+    /// </summary>
+    public string OutlookFlavor { get; set; } = string.Empty;
+
+    /// <summary>True if this process is running elevated (as Administrator).</summary>
+    public bool ProcessElevated { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CurrentFolderName { get; set; }
 
@@ -264,6 +273,31 @@ public class OutlookApplicationStatusResult : ResultBase
 public class OutlookFolderListResult : ResultBase
 {
     public List<OutlookFolderInfo> Folders { get; set; } = [];
+}
+
+public class OutlookFolderResolveResult : ResultBase
+{
+    public bool Resolved { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RequestedFolder { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DefaultRole { get; set; }
+
+    public int ChildFolderCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ItemCount { get; set; }
 }
 
 public class OutlookFolderInfo
@@ -279,6 +313,54 @@ public class OutlookFolderInfo
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ItemCount { get; set; }
+}
+
+public class OutlookFolderItemListResult : ResultBase
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderName { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
+
+    public int TotalItemCount { get; set; }
+    public int ReturnedCount { get; set; }
+    public List<OutlookFolderItemInfo> Items { get; set; } = [];
+}
+
+public class OutlookFolderItemInfo
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ItemType { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MessageClass { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Preview { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? ReceivedTime { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? Start { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? End { get; set; }
+
+    public bool Unread { get; set; }
 }
 
 public class ActiveMailResult : ResultBase
@@ -316,6 +398,13 @@ public class ActiveMailResult : ResultBase
     public string? BodyPreview { get; set; }
 
     public List<string> Categories { get; set; } = [];
+
+    /// <summary>
+    /// Names of properties whose read was blocked by the Outlook Object Model Guard rather than
+    /// the property simply being absent. See <see cref="MailSummaryInfo.AccessDenied"/>. #30.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? AccessDenied { get; set; }
 
     public bool Unread { get; set; }
     public int Importance { get; set; }
@@ -369,6 +458,23 @@ public class MailListResult : ResultBase
 
     public int TotalItemCount { get; set; }
     public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Number of folder items actually scanned/matched against by this call (i.e. items
+    /// Outlook's index/filter evaluated, not the client-side substring fallback's old fixed cap).
+    /// </summary>
+    public int ScannedCount { get; set; }
+
+    /// <summary>
+    /// True when this call did not exhaustively scan/match every item in
+    /// <see cref="TotalItemCount"/> -- either because the result-count cap (<c>maxCount</c>) was
+    /// reached, or (for <c>mail.search</c>'s client-side body-substring fallback path only) a
+    /// bounded scan limit was hit before exhausting the folder. A client MUST NOT read an empty
+    /// or short <see cref="Messages"/> list as "no such mail exists" when this is true -- there
+    /// may be more matches beyond what was scanned/returned. See #27.
+    /// </summary>
+    public bool Truncated { get; set; }
+
     public List<MailSummaryInfo> Messages { get; set; } = [];
 }
 
@@ -400,6 +506,17 @@ public class MailSummaryInfo
 
     public List<string> Categories { get; set; } = [];
 
+    /// <summary>
+    /// Names of properties whose read was blocked by the Outlook Object Model Guard (a security
+    /// prompt was shown and not approved, or Outlook aborted the call outright) rather than the
+    /// property simply being absent. A client seeing e.g. <c>senderEmailAddress: null</c> plus
+    /// <c>"senderEmailAddress"</c> in this list should not treat that as "no sender" -- it means
+    /// access was denied. Empty when no property read was blocked. See #30 (Rule 22: security
+    /// denials must never be silently indistinguishable from "value not present").
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? AccessDenied { get; set; }
+
     public bool Unread { get; set; }
     public bool IsDraft { get; set; }
     public int Importance { get; set; }
@@ -415,6 +532,17 @@ public class MailSummaryInfo
 public class MailSendResult : ResultBase
 {
     public bool Sent { get; set; }
+
+    /// <summary>
+    /// True when the outcome of this send request could not be determined (e.g. the underlying
+    /// operation timed out while a security prompt was on screen). An indeterminate outcome is
+    /// deliberately NOT the same as <c>Success = false</c>: the mail may have actually sent. A
+    /// client seeing <c>indeterminate: true</c> must not blindly retry -- retrying an
+    /// already-sent message would duplicate it. Re-check via <c>mail.read</c> using
+    /// <see cref="EntryId"/>/<see cref="StoreId"/> (if known) before deciding whether to resend.
+    /// See #29.
+    /// </summary>
+    public bool Indeterminate { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; set; }
@@ -448,6 +576,15 @@ public class MailMutationResult : ResultBase
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Subject { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? To { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Cc { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Bcc { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FolderName { get; set; }

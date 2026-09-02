@@ -5,14 +5,14 @@ namespace OutlookMcp.Core.Commands.Calendar;
 
 [ServiceCategory("calendar")]
 [NoSession]
-[McpTool("calendar", Title = "Outlook Calendar Operations", Destructive = false, Category = "calendar",
-    Description = "Inspect Outlook calendar items and create safe appointments without opening a persistent session. "
+[McpTool("calendar", Title = "Outlook Calendar Operations", Destructive = true, Category = "calendar",
+    Description = "Inspect Outlook calendar items and manage appointments without opening a persistent session. "
     + "Use list to inspect the default Calendar folder or a specific Outlook folder path. "
     + "Use read to inspect an explicit appointment by entry id/store id or fall back to the active appointment inspector. "
-    + "Use create-appointment, update-appointment, and delete-appointment to manage Outlook calendar items safely.")]
+    + "Use create-appointment, update-appointment, and delete-appointment to create, modify, and permanently delete Outlook calendar items — delete-appointment and update-appointment are destructive and cannot be undone.")]
 public interface ICalendarCommands
 {
-    [ServiceAction("list")]
+    [ServiceAction("list", Destructive = false)]
     CalendarListResult List(
         string? folder = null,
         string? start = null,
@@ -20,13 +20,13 @@ public interface ICalendarCommands
         int maxCount = 25,
         bool includeBodyPreview = false);
 
-    [ServiceAction("read")]
+    [ServiceAction("read", Destructive = false)]
     CalendarItemResult Read(
         string? entryId = null,
         string? storeId = null,
         bool useActiveAppointment = true);
 
-    [ServiceAction("create-appointment")]
+    [ServiceAction("create-appointment", Destructive = true)]
     CalendarAppointmentResult CreateAppointment(
         string subject,
         string start,
@@ -36,7 +36,7 @@ public interface ICalendarCommands
         bool allDay = false,
         bool display = false);
 
-    [ServiceAction("update-appointment")]
+    [ServiceAction("update-appointment", Destructive = true)]
     CalendarMutationResult UpdateAppointment(
         string? entryId = null,
         string? storeId = null,
@@ -48,7 +48,7 @@ public interface ICalendarCommands
         bool? allDay = null,
         bool useActiveAppointment = false);
 
-    [ServiceAction("delete-appointment")]
+    [ServiceAction("delete-appointment", Destructive = true)]
     CalendarMutationResult DeleteAppointment(
         string? entryId = null,
         string? storeId = null,

@@ -8,7 +8,6 @@ public sealed class ServiceInfo
     public string Category { get; }
     public string CategoryPascal { get; }
     public string McpToolName { get; }
-    public bool NoSession { get; }
     public string? XmlDocSummary { get; }
     public List<MethodInfo> Methods { get; }
 
@@ -27,14 +26,13 @@ public sealed class ServiceInfo
     /// <summary>Whether the interface has an explicit [McpTool] attribute. Used by MCP generator to skip hand-written tools.</summary>
     public bool HasMcpToolAttribute { get; }
 
-    public ServiceInfo(string category, string categoryPascal, string mcpToolName, bool noSession, List<MethodInfo> methods,
+    public ServiceInfo(string category, string categoryPascal, string mcpToolName, List<MethodInfo> methods,
         string? xmlDocSummary = null, string? mcpToolTitle = null, bool mcpToolDestructive = true, string? mcpToolCategory = null,
         string? mcpToolDescription = null, bool hasMcpToolAttribute = true)
     {
         Category = category;
         CategoryPascal = categoryPascal;
         McpToolName = mcpToolName;
-        NoSession = noSession;
         XmlDocSummary = xmlDocSummary;
         Methods = methods;
         McpToolTitle = mcpToolTitle;
@@ -56,8 +54,6 @@ public sealed class MethodInfo
     public string McpTool { get; }
     public List<ParameterInfo> Parameters { get; }
     public string? XmlDocSummary { get; }
-    /// <summary>Whether the original interface method has an IPptBatch parameter.</summary>
-    public bool HasBatchParameter { get; }
 
     /// <summary>Whether the original interface method has an IProgress&lt;T&gt; parameter.</summary>
     public bool HasProgressParameter { get; }
@@ -70,7 +66,7 @@ public sealed class MethodInfo
     public bool IsDestructive { get; }
 
     public MethodInfo(string methodName, string actionName, string returnType, string mcpTool,
-        List<ParameterInfo> parameters, string? xmlDocSummary = null, bool hasBatchParameter = true,
+        List<ParameterInfo> parameters, string? xmlDocSummary = null,
         bool hasProgressParameter = false, bool isDestructive = true)
     {
         MethodName = methodName;
@@ -79,7 +75,6 @@ public sealed class MethodInfo
         McpTool = mcpTool;
         Parameters = parameters;
         XmlDocSummary = xmlDocSummary;
-        HasBatchParameter = hasBatchParameter;
         HasProgressParameter = hasProgressParameter;
         IsDestructive = isDestructive;
     }

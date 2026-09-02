@@ -69,7 +69,7 @@ Quick reference:
 - `dependency-review.yml` - Dependency security scanning
 
 **Manual/on-demand gates:**
-- `scripts\Test-LlmRegressionGate.ps1` - LLM regression gate. Currently non-functional: it names PowerPoint scenarios deleted by #26. See #68.
+
 - `integration-tests.yml` `workflow_dispatch` inputs can opt into `RunType=OnDemand` and the LLM gate when the Outlook runner is available
 
 **Note:** The workflow file is active, but the `outlook-integration` job intentionally no-ops unless `ENABLE_OUTLOOK_INTEGRATION_CI=true`, reporting `integration-runner-disabled` instead. See `docs/AZURE_SELFHOSTED_RUNNER_SETUP.md`.

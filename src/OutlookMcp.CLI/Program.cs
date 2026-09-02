@@ -104,22 +104,6 @@ internal sealed class Program
                     .WithDescription("Report the detected Outlook flavour (classic desktop vs. new Outlook) and process integrity level.");
             });
 
-            // Session commands
-            config.AddBranch("session", branch =>
-            {
-                branch.SetDescription("Dormant document-session layer. NOT used by any Outlook command; retained as reference infrastructure (see issue #12).");
-                branch.AddCommand<SessionCreateCommand>("create")
-                    .WithDescription("Create a new .pptx document, open it, and create a session. Not an Outlook operation.");
-                branch.AddCommand<SessionOpenCommand>("open")
-                    .WithDescription("Open an existing .pptx document and create a session. Not an Outlook operation.");
-                branch.AddCommand<SessionCloseCommand>("close")
-                    .WithDescription("Close a session. Use --save to persist changes.");
-                branch.AddCommand<SessionListCommand>("list")
-                    .WithDescription("List active sessions.");
-                branch.AddCommand<SessionSaveCommand>("save")
-                    .WithDescription("Save a session without closing it.");
-            });
-
             // Sheet commands
             // =============================================
             // All service commands are auto-generated from
@@ -213,7 +197,7 @@ internal sealed class Program
         // (Console.IsOutputRedirected is false in VS Code integrated terminal
         // even when capturing with $result = outlookcli ...).
         var err = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
-        err.Write(new FigletText("PPT CLI").Color(Spectre.Console.Color.Blue));
+        err.Write(new FigletText("Outlook CLI").Color(Spectre.Console.Color.Blue));
         err.MarkupLine("[dim]Outlook migration CLI powered by the shared MCP service stack[/]");
         err.MarkupLine("[yellow]Legacy workflow:[/] [green]session open <file>[/] → run commands with [green]--session <id>[/] → [green]session close --save[/].");
         err.MarkupLine("[dim]Outlook-first commands such as application, folder, mail, and attachment run without the legacy presentation session path.[/]");
@@ -309,7 +293,7 @@ internal sealed class Program
         }, TaskScheduler.Default);
 
         // Run WinForms message loop with tray icon on main thread
-        using var tray = new CliServiceTray(service.SessionManager, () =>
+        using var tray = new CliServiceTray(() =>
         {
             service.RequestShutdown();
             Application.ExitThread();
@@ -329,4 +313,3 @@ internal sealed class Program
         return 0;
     }
 }
-

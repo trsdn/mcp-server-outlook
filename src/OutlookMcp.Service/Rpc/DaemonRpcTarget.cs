@@ -4,7 +4,7 @@ namespace OutlookMcp.Service.Rpc;
 /// Server-side RPC target that delegates incoming JSON-RPC calls to <see cref="OutlookMcpService.ProcessAsync"/>.
 /// One instance is attached per pipe connection via <c>JsonRpc.Attach(stream, target)</c>.
 /// </summary>
-internal sealed class DaemonRpcTarget : IPptDaemonRpc
+internal sealed class DaemonRpcTarget : IOutlookDaemonRpc
 {
     private readonly OutlookMcpService _service;
 

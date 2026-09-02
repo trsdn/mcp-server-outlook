@@ -27,7 +27,6 @@ Relates to #[issue number]
 - [ ] Tested error conditions (Outlook not running, new-Outlook-only, stale entry ID, invalid arguments)
 - [ ] Verified COM objects are released: `scripts\check-com-leaks.ps1` reports 0 leaks
 - [ ] Manually exercised the change against a real Outlook profile, and said which actions below
-- [ ] If LLM-facing help/docs changed, ran `scripts\Test-LlmRegressionGate.ps1` or explained why not
 
 **Manual verification performed (be specific):**
 ```powershell

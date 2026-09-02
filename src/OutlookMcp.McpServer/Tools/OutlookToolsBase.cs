@@ -7,13 +7,13 @@ using System.Text.Json.Serialization;
 namespace OutlookMcp.McpServer.Tools;
 
 /// <summary>
-/// Base class for PowerPoint MCP tools providing common patterns and utilities.
-/// All PowerPoint tools inherit from this to ensure consistency for LLM usage.
+/// Base class for Outlook MCP tools providing common patterns and utilities.
+/// All Outlook tools inherit from this to ensure consistency for LLM usage.
 ///
 /// The MCP Server forwards ALL requests to the in-process OutlookMcp Service.
 /// </summary>
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)]
-public static class PptToolsBase
+public static class OutlookToolsBase
 {
     /// <summary>
     /// Ensures the OutlookMcp Service is running.
@@ -47,55 +47,25 @@ public static class PptToolsBase
     /// Delegate wrapper for ForwardToService matching the generated code signature.
     /// Used by generated RouteAction methods.
     /// </summary>
-    public static readonly Func<string, string, object?, string> ForwardToServiceFunc =
-        (command, sessionId, args) => ForwardToService(command, sessionId, args);
+    public static readonly Func<string, object?, string> ForwardToServiceFunc =
+        (command, args) => ForwardToService(command, args);
 
     /// <summary>
     /// Forwards a command to the OutlookMcp Service and returns the JSON response.
     /// This is the primary method for MCP tools to execute commands.
     ///
-    /// The command format is "category.action", e.g., "sheet.list", "range.get-values".
-    /// The service handles session management and Core command execution.
+    /// The command format is "category.action", e.g., "folder.list-default", "mail.search".
     /// </summary>
     /// <param name="command">Service command in format "category.action"</param>
-    /// <param name="sessionId">Session ID for the operation</param>
     /// <param name="args">Optional arguments object to serialize</param>
     /// <param name="timeoutSeconds">Optional timeout override</param>
     /// <returns>JSON response from service</returns>
     public static string ForwardToService(
         string command,
-        string? sessionId,
         object? args = null,
         int? timeoutSeconds = null)
     {
-        var response = ServiceBridge.ServiceBridge.SendAsync(command, sessionId, args, timeoutSeconds).GetAwaiter().GetResult();
-
-        if (!response.Success)
-        {
-            return JsonSerializer.Serialize(new
-            {
-                success = false,
-                errorMessage = response.ErrorMessage ?? $"Command '{command}' failed",
-                isError = true
-            }, JsonOptions);
-        }
-
-        return response.Result ?? JsonSerializer.Serialize(new
-        {
-            success = true
-        }, JsonOptions);
-    }
-
-    /// <summary>
-    /// Forwards a command to the OutlookMcp Service without a session.
-    /// Used for commands that don't require an active session (e.g., service.status).
-    /// </summary>
-    public static string ForwardToServiceNoSession(
-        string command,
-        object? args = null,
-        int? timeoutSeconds = null)
-    {
-        var response = ServiceBridge.ServiceBridge.SendAsync(command, null, args, timeoutSeconds).GetAwaiter().GetResult();
+        var response = ServiceBridge.ServiceBridge.SendAsync(command, args, timeoutSeconds).GetAwaiter().GetResult();
 
         if (!response.Success)
         {
@@ -133,7 +103,7 @@ public static class PptToolsBase
     /// </summary>
     /// <param name="toolName">Tool name (e.g., "range").</param>
     /// <param name="actionName">Action string (kebab-case) included in error context.</param>
-    /// <param name="path">Optional PowerPoint path for context in error messages.</param>
+    /// <param name="path">Optional file path for context in error messages.</param>
     /// <param name="operation">Synchronous operation to execute.</param>
     /// <param name="customHandler">Optional handler that can override default error serialization. Return null/empty to fall back to default.</param>
     /// <returns>Serialized JSON response.</returns>
@@ -191,14 +161,14 @@ public static class PptToolsBase
         }
 
         // Use .NET's built-in check for fully qualified Windows paths
-        // Returns false for Unix paths like /home/user/file.pptx, relative paths like ./file.pptx
+        // Returns false for Unix paths like /home/user/file.msg, relative paths like ./file.msg
         if (!Path.IsPathFullyQualified(path))
         {
             // Extract filename from the invalid path (works for both Unix and Windows separators)
             var fileName = Path.GetFileName(path.Replace('/', Path.DirectorySeparatorChar));
             if (string.IsNullOrEmpty(fileName))
             {
-                fileName = "presentation.pptx";
+                fileName = "attachment.dat";
             }
 
             // Get user's actual Documents folder to provide a valid suggestion
@@ -229,7 +199,7 @@ public static class PptToolsBase
     /// Includes detailed COM exception info for diagnostics.
     /// </summary>
     /// <param name="actionName">Action string (kebab-case) included in message.</param>
-    /// <param name="path">Optional PowerPoint path context.</param>
+    /// <param name="path">Optional file path context.</param>
     /// <param name="ex">Exception to serialize.</param>
     /// <returns>Serialized JSON error payload.</returns>
     public static string SerializeToolError(string actionName, string? path, Exception ex)

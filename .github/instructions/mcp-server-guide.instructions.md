@@ -51,7 +51,7 @@ private static string ForwardSomeAction(string sessionId, string? param)
         throw new ModelContextProtocol.McpException("param is required for action");
 
     // 2. Forward to in-process OutlookMcpService (direct call, no pipe)
-    return PptToolsBase.ForwardToService("category.action", sessionId, new { param });
+    return OutlookToolsBase.ForwardToService("category.action", new { param });
 }
 ```
 
@@ -71,7 +71,7 @@ private static string ForwardSomeAction(string sessionId, string? param)
 ```csharp
 // Core returns: { Success = false, ErrorMessage = "Folder 'Archive' not found" }
 // MCP Tool: Return this as-is
-return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
+return JsonSerializer.Serialize(result, OutlookToolsBase.JsonOptions);
 // Client receives via MCP protocol:
 // {
 //   "jsonrpc": "2.0",
@@ -138,11 +138,11 @@ public static async Task<string> Mail(MailAction action, ...)
                 ? "Maximum timeout reached. Check connectivity manually."
                 : "Retry acceptable if issue is transient."
         };
-        return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
+        return JsonSerializer.Serialize(result, OutlookToolsBase.JsonOptions);
     }
     catch (Exception ex)
     {
-        PptToolsBase.ThrowInternalError(ex, action.ToActionString());
+        OutlookToolsBase.ThrowInternalError(ex, action.ToActionString());
         throw; // Unreachable but satisfies compiler
     }
 }
@@ -169,14 +169,14 @@ public static async Task<string> Mail(string action, ...)
 // Action methods forward to in-process OutlookMcpService:
 private static string ForwardList(string sessionId)
 {
-    return PptToolsBase.ForwardToService("mail.list", sessionId);
+    return OutlookToolsBase.ForwardToService("mail.list");
 }
 
 private static string ForwardRead(string sessionId, string entryId)
 {
     if (string.IsNullOrEmpty(entryId))
-        PptToolsBase.ThrowMissingParameter("entryId", "read");
-    return PptToolsBase.ForwardToService("mail.read", sessionId, new { entryId });
+        OutlookToolsBase.ThrowMissingParameter("entryId", "read");
+    return OutlookToolsBase.ForwardToService("mail.read", new { entryId });
 }
 ```
 

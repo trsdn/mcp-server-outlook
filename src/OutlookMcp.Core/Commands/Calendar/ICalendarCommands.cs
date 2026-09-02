@@ -4,7 +4,6 @@ using OutlookMcp.Core.Models;
 namespace OutlookMcp.Core.Commands.Calendar;
 
 [ServiceCategory("calendar")]
-[NoSession]
 [McpTool("calendar", Title = "Outlook Calendar Operations", Destructive = true, Category = "calendar",
     Description = "Inspect Outlook calendar items and manage appointments without opening a persistent session. "
     + "Use list to inspect the default Calendar folder or a specific Outlook folder path. "

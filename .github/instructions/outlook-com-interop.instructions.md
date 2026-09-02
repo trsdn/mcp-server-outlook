@@ -186,12 +186,7 @@ description warns the caller.
 
 ---
 
-## Retained but dormant: `ComInterop/Session/*`
-
-`PptSession`, `PptBatch`, `PptContext` and `IPptBatch` still exist under
-`src/OutlookMcp.ComInterop/Session/`. **No Outlook code path calls them.** They are a
-product-neutral document-session layer retained deliberately; ADR-002 records the decision and
-`src/OutlookMcp.ComInterop/README.md` explains why they keep their current names.
+## No session or batch API
 
 Do not introduce a batch API into an Outlook command. Outlook has no document to open, save
 or close - there is one long-lived running application, which is exactly why the dispatcher

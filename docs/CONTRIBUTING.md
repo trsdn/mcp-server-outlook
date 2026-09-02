@@ -108,9 +108,9 @@ Key rules:
 5. Re-resolve entry IDs after moves between stores.
 6. Respect Outlook Object Model Guard prompts. Do not bypass them.
 
-#### Dormant Legacy Session Layer
+#### No Session or Batch API
 
-`src\OutlookMcp.ComInterop\Session\` still contains retained `Ppt*` infrastructure. It is dormant for the active Outlook command surface. Do not remove or rename it as part of ordinary Outlook feature work unless the naming-debt issue explicitly calls for that.
+Outlook has no document to open, save, or close. Every COM call is marshalled onto the single STA thread owned by `OutlookDispatcher`. Do not introduce a session or batch abstraction into an Outlook command.
 
 ### Testing
 

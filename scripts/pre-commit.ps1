@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Runs checks before allowing commits:
-    0. Process cleanup - kills stale PowerPoint, outlookcli, and MCP server processes to prevent file locks
+    0. Process cleanup - kills stale outlookcli and MCP server processes to prevent file locks
     1. COM leak checker - ensures no Outlook COM objects are leaked
     2. Coverage check - ensures Core Commands are exposed via MCP Server (CoreCommandsCoverageTests)
     3. CLI Settings usage check - ensures every CLI Settings property is actually passed to the daemon
@@ -50,11 +50,11 @@ if ($currentBranch -eq "master") {
 Write-Host "Branch check passed - on '$currentBranch' (not master)" -ForegroundColor Green
 Write-Host ""
 
-# Kill stale PowerPoint and MCP server processes to avoid file locks on Release binaries
-Write-Host "Killing stale PowerPoint and server processes..." -ForegroundColor Cyan
+# Kill stale CLI and MCP server processes to avoid file locks on Release binaries
+Write-Host "Killing stale CLI and server processes..." -ForegroundColor Cyan
 
 $killedProcesses = @()
-foreach ($procName in @("POWERPNT", "outlookcli", "OutlookMcp.McpServer", "OutlookMcp.Service")) {
+foreach ($procName in @("outlookcli", "OutlookMcp.McpServer", "OutlookMcp.Service")) {
     $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
     if ($procs) {
         $procs | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -286,7 +286,6 @@ try {
 catch {
     Write-Host ""
     Write-Host "Error running smoke test: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "   Ensure PowerPoint is installed and accessible." -ForegroundColor Yellow
     exit 1
 }
 

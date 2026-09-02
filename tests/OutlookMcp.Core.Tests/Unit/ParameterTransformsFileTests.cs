@@ -11,7 +11,7 @@ namespace OutlookMcp.Core.Tests.Unit;
 [Trait("Category", "Unit")]
 [Trait("Feature", "ParameterTransforms")]
 [Trait("Speed", "Fast")]
-[Trait("RequiresPowerPoint", "false")]
+[Trait("RequiresOutlook", "false")]
 public sealed class ParameterTransformsFileTests : IDisposable
 {
     private readonly string _tempDir;
@@ -235,7 +235,7 @@ public sealed class ParameterTransformsFileTests : IDisposable
         Assert.Contains("rowsFile", ex.Message);
     }
 
-    // ResolveFormulasOrFile tests removed — Excel-specific formulas not applicable to PowerPoint
+    // ResolveFormulasOrFile tests removed - Excel-specific formulas not applicable to Outlook
 
     // === ParseCsvToRows ===
 

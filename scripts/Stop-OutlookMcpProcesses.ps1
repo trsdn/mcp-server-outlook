@@ -1,12 +1,11 @@
 <#
 .SYNOPSIS
-    Stops the OutlookMcp Service gracefully and kills PowerPoint processes before build.
+    Stops the OutlookMcp Service gracefully before build.
 .DESCRIPTION
     Pre-build cleanup script that:
     1. Gracefully stops the OutlookMcp Service via named pipe (service.shutdown)
-    2. Kills any remaining PowerPoint (POWERPNT.EXE) processes
 
-    This prevents file locking issues during build when the service or PowerPoint
+    This prevents file locking issues during build when the service
     holds handles to assemblies or presentations.
 .NOTES
     Called from Directory.Build.props as a BeforeBuild target.
@@ -105,23 +104,6 @@ function Stop-OutlookMcpServiceFallback {
 }
 
 # ----------------------------------------------
-# 2. Kill PowerPoint processes
-# ----------------------------------------------
-function Stop-PowerPointProcesses {
-    $pptProcs = Get-Process -Name 'POWERPNT' -ErrorAction SilentlyContinue
-    if ($pptProcs) {
-        $count = $pptProcs.Count
-        $pptProcs | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 500
-        Write-Host "  Killed $count PowerPoint process(es)" -ForegroundColor Yellow
-    }
-    else {
-        Write-Status "No PowerPoint processes running"
-    }
-}
-
-# ----------------------------------------------
 # Run cleanup
 # ----------------------------------------------
 Stop-OutlookMcpService
-Stop-PowerPointProcesses

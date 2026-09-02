@@ -1,6 +1,5 @@
 using System.IO.Pipes;
 using System.Text.Json;
-using OutlookMcp.ComInterop.Session;
 using OutlookMcp.Core.Commands.Attachment;
 using OutlookMcp.Core.Commands.Application;
 using OutlookMcp.Core.Commands.Calendar;
@@ -20,7 +19,6 @@ namespace OutlookMcp.Service;
 /// </summary>
 public sealed class OutlookMcpService : IDisposable
 {
-    private readonly SessionManager _sessionManager = new();
     private readonly CancellationTokenSource _shutdownCts = new();
     private readonly DateTime _startTime = DateTime.UtcNow;
     private string _pipeName = "";
@@ -40,8 +38,6 @@ public sealed class OutlookMcpService : IDisposable
     }
 
     public DateTime StartTime => _startTime;
-    public int SessionCount => _sessionManager.GetActiveSessions().Count;
-    public SessionManager SessionManager => _sessionManager;
 
     /// <summary>
     /// Runs the service in-process, listening for commands on the named pipe.
@@ -147,13 +143,6 @@ public sealed class OutlookMcpService : IDisposable
         {
             await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
 
-            var hasSessions = _sessionManager.GetActiveSessions().Count > 0;
-            if (hasSessions)
-            {
-                _lastActivityTime = DateTime.UtcNow;
-                continue;
-            }
-
             var idleTime = DateTime.UtcNow - _lastActivityTime;
             if (idleTime >= _idleTimeout!.Value)
             {
@@ -191,7 +180,6 @@ public sealed class OutlookMcpService : IDisposable
                 "calendar" => DispatchCalendarSessionless(action, request),
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
-                "session" => HandleSessionCommand(action, request),
                 _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown command category: {category}" }
             });
         }
@@ -227,13 +215,10 @@ public sealed class OutlookMcpService : IDisposable
         {
             Running = true,
             ProcessId = Environment.ProcessId,
-            SessionCount = _sessionManager.GetActiveSessions().Count,
             StartTime = _startTime
         };
         return new ServiceResponse { Success = true, Result = JsonSerializer.Serialize(status, ServiceProtocol.JsonOptions) };
     }
-
-    // === LEGACY POWERPOINT SESSION COMMANDS ===
 
     // === DIAG COMMANDS ===
 
@@ -320,160 +305,6 @@ public sealed class OutlookMcpService : IDisposable
         };
     }
 
-    // === SESSION COMMANDS ===
-
-    private ServiceResponse HandleSessionCommand(string action, ServiceRequest request)
-    {
-        return action switch
-        {
-            "create" => HandleSessionCreate(request),
-            "open" => HandleSessionOpen(request),
-            "close" => HandleSessionClose(request),
-            "save" => HandleSessionSave(request),
-            "list" => HandleSessionList(),
-            _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown session action: {action}" }
-        };
-    }
-
-    private ServiceResponse HandleSessionCreate(ServiceRequest request)
-    {
-        var args = ServiceRegistry.DeserializeArgs<SessionOpenArgs>(request.Args);
-        if (string.IsNullOrWhiteSpace(args?.FilePath))
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = "filePath is required" };
-        }
-
-        var fullPath = Path.GetFullPath(args.FilePath);
-
-        if (File.Exists(fullPath))
-        {
-            return new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"File already exists: {fullPath}. Use session open to open an existing legacy presentation."
-            };
-        }
-
-        var extension = Path.GetExtension(fullPath);
-        if (!string.Equals(extension, ".pptx", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(extension, ".pptm", StringComparison.OrdinalIgnoreCase))
-        {
-            return new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Invalid file extension '{extension}'. legacy session create supports .pptx and .pptm only."
-            };
-        }
-
-        try
-        {
-            // Legacy PowerPoint path: use the combined create+open which starts PowerPoint only once
-            TimeSpan? timeout = args.TimeoutSeconds.HasValue
-                ? TimeSpan.FromSeconds(args.TimeoutSeconds.Value)
-                : null;
-            var sessionId = _sessionManager.CreateSessionForNewFile(fullPath, show: args.Show, operationTimeout: timeout, origin: SessionOrigin.CLI);
-
-            return new ServiceResponse
-            {
-                Success = true,
-                Result = JsonSerializer.Serialize(new { success = true, sessionId, filePath = fullPath }, ServiceProtocol.JsonOptions)
-            };
-        }
-        catch (Exception ex)
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = $"{ex.GetType().Name}: {ex.Message}" };
-        }
-    }
-
-    private ServiceResponse HandleSessionOpen(ServiceRequest request)
-    {
-        var args = ServiceRegistry.DeserializeArgs<SessionOpenArgs>(request.Args);
-        if (string.IsNullOrWhiteSpace(args?.FilePath))
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = "filePath is required" };
-        }
-
-        try
-        {
-            TimeSpan? timeout = args.TimeoutSeconds.HasValue
-                ? TimeSpan.FromSeconds(args.TimeoutSeconds.Value)
-                : null;
-            var sessionId = _sessionManager.CreateSession(args.FilePath, show: args.Show, operationTimeout: timeout, origin: SessionOrigin.CLI);
-            return new ServiceResponse
-            {
-                Success = true,
-                Result = JsonSerializer.Serialize(new { success = true, sessionId, filePath = args.FilePath }, ServiceProtocol.JsonOptions)
-            };
-        }
-        catch (Exception ex)
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = $"{ex.GetType().Name}: {ex.Message}" };
-        }
-    }
-
-    private ServiceResponse HandleSessionClose(ServiceRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.SessionId))
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = "sessionId is required" };
-        }
-
-        var args = ServiceRegistry.DeserializeArgs<SessionCloseArgs>(request.Args);
-        var closed = _sessionManager.CloseSession(request.SessionId, save: args?.Save ?? false);
-
-        return closed
-            ? new ServiceResponse { Success = true }
-            : new ServiceResponse { Success = false, ErrorMessage = $"Session '{request.SessionId}' not found" };
-    }
-
-    private ServiceResponse HandleSessionSave(ServiceRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.SessionId))
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = "sessionId is required" };
-        }
-
-        var batch = _sessionManager.GetSession(request.SessionId);
-        if (batch == null)
-        {
-            return new ServiceResponse { Success = false, ErrorMessage = $"Session '{request.SessionId}' not found" };
-        }
-
-        // Legacy PowerPoint path: check if the presentation process is still alive before attempting save
-        if (!batch.IsPowerPointProcessAlive())
-        {
-            _sessionManager.CloseSession(request.SessionId, save: false, force: true);
-            return new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = $"Legacy PowerPoint process for session '{request.SessionId}' has died. Session has been closed. Please create a new session."
-            };
-        }
-
-        batch.Save();
-        return new ServiceResponse { Success = true };
-    }
-
-    private ServiceResponse HandleSessionList()
-    {
-        var sessions = _sessionManager.GetActiveSessions()
-            .Select(s => new
-            {
-                sessionId = s.SessionId,
-                filePath = s.FilePath,
-                isPowerPointVisible = _sessionManager.IsPowerPointVisible(s.SessionId),
-                activeOperations = _sessionManager.GetActiveOperationCount(s.SessionId),
-                canClose = _sessionManager.GetActiveOperationCount(s.SessionId) == 0
-            })
-            .ToList();
-
-        return new ServiceResponse
-        {
-            Success = true,
-            Result = JsonSerializer.Serialize(new { success = true, sessions, count = sessions.Count }, ServiceProtocol.JsonOptions)
-        };
-    }
-
 
 
     // === GENERATED DISPATCH ===
@@ -548,18 +379,6 @@ public sealed class OutlookMcpService : IDisposable
         _disposed = true;
 
         _shutdownCts.Cancel();
-        _sessionManager.Dispose();
         _shutdownCts.Dispose();
     }
 }
-
-// === ARGUMENT TYPES (Session only - all other args are now generated in ServiceRegistry) ===
-
-// Session
-public sealed class SessionOpenArgs
-{
-    public string? FilePath { get; set; }
-    public bool Show { get; set; }
-    public int? TimeoutSeconds { get; set; }
-}
-public sealed class SessionCloseArgs { public bool Save { get; set; } }

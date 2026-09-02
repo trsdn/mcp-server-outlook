@@ -81,7 +81,7 @@
     </Task>
   </UsingTask>
 
-  <!-- Inline task: Generate PptSkillPrompts.g.cs from skills/shared/*.md files -->
+  <!-- Inline task: Generate OutlookSkillPrompts.g.cs from skills/shared/*.md files -->
   <UsingTask TaskName="GenerateSkillPromptsClass" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <SkillFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
@@ -132,9 +132,9 @@ sb.AppendLine("/// Auto-generated MCP prompts from skills/shared/*.md files.");
 sb.AppendLine("/// Ensures Claude Desktop and other MCP clients get the same guidance as skill-based clients.");
 sb.AppendLine("/// </summary>");
 sb.AppendLine("[McpServerPromptType]");
-sb.AppendLine("public static class PptSkillPrompts");
+sb.AppendLine("public static class OutlookSkillPrompts");
 sb.AppendLine("{");
-sb.AppendLine("    private static readonly Assembly _assembly = typeof(PptSkillPrompts).Assembly;");
+sb.AppendLine("    private static readonly Assembly _assembly = typeof(OutlookSkillPrompts).Assembly;");
 sb.AppendLine();
 sb.AppendLine("    private static string LoadResource(string fileName)");
 sb.AppendLine("    {");
@@ -214,7 +214,7 @@ System.IO.File.WriteAllText(OutputFile, sb.ToString());
   <Target Name="GenerateSkillPrompts" BeforeTargets="BeforeCompile;CoreCompile">
     <PropertyGroup>
       <SkillsSharedDir>$(MSBuildProjectDirectory)\..\..\skills\shared</SkillsSharedDir>
-      <SkillPromptsGenFile>$(IntermediateOutputPath)PptSkillPrompts.g.cs</SkillPromptsGenFile>
+      <SkillPromptsGenFile>$(IntermediateOutputPath)OutlookSkillPrompts.g.cs</SkillPromptsGenFile>
     </PropertyGroup>
     <!-- skills/shared/ holds only Outlook guidance, so every file here becomes an MCP prompt.
          The slide-design docs that used to require an allow-list were removed with the eval

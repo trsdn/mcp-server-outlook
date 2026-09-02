@@ -7,7 +7,7 @@ namespace OutlookMcp.ComInterop.Tests.Unit;
 /// Tests verify that the message filter can be registered/revoked without errors.
 ///
 /// NOTE: These tests verify the registration mechanism but don't test actual
-/// COM retry behavior (that requires PowerPoint and would be OnDemand tests).
+/// COM retry behavior (that requires Outlook and would be integration tests).
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Speed", "Fast")]

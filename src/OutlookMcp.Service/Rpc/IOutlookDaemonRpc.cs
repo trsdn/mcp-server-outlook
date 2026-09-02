@@ -16,7 +16,7 @@ namespace OutlookMcp.Service.Rpc;
 /// </summary>
 [JsonRpcContract]
 [GenerateShape(IncludeMethods = MethodShapeFlags.PublicInstance)]
-public partial interface IPptDaemonRpc
+public partial interface IOutlookDaemonRpc
 {
     /// <summary>
     /// Sends a command to the daemon for execution.

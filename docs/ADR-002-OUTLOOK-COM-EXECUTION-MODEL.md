@@ -7,12 +7,18 @@
 **Stakeholders**: Development Team, Code Reviewers, Contributors
 **Related**: #40 (this decision), #12 (epic), #20 (implementation), #19, #26, #29
 
-> **Revision 2026-09-03** — This ADR originally stated that `ComInterop/Session/*` should be deleted
-> wholesale once #26 removes the PowerPoint command surface. That directly contradicted #26's own
-> acceptance criteria, which require the layer to be **retained**. The conflict was resolved in
-> favour of #26: the layer is kept as dormant infrastructure. The ADR's central decision is
-> unchanged — Outlook executes via `OutlookDispatcher`, never via `PptSession`/`PptBatch`.
+> **Revision 2026-09-04 (supersedes the 2026-09-03 revision)** — The retention decision has been
+> overruled by the product owner: "hier geht es nur um Outlook". `ComInterop/Session/*` has been
+> **deleted** in full, along with the CLI `session` command branch, the service session RPC
+> handlers, the `[NoSession]` attribute, and the `Microsoft.Office.Interop.PowerPoint` reference.
+> This restores the ADR's original position. The central decision is unchanged — Outlook executes
+> via `OutlookDispatcher` — and the naming debt tracked by #12 is resolved by deletion.
 > See [Fate of `ComInterop/Session/*`](#fate-of-cominteropsession).
+
+> **Revision 2026-09-03 (superseded)** — This ADR originally stated that `ComInterop/Session/*`
+> should be deleted wholesale once #26 removes the PowerPoint command surface. That directly
+> contradicted #26's own acceptance criteria, which required the layer to be **retained**. The
+> conflict was resolved in favour of #26 at the time; that resolution has since been reversed.
 
 ---
 
@@ -101,39 +107,41 @@ Specifically:
 
 ## Fate of `ComInterop/Session/*`
 
-- **Retained as-is for PowerPoint.** `PptBatch`, `PptSession`, `PptContext`, `SessionManager`,
-  and `PptShutdownService` continue to serve the legacy PowerPoint command surface until that
-  surface is removed (epic #11 / issues #23–#26, #34). They are not deleted by this ADR.
-- **Retained beyond #26 as dormant infrastructure.** When the legacy PowerPoint *command* surface
-  is deleted (#26), `ComInterop/Session/*` is nevertheless **kept**, per #26's own acceptance
-  criteria. It is the only mature COM infrastructure in the repository — dedicated STA pump, Polly
-  resilience pipelines, operation tracking, timeout handling, named-pipe daemon — and it is covered
-  by 8 integration test files. Discarding that in exchange for no immediate benefit is not a trade
-  this ADR is willing to force. It becomes dormant (nothing calls it once the PowerPoint commands
-  are gone) pending the re-scoping of #12.
-- **Not renamed or generalized *for Outlook*.** We explicitly reject retrofitting these types into a
-  PowerPoint/Outlook-agnostic abstraction *in order to serve Outlook* — the attempt would either
-  leak PowerPoint-only concepts into Outlook call sites or force Outlook's single-shared-instance
-  model through multi-instance-per-file abstractions, both of which this ADR found unacceptable.
-  Retention is **not** reuse: Outlook executes via `OutlookDispatcher` (decision 1), never via
-  `PptSession`/`PptBatch`. Any future generalization of the retained layer must be justified by a
-  genuine third consumer, not by Outlook.
-  `OleMessageFilter` is the one piece of infrastructure both models legitimately share as-is
-  (STA message filtering has no PowerPoint- or Outlook-specific shape) and stays a shared
-  `ComInterop` utility.
+**Deleted.** The layer is gone as of the 2026-09-04 revision. `PptSession`, `PptBatch`,
+`PptContext`, `IPptBatch`, `SessionManager`, `PptShutdownService` and `ResiliencePipelines` were
+removed along with their 8 integration test files, the CLI `session` command branch, the service
+session RPC handlers, and the `[NoSession]` attribute (every Outlook interface carried it, so the
+generated session branches were dead code).
+
+The 2026-09-03 revision kept the layer as dormant infrastructure on the grounds that it was mature,
+tested COM plumbing that might serve a future third COM product. That bet was not taken. The
+carrying cost turned out to be real rather than theoretical:
+
+- Its integration tests launched PowerPoint on any unfiltered `dotnet test`, silently, on a
+  developer's machine (#70).
+- It kept `Microsoft.Office.Interop.PowerPoint` on the dependency graph, the dependency-review
+  allow-list, and the CodeQL suppression list.
+- It required permanent "this is dormant, do not use it" caveats in the contributor
+  instructions, the READMEs, the testing guide, and the timeout guide — caveats that are load
+  bearing precisely because the code looks usable.
+- It anchored the `Ppt*` naming debt (#12) that could not be resolved either way while the code
+  existed.
+
+`OleMessageFilter` is the one piece of that infrastructure that was genuinely product-neutral. It
+survives as a shared `ComInterop` utility, along with `OutlookDispatcher`, `ComUtilities` and
+`FileAccessValidator`.
+
+Anything the deleted layer taught us is recoverable from git history if a third COM product ever
+justifies it.
 
 ## Naming Plan
 
-- New Outlook dispatcher type: `OutlookMcp.ComInterop.Session.OutlookDispatcher` (or
-  `OutlookComDispatcher` if `OutlookDispatcher` collides with a generated name), living beside
-  the existing `Session/` folder in `OutlookMcp.ComInterop` since it is genuinely a
-  session/dispatch concern, not a `Commands`-layer concern. `OutlookInteropRunner` in
-  `OutlookMcp.Core` becomes a thin caller of the dispatcher rather than owning thread lifecycle
-  itself.
-- No `Ppt*`-prefixed Outlook types are introduced. Existing `Ppt*` types remain scoped to the
-  (retained) session layer and are **not** renamed to `Outlook*` for Outlook reuse — Outlook does
-  not use them, so an `Outlook*` prefix would actively misdescribe them. Whether they are renamed
-  to some product-neutral prefix is deferred to the re-scoping of #12.
+- Outlook dispatcher type: `OutlookMcp.ComInterop.OutlookDispatcher`, at the root of the
+  `OutlookMcp.ComInterop` project (the `Session/` folder no longer exists).
+  `OutlookInteropRunner` in `OutlookMcp.Core` is a thin caller of the dispatcher rather than
+  owning thread lifecycle itself.
+- No `Ppt*`-prefixed types remain in the product. `PptToolsBase` was renamed to
+  `OutlookToolsBase`. This resolves the naming debt tracked by #12.
 - `OleMessageFilter` keeps its current name and location (`OutlookMcp.ComInterop`) as the one
   shared piece of infrastructure.
 
@@ -154,7 +162,7 @@ Specifically:
 
 | Decision | Status | Where |
 |---|---|---|
-| 1. Single long-lived STA dispatcher, filter registered once | ✅ Done | `ComInterop/Session/OutlookDispatcher.cs` |
+| 1. Single long-lived STA dispatcher, filter registered once | ✅ Done | `ComInterop/OutlookDispatcher.cs` |
 | 2. Never create/destroy the shared `Application` | ✅ Done | `OutlookInteropRunner.ReleaseSharedComObject` |
 | 3. `entryId`/`storeId`-addressed work items | ✅ Done | `Commands/Mail/*`, `Commands/Folder/*` |
 | 4. Timeout cancels/quarantines in-flight work | ⬜ **Not done** | `OutlookDispatcher.Execute` (#19) |
@@ -249,16 +257,13 @@ Tracked as the open criterion on #19.
   with no corresponding benefit, while its naming and constructors are pervasively
   PowerPoint-shaped (`_isMacroEnabled`, `_createNewFile`, presentation dictionaries).
 - **Generalize `ComInterop/Session/*` into an abstract multi-app session layer shared by both
-  products.** Rejected for this iteration: the abstraction would need to model "opens a
-  document" vs. "attaches to a singleton" as two fundamentally different resource lifecycles,
-  which is a larger refactor than the current Outlook correctness work justifies. Note that the
-  original rationale also cited this layer's imminent deletion alongside the PowerPoint surface;
-  that premise no longer holds, since #26 retains it. The rejection stands on the refactor-cost
-  argument alone: retaining the layer is cheap, generalizing it speculatively is not. Revisit if a
-  genuine third COM consumer appears — not for Outlook, which uses `OutlookDispatcher`.
-- **Delete `ComInterop/Session/*` wholesale when #26 removes the PowerPoint commands.** Considered
-  and rejected: this ADR originally proposed it on the grounds that nothing would call `PptBatch`'s
-  file-open/close lifecycle afterwards. It conflicted with #26's own acceptance criteria, and the
-  conflict was resolved in favour of #26. The layer carries real, tested COM infrastructure (STA
-  pump, Polly pipelines, operation tracking, named-pipe daemon) whose reconstruction cost exceeds
-  the carrying cost of leaving it dormant. See [Fate of `ComInterop/Session/*`](#fate-of-cominteropsession).
+  products.** Rejected: the abstraction would need to model "opens a document" vs. "attaches to a
+  singleton" as two fundamentally different resource lifecycles, which is a larger refactor than
+  the Outlook correctness work justifies. Moot as of the 2026-09-04 revision, since the layer has
+  been deleted. Revisit from git history if a genuine third COM consumer appears — not for
+  Outlook, which uses `OutlookDispatcher`.
+- **Retain `ComInterop/Session/*` as dormant infrastructure.** Adopted in the 2026-09-03 revision,
+  then reversed. The reconstruction-cost argument was real but outweighed by the carrying cost:
+  a stray `dotnet test` launched PowerPoint (#70), the PowerPoint interop stayed on the dependency
+  graph, and every contributor-facing document needed a "do not use this" caveat. See
+  [Fate of `ComInterop/Session/*`](#fate-of-cominteropsession).

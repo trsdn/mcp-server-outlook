@@ -54,7 +54,6 @@ public static class ServiceBridge
     /// </summary>
     public static async Task<ServiceResponse> SendAsync(
         string command,
-        string? sessionId = null,
         object? args = null,
         int? timeoutSeconds = null,
         CancellationToken cancellationToken = default)
@@ -71,7 +70,6 @@ public static class ServiceBridge
         var request = new ServiceRequest
         {
             Command = command,
-            SessionId = sessionId,
             Args = args != null ? JsonSerializer.Serialize(args, JsonOptions) : null
         };
 
@@ -98,105 +96,8 @@ public static class ServiceBridge
     }
 
     /// <summary>
-    /// Sends a session-scoped command to the service.
-    /// </summary>
-    public static async Task<ServiceResponse> WithSessionAsync(
-        string sessionId,
-        string command,
-        object? args = null,
-        int? timeoutSeconds = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return new ServiceResponse
-            {
-                Success = false,
-                ErrorMessage = "sessionId is required. Use file 'open' action to start a session."
-            };
-        }
-
-        return await SendAsync(command, sessionId, args, timeoutSeconds, cancellationToken);
-    }
-
-    /// <summary>
-    /// Opens a session via the service.
-    /// </summary>
-    public static async Task<ServiceResponse> OpenSessionAsync(
-        string presentationPath,
-        bool show = false,
-        int? timeoutSeconds = null,
-        CancellationToken cancellationToken = default)
-    {
-        return await SendAsync("session.open", null, new
-        {
-            filePath = presentationPath,
-            show,
-            timeoutSeconds
-        }, timeoutSeconds, cancellationToken);
-    }
-
-    /// <summary>
-    /// Creates a new file and opens a session via the service.
-    /// </summary>
-    public static async Task<ServiceResponse> CreateSessionAsync(
-        string presentationPath,
-        bool macroEnabled = false,
-        bool show = false,
-        int? timeoutSeconds = null,
-        CancellationToken cancellationToken = default)
-    {
-        return await SendAsync("session.create", null, new
-        {
-            filePath = presentationPath,
-            macroEnabled,
-            show,
-            timeoutSeconds
-        }, timeoutSeconds, cancellationToken);
-    }
-
-    /// <summary>
-    /// Closes a session via the service.
-    /// </summary>
-    public static async Task<ServiceResponse> CloseSessionAsync(
-        string sessionId,
-        bool save = true,
-        CancellationToken cancellationToken = default)
-    {
-        return await SendAsync("session.close", sessionId, new { save }, cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    /// Lists active sessions via the service.
-    /// </summary>
-    public static async Task<ServiceResponse> ListSessionsAsync(CancellationToken cancellationToken = default)
-    {
-        return await SendAsync("session.list", cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    /// Saves a session via the service.
-    /// </summary>
-    public static async Task<ServiceResponse> SaveSessionAsync(
-        string sessionId,
-        CancellationToken cancellationToken = default)
-    {
-        return await SendAsync("session.save", sessionId, cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    /// Tests if a file can be opened via the service.
-    /// </summary>
-    public static async Task<ServiceResponse> TestFileAsync(
-        string presentationPath,
-        CancellationToken cancellationToken = default)
-    {
-        return await SendAsync("session.test", null, new { filePath = presentationPath }, cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    /// Disposes the in-process OutlookMcp Service, auto-saving all sessions before shutdown.
-    /// Must be called when the MCP server process exits to prevent silent data loss.
+    /// Disposes the in-process OutlookMcp Service.
+    /// Must be called when the MCP server process exits.
     /// </summary>
     public static void Dispose()
     {

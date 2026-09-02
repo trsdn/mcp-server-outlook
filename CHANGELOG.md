@@ -8,14 +8,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
-- **`Microsoft.Office.Interop.PowerPoint` dropped from `OutlookMcp.Core`**: after #26 deleted the
-  33 inherited PowerPoint command domains, nothing in Core referenced a PowerPoint type. The
-  reference is gone; `Microsoft.Office.Interop.Outlook` remains. The `OutlookMcp.ComInterop`
-  reference is deliberately **kept**, because the session layer ADR-002 retains
-  (`PptSession`/`PptBatch`/`PptContext`) genuinely uses it, so the package stays in
-  `dependency-review.yml`'s allow-list.
+- **The inherited PowerPoint session/batch layer is gone** (#12, #65, #70). The product owner
+  directed that nothing PowerPoint remain, which overrules ADR-002's earlier decision to retain the
+  layer as dormant infrastructure. ADR-002 has been amended to record the reversal and its reasons.
+  Deleted:
+  - `src/OutlookMcp.ComInterop/Session/`: `PptSession`, `PptBatch`, `PptContext`, `IPptBatch`,
+    `SessionManager`, `PptShutdownService`, `ResiliencePipelines`, and the 8 integration test files
+    that went with them. Those tests launched PowerPoint on any unfiltered `dotnet test` (#70).
+  - The CLI `session` command branch (`create`, `open`, `close`, `list`, `save`) and
+    `SessionCommands.cs`. No Outlook operation ever used it.
+  - The service's session RPC handlers, `SessionManager` property, `SessionCount` field on
+    `ServiceStatus`, and the session UI in the CLI daemon's tray icon.
+  - The `[NoSession]` attribute and every session branch in the four source generators. All five
+    Outlook service interfaces carried `[NoSession]`, so the generated `session_id` MCP parameter,
+    the `RequiresSession` CLI plumbing, and the `IPptBatch` dispatch argument were dead code for the
+    shipping product. **The generated tool and CLI surface is unchanged.**
+  - `scripts/refactor-service.ps1`, an unreferenced one-off migration script.
+- **`Microsoft.Office.Interop.PowerPoint` dropped entirely**: removed from `OutlookMcp.Core` (after
+  #26 nothing in Core referenced a PowerPoint type) and from `OutlookMcp.ComInterop` (its only
+  consumer was the session layer). Also removed from `dependency-review.yml`'s allow-list.
+  `Microsoft.Office.Interop.Outlook` remains.
+- **`llm-tests/` deleted** (#68). Every scenario in the pytest/`pytest-aitest` harness targeted the
+  presentation surface removed by #26 - charts, tables, ranges, slides, styling - so the suite
+  tested nothing that exists. `scripts/Test-LlmRegressionGate.ps1`, the `run_llm_gate`
+  `workflow_dispatch` input in `integration-tests.yml`, and
+  `.github/instructions/llm-testing-philosophy.instructions.md` went with it. If LLM-behaviour
+  testing is wanted again it should be designed against the five Outlook tools from scratch.
+- **`FileAccessValidator` deleted**: OLE2/IRM-container detection for Office *documents*, with no
+  caller anywhere in the Outlook surface.
+- **PowerPoint file-format constants and quit timeouts removed** from `ComInteropConstants`, which
+  now carries only the three values Outlook actually uses.
+- **The `RunType=OnDemand` CI step and its `workflow_dispatch` input** were removed from
+  `integration-tests.yml`: no test carries that trait any more.
+
+### Changed
+
+- **Naming debt #12 closed.** The last `Ppt*` identifiers are gone: the generated MCP tool types are
+  now `Outlook{Category}Tool` (the wire-level tool names - `mail`, `calendar`, `folder`,
+  `attachment`, `application` - are unchanged, so **no MCP client sees a difference**), the
+  hand-written base class is `OutlookToolsBase`, the daemon RPC contract is `IOutlookDaemonRpc`, and
+  the generated prompt class is `OutlookSkillPrompts`.
+- **`ServiceBridge.SendAsync` and the generated `RouteAction`/`Forward*` methods lost their
+  `sessionId` parameter.** It was threaded through the whole MCP call path and was always the empty
+  string. Internal only; the tool schemas are unchanged.
+
 ### Fixed
 
+- **The pre-commit hook was unusable for everyone who installed it** (#65): check 6 ran
+  `scripts/Test-CliWorkflow.ps1`, which drove the PowerPoint CLI surface deleted by #26 - creating a
+  `.pptx`, adding slides and shapes - so it failed immediately, and it launched PowerPoint while
+  doing so. Rewritten against the real Outlook CLI surface. The new script asserts only things that
+  hold whether or not Outlook is running: `diag ping` answers, `diag echo` round-trips a parameter
+  through the pipe, `diag outlook` and `service status` return well-formed JSON, an unknown action
+  exits non-zero, `--output` writes no file on failure, and - the important one - `application
+  get-status` reaches the generated dispatch surface and its process exit code **agrees** with the
+  `success` field in its payload, which is a standing regression guard for #63. It never launches an
+  Office application.
 - **`OleMessageFilterTests.MessagePending_ReturnValue_MustBe_WaitDefProcess` failed on `master`** (#59):
   - ROOT CAUSE: the **test**, not the implementation. It declared
     `PENDINGMSG_WAITDEFPROCESS = 1` and `PENDINGMSG_WAITNOPROCESS = 2`. The Win32 `PENDINGMSG`

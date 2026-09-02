@@ -13,7 +13,7 @@ Test projects:
 | Project | Covers |
 |---|---|
 | `tests/OutlookMcp.Core.Tests` | Outlook Core command business logic |
-| `tests/OutlookMcp.ComInterop.Tests` | `OutlookDispatcher`, OLE message filter, retained session layer |
+| `tests/OutlookMcp.ComInterop.Tests` | `OutlookDispatcher`, OLE message filter |
 | `tests/OutlookMcp.McpServer.Tests` | MCP protocol, generated tools, coverage assertions |
 | `tests/OutlookMcp.CLI.Tests` | CLI argument handling, exit codes, daemon |
 | `tests/OutlookMcp.Diagnostics.Tests` | Diagnostic helpers |
@@ -35,12 +35,9 @@ dotnet test tests\OutlookMcp.CLI.Tests\OutlookMcp.CLI.Tests.csproj --filter "Fea
 
 Valid `Feature` values today: `ActionEnums`, `ActionValidation`, `Batch`, `CliExitCode`,
 `Configuration`, `DestructiveAnnotations`, `Diag`, `FileLocking`, `McpProtocol`,
-`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`, `PptBatch`,
-`PptSession`, `ServiceDaemon`, `ServiceRegistry`, `SessionManager`, `SkillGeneration`,
+`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`,
+`ServiceDaemon`, `ServiceRegistry`, `SkillGeneration`,
 `StreamJsonRpc`, `VersionCheck`.
-
-`PptBatch` and `PptSession` cover the retained, Outlook-unused session layer in
-`src/OutlookMcp.ComInterop/Session/`. They are not Outlook tests.
 
 ### Run a specific test by name
 
@@ -181,35 +178,10 @@ enum-to-string mapping, JSON shaping - are fine and are not what that rule is ab
 
 ## LLM Integration Tests
 
-**Location**: `llm-tests/`
+**Removed (#68).** The `llm-tests/` pytest harness was deleted along with the rest of the
+PowerPoint surface: every scenario it contained targeted charts, tables, ranges, slides and
+styling, none of which exist in this repository any more. `scripts/Test-LlmRegressionGate.ps1`
+and the `run_llm_gate` workflow input went with it.
 
-> **Status (#68):** every scenario in `llm-tests/` targets the PowerPoint surface deleted by
-> #26 - charts, tables, ranges, slides, styling. `scripts/Test-LlmRegressionGate.ps1` names six
-> of those dead modules as its canonical gate. The harness does not currently test anything
-> that exists. #68 tracks the decision to delete it or rewrite it for Outlook. Treat anything
-> below as describing the mechanism, not a working suite.
-
-**Purpose**: validate that LLMs correctly use the MCP Server and CLI tools, using
-[pytest-aitest](https://github.com/sbroenne/pytest-aitest).
-
-**When to run**: manual and on demand only. It is not part of CI.
-
-```powershell
-cd llm-tests
-uv sync
-
-uv run pytest -m mcp -v      # MCP Server tests
-uv run pytest -m cli -v      # CLI tests
-uv run pytest -m aitest -v   # All LLM tests
-```
-
-**Prerequisites:**
-- `AZURE_OPENAI_ENDPOINT` environment variable
-- Windows desktop with classic Outlook for Windows installed and running
-- MCP Server built in Release, and `outlookcli` available on PATH
-
-**Configuration overrides:**
-- `outlook_mcp_SERVER_COMMAND` overrides the MCP server command
-- `OUTLOOK_CLI_COMMAND` overrides the CLI command
-
-See `llm-tests/README.md` for complete documentation.
+If LLM-behaviour testing is wanted again, it should be designed against the five Outlook tools
+from scratch rather than resurrected from the PowerPoint scenarios.

@@ -4,7 +4,6 @@ using OutlookMcp.Core.Models;
 namespace OutlookMcp.Core.Commands.Folder;
 
 [ServiceCategory("folder")]
-[NoSession]
 [McpTool("folder", Title = "Outlook Folder Operations", Destructive = false, Category = "folder",
     Description = "Inspect Outlook mailbox folders without opening a persistent session. "
     + "Use list-default to enumerate important default folders such as Inbox, Drafts, Sent Items, Calendar, and Contacts. "

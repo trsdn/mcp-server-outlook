@@ -40,7 +40,7 @@ public sealed class ServiceClient : IDisposable
             await pipe.ConnectAsync((int)_connectTimeout.TotalMilliseconds, timeoutCts.Token);
 
             // Use StreamJsonRpc typed proxy for the RPC call
-            var proxy = JsonRpc.Attach<IPptDaemonRpc>(pipe);
+            var proxy = JsonRpc.Attach<IOutlookDaemonRpc>(pipe);
             try
             {
                 return await proxy.ProcessCommandAsync(request);

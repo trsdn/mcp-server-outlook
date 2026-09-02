@@ -111,7 +111,7 @@ tests\
 |-- OutlookMcp.Core.Tests\          # Core models, helpers, and manual Outlook smoke tests
 |-- OutlookMcp.McpServer.Tests\     # MCP protocol and generated action coverage
 |-- OutlookMcp.CLI.Tests\           # CLI routing, daemon, diagnostics, and batch command tests
-|-- OutlookMcp.ComInterop.Tests\    # Shared COM infrastructure and dormant legacy session layer
+|-- OutlookMcp.ComInterop.Tests\    # Shared COM infrastructure (dispatcher, OLE message filter)
 |-- OutlookMcp.Diagnostics.Tests\   # Manual diagnostics when present
 `-- OutlookMcp.SkillGeneration.Tests\ # Skill markdown quality checks
 ```
@@ -137,10 +137,10 @@ For manual Outlook smoke coverage:
 dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
 ```
 
-For dormant legacy session infrastructure:
+For shared COM infrastructure:
 
 ```powershell
-dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch|Feature=PptSession|Feature=SessionManager"
+dotnet test tests\OutlookMcp.ComInterop.Tests
 ```
 
 ### Adding New Tests

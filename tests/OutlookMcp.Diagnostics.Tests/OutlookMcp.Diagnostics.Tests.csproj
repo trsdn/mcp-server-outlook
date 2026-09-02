@@ -36,7 +36,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\OutlookMcp.Core.Tests\Helpers\TempDirectoryFixture.cs" Link="Helpers\TempDirectoryFixture.cs" />
   </ItemGroup>
 
 </Project>

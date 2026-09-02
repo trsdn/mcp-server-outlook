@@ -4,7 +4,6 @@ using OutlookMcp.Core.Models;
 namespace OutlookMcp.Core.Commands.Mail;
 
 [ServiceCategory("mail")]
-[NoSession]
 [McpTool("mail", Title = "Outlook Mail Operations", Destructive = true, Category = "mail",
     Description = "Read the currently active Outlook mail item, list and search mailbox content, and create or send Outlook draft emails without opening a persistent session. "
     + "Use read-active to inspect the currently selected or opened mail item. "

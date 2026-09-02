@@ -1,12 +1,8 @@
 # Timeout Implementation Guide
 
-> This document covers two different timeout paths: the active Outlook dispatcher timeout and the dormant retained legacy session-layer timeout.
-
 ## Overview
 
 OutlookMcp currently uses `OutlookDispatcher` for active Outlook commands. It serializes all Outlook COM work onto one dedicated STA thread and applies a timeout to both queueing and execution.
-
-The older `PptBatch` timeout code still exists in `src\OutlookMcp.ComInterop\Session\`. That layer is deliberately retained but dormant for the Outlook product. Nothing in the active mail, calendar, folder, attachment, or application command surface uses it.
 
 **Key Features:**
 
@@ -22,7 +18,7 @@ The older `PptBatch` timeout code still exists in `src\OutlookMcp.ComInterop\Ses
 
 ### Constants
 
-`ComInteropConstants.DefaultOperationTimeout` is currently the shared default timeout used by active Outlook commands and retained COM infrastructure.
+`ComInteropConstants.DefaultOperationTimeout` is the shared default timeout used by Outlook commands.
 
 ```csharp
 public static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromMinutes(5);
@@ -56,19 +52,6 @@ return OutlookDispatcher.Shared.Execute(operationName, () =>
 ```
 
 This means active Outlook commands do not take a per-command timeout parameter today.
-
-### Dormant Legacy Session Layer
-
-The retained `PptBatch` and `IPptBatch` types also have timeout support. This exists for the dormant presentation-session infrastructure only.
-
-```csharp
-Task<T> Execute<T>(
-    Func<PptContext, CancellationToken, T> operation,
-    CancellationToken cancellationToken = default,
-    TimeSpan? timeout = null);
-```
-
-Keep this code accurate if you modify the retained session layer, but do not describe it as the active Outlook execution path.
 
 ---
 
@@ -123,16 +106,6 @@ When surfacing dispatcher timeouts, include guidance that fits Outlook:
 - Retry only when the operation is safe to repeat.
 - For `mail send`, use `operationId` to avoid duplicate sends on retry.
 
-### Pattern 3: Dormant Session-Layer Changes
-
-Only use `IPptBatch.Execute` timeout overloads when working on retained legacy session infrastructure.
-
-```csharp
-return await batch.Execute(
-    (ctx, ct) => RunLegacySessionOperation(ctx),
-    timeout: TimeSpan.FromMinutes(5));
-```
-
 ---
 
 ## Operation-Specific Timeout Recommendations
@@ -142,13 +115,10 @@ return await batch.Execute(
 | Mail, calendar, folder, attachment, application | Active Outlook dispatcher | Use the shared default unless adding a designed timeout option. |
 | Many overlapping CLI or MCP requests | Active Outlook dispatcher | Expect queue back-pressure. Avoid parallel Outlook mutation. |
 | Send mail | Active Outlook dispatcher | Use `confirm=true`; use `operationId` for retry safety. |
-| Legacy session operations | Dormant session layer | Keep existing timeout support, but do not apply it to Outlook docs. |
 
 ---
 
 ## Stderr Logging
-
-The old presentation-session logging examples using `[PPT-BATCH]` apply only to the retained legacy session layer if that path is used. They are not active Outlook product logging.
 
 For active Outlook timeout work, prefer messages and result context that name the Outlook operation, for example `mail.send` or `folder.list-default`.
 
@@ -176,12 +146,6 @@ For active Outlook timeout work, prefer messages and result context that name th
 - [ ] Surface timeout errors as JSON in quiet/scripted paths.
 - [ ] Include actionable guidance without claiming the operation is isolated from Outlook.
 
-### For Dormant Legacy Session Code
-
-- [ ] Keep `PptBatch` timeout tests targeted to the retained session layer.
-- [ ] Label documentation and comments as legacy or dormant when relevant.
-- [ ] Do not imply Outlook commands use `PptSession`, `PptBatch`, or `PptContext`.
-
 ---
 
 ## Testing Strategy
@@ -202,14 +166,6 @@ CI-safe:
 
 ```powershell
 dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
-```
-
-### Dormant Legacy Timeout Tests
-
-Run only when changing the retained session layer:
-
-```powershell
-dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch"
 ```
 
 ---

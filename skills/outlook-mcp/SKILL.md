@@ -46,5 +46,5 @@ requests to the shared service layer while the repository continues its migratio
 
 ## Transitional note
 
-The repo is still migrating from copied PowerPoint plumbing, so some executables or project names
+The repo was renamed from an Office-automation baseline, so some executables or project names
 may still contain `OutlookMcp`. Public guidance should nevertheless stay Outlook-first.

@@ -16,9 +16,6 @@ dotnet test
 
 # Run Outlook smoke tests manually on a Windows desktop with classic Outlook running
 dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
-
-# Run retained dormant session-layer tests only when modifying that legacy infrastructure
-dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch|Feature=PptSession|Feature=SessionManager"
 ```
 
 ## Documentation
@@ -30,7 +27,7 @@ For broader test philosophy and repository rules, see:
 - [Testing Strategy](../.github/instructions/testing-strategy.instructions.md)
 - [Critical Rules](../.github/instructions/critical-rules.instructions.md)
 
-Some instruction files still contain historical PowerPoint guidance while the Outlook migration continues. Follow the current code and this README for the active Outlook surface.
+Follow the current code and this README for the active Outlook surface.
 
 ## Test Architecture
 
@@ -39,11 +36,10 @@ tests\
 |-- OutlookMcp.Core.Tests\          # Core result contracts and Outlook smoke tests
 |-- OutlookMcp.McpServer.Tests\     # MCP protocol, tool metadata, and coverage checks
 |-- OutlookMcp.CLI.Tests\           # CLI daemon, batch, diagnostics, and validation tests
-|-- OutlookMcp.ComInterop.Tests\    # Shared COM infrastructure and dormant legacy session layer
+|-- OutlookMcp.ComInterop.Tests\    # Shared COM infrastructure (dispatcher, OLE message filter)
 |-- OutlookMcp.Diagnostics.Tests\   # Manual diagnostics, currently empty or historical
 `-- OutlookMcp.SkillGeneration.Tests\ # Skill markdown quality checks
 
-llm-tests\                          # Manual LLM behavior tests
 ```
 
 ## Test Categories
@@ -53,8 +49,6 @@ llm-tests\                          # Manual LLM behavior tests
 | Unit | Pure .NET behavior, serialization, generated metadata, validation | .NET SDK | CI-safe |
 | Integration | Protocol or process integration, plus Outlook smoke tests | Depends on test | Only CI-safe subsets should be assumed |
 | OutlookSeed | Manual Outlook behavior smoke coverage | Classic Outlook running on Windows | Not verified by hosted CI |
-| PptBatch, PptSession, SessionManager | Dormant retained presentation-session infrastructure | Desktop Office setup | Only relevant when modifying that layer |
-| LLM tests | Manual AI behavior validation | Azure OpenAI config and local tools | Manual only |
 
 ## Outlook Smoke Tests
 
@@ -100,14 +94,6 @@ dotnet test --filter "Feature=ServiceDaemon"
 dotnet test --filter "Feature=SkillGeneration"
 ```
 
-When changing the dormant retained session layer, use its specific filters:
-
-```powershell
-dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch"
-dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptSession"
-dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=SessionManager"
-```
-
 ## When to Run Which Tests
 
 | Scenario | Command |
@@ -116,25 +102,7 @@ dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=SessionManager"
 | Generated action or Core interface change | `dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"` |
 | CLI routing or daemon change | `dotnet test tests\OutlookMcp.CLI.Tests` |
 | Outlook command behavior change | Manual `Feature=OutlookSeed` on Windows with classic Outlook running, plus targeted tests you add |
-| Dormant session-layer change | Target `PptBatch`, `PptSession`, or `SessionManager` tests |
 | Skill guidance change | `dotnet test tests\OutlookMcp.SkillGeneration.Tests` |
-| LLM behavior validation | `.\scripts\Test-LlmRegressionGate.ps1` if that script is current for the Outlook surface |
-
-## LLM Tests
-
-The `llm-tests\` project is manual. Before relying on it, inspect the prompts and expected behavior to make sure they reference the current Outlook command surface.
-
-```powershell
-Set-Location llm-tests
-uv sync
-uv run pytest -m aitest -v
-```
-
-Prerequisites:
-
-- `AZURE_OPENAI_ENDPOINT` environment variable.
-- Windows desktop when tests call local MCP or CLI tools.
-- Any required local model or service credentials.
 
 ## Key Principles
 
@@ -149,4 +117,3 @@ Prerequisites:
 - Test failures: read the failing test output first.
 - Outlook issues: confirm classic Outlook is installed, running, signed in, and at the same elevation level as the test process.
 - Generated action issues: inspect Core service interfaces and generated metadata.
-- Session-layer issues: remember that `Ppt*` infrastructure is retained but dormant for Outlook commands.

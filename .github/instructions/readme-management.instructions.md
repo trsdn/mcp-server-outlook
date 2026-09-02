@@ -27,7 +27,7 @@ You need to make sure that the `Features.md` file is up-to-date with the latest 
 
 Before updating counts, verify by counting:
 
-- **MCP Server**: Count tool files (ppt_batch handled via PptTools.cs, not separate tool file)
+- **MCP Server**: Count the generated Outlook tool types registered in `Program.cs`
 - **CLI**: Count command group folders (includes Session commands)
 - **Operations**: Count separately for each - they differ!
 

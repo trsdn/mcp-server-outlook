@@ -4,7 +4,6 @@ using OutlookMcp.Core.Models;
 namespace OutlookMcp.Core.Commands.Attachment;
 
 [ServiceCategory("attachment")]
-[NoSession]
 [McpTool("attachment", Title = "Outlook Attachment Operations", Destructive = true, Category = "mail",
     Description = "Inspect and save attachments from a selected Outlook mail item without opening a persistent session. "
     + "Use list to inspect attachments on the active mail item or a specific mail entry id. "

@@ -52,7 +52,7 @@ internal sealed class ListActionsCommand : Command<ListActionsCommand.Settings>
         var payload = new
         {
             success = true,
-            workflow = "Outlook commands (application, attachment, calendar, folder, mail) run directly with no session. Start with application get-status to confirm classic Outlook is available. The session commands drive a dormant document-session layer that no Outlook command uses.",
+            workflow = "Outlook commands (application, attachment, calendar, folder, mail) run directly with no session. Start with application get-status to confirm classic Outlook is available.",
             example = "mail list --folder Inbox",
             commands = all
         };

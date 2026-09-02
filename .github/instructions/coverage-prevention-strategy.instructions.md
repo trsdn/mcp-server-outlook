@@ -25,7 +25,7 @@ This is the single most important thing to know. `src/OutlookMcp.Generators*` re
 - the action-to-string mapping
 - the CLI command and its argument binding
 
-`src/OutlookMcp.McpServer/Tools/` contains exactly one hand-written file, `PptToolsBase.cs`.
+`src/OutlookMcp.McpServer/Tools/` contains exactly one hand-written file, `OutlookToolsBase.cs`.
 There is no `ToolActions.cs` and no `ActionExtensions.cs` - they were deleted when the
 generators landed (#5/#11). If a guide tells you to edit them, that guide is stale.
 

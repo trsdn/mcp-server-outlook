@@ -43,10 +43,9 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
 
     /// <summary>
     /// Expected tool names from our assembly - the source of truth.
-    /// Program.cs registers only these five Outlook tools via an explicit allow-list (#23); the
-    /// assembly still contains 33 generated legacy PowerPoint tool types plus the hand-written
-    /// "file" tool, but they are deliberately not registered with the MCP server and so must not
-    /// appear here or in tools/list. This test is the regression guard for that allow-list.
+    /// Program.cs registers only these five Outlook tools via an explicit allow-list (#23).
+    /// Anything else appearing in tools/list means the allow-list has drifted, so this test is
+    /// the regression guard for it.
     /// </summary>
     private static readonly HashSet<string> ExpectedToolNames =
     [
@@ -82,13 +81,13 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
             // registration surface real clients see.
             .WithTools(
             [
-                typeof(PptApplicationTool),
-                typeof(PptAttachmentTool),
-                typeof(PptCalendarTool),
-                typeof(PptFolderTool),
-                typeof(PptMailTool),
+                typeof(OutlookApplicationTool),
+                typeof(OutlookAttachmentTool),
+                typeof(OutlookCalendarTool),
+                typeof(OutlookFolderTool),
+                typeof(OutlookMailTool),
             ])
-            .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.PptSkillPrompts)]);
+            .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.OutlookSkillPrompts)]);
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
 
@@ -236,7 +235,7 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
     /// <summary>
     /// Tests that the application tool's get-status action works via MCP protocol.
     /// This exercises the complete tool invocation path for an Outlook tool (#23: the legacy
-    /// PowerPoint "file" tool this test previously called is no longer registered).
+    /// legacy "file" tool this test previously called is no longer registered).
     /// </summary>
     [Fact]
     public async Task CallTool_ApplicationGetStatus_ReturnsSuccess()
@@ -339,7 +338,7 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
     /// <summary>
     /// Regression guard for #23's prompts/list acceptance criterion: only Outlook-relevant prompts
     /// should be discoverable. Every `.md` under `skills/shared/` becomes an `[McpServerPrompt]`, so
-    /// this also guards against a PowerPoint-era doc being reintroduced there.
+    /// this also guards against a legacy doc being reintroduced there.
     /// </summary>
     [Fact]
     public async Task ListPrompts_ReturnsOnlyOutlookPrompts()
@@ -366,11 +365,11 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
         var unexpectedPrompts = actualPromptNames.Except(expectedPromptNames).ToList();
         if (unexpectedPrompts.Count > 0)
         {
-            output.WriteLine($"\n❌ Unexpected prompts (likely leaked PowerPoint prompts): {string.Join(", ", unexpectedPrompts)}");
+            output.WriteLine($"\n❌ Unexpected prompts (likely leaked legacy prompts): {string.Join(", ", unexpectedPrompts)}");
         }
         Assert.Empty(unexpectedPrompts);
 
-        output.WriteLine($"\n✓ All {expectedPromptNames.Count} Outlook prompts discovered, no legacy PowerPoint prompts leaked");
+        output.WriteLine($"\n✓ All {expectedPromptNames.Count} Outlook prompts discovered, no legacy prompts leaked");
     }
 }
 

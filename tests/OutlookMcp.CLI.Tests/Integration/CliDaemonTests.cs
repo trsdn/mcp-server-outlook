@@ -8,13 +8,13 @@ namespace OutlookMcp.CLI.Tests.Integration;
 /// <summary>
 /// Integration tests for the CLI daemon process (outlookcli service run).
 /// Verifies the daemon starts, accepts pipe connections, and shuts down cleanly.
-/// These tests do NOT require PowerPoint — they validate daemon infrastructure.
+/// These tests do NOT require Outlook — they validate daemon infrastructure.
 /// Uses a test-specific pipe name to avoid conflicting with ServiceFixture.
 /// </summary>
 [Trait("Layer", "CLI")]
 [Trait("Category", "Integration")]
 [Trait("Feature", "ServiceDaemon")]
-[Trait("RequiresPowerPoint", "false")]
+[Trait("RequiresOutlook", "false")]
 [Trait("Speed", "Medium")]
 public sealed class CliDaemonTests : IAsyncLifetime
 {

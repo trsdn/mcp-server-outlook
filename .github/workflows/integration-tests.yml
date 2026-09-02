@@ -10,7 +10,6 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'scripts/**'
-      - 'llm-tests/**'
       - 'global.json'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
@@ -21,24 +20,11 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'scripts/**'
-      - 'llm-tests/**'
       - 'global.json'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
       - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
-    inputs:
-      run_on_demand:
-        description: 'Run the slower RunType=OnDemand COM/session tests too'
-        required: false
-        default: false
-        type: boolean
-      run_llm_gate:
-        description: 'Run the canonical manual LLM regression gate too'
-        required: false
-        default: false
-        type: boolean
-
 jobs:
   integration-runner-disabled:
     if: ${{ vars.ENABLE_OUTLOOK_INTEGRATION_CI != 'true' }}
@@ -108,21 +94,6 @@ jobs:
           dotnet test tests/OutlookMcp.McpServer.Tests/OutlookMcp.McpServer.Tests.csproj
           --logger "trx;LogFileName=mcp-integration.trx"
 
-      - name: Run OnDemand COM/session suite
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_on_demand }}
-        shell: pwsh
-        run: >
-          dotnet test tests/OutlookMcp.ComInterop.Tests/OutlookMcp.ComInterop.Tests.csproj
-          --filter "RunType=OnDemand"
-          --logger "trx;LogFileName=cominterop-ondemand.trx"
-
-      - name: Run canonical LLM regression gate
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_llm_gate }}
-        shell: pwsh
-        env:
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-        run: ./scripts/Test-LlmRegressionGate.ps1
-
       - name: Upload integration test artifacts
         if: always()
         uses: actions/upload-artifact@v6
@@ -130,4 +101,3 @@ jobs:
           name: outlook-integration-${{ github.run_id }}
           path: |
             **/*.trx
-            llm-tests/TestResults/**

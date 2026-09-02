@@ -19,7 +19,7 @@ namespace OutlookMcp.McpServer.Tests.Integration.Models;
 [Trait("Speed", "Fast")]
 [Trait("Layer", "McpServer")]
 [Trait("Feature", "ActionEnums")]
-[Trait("RequiresPowerPoint", "false")]
+[Trait("RequiresOutlook", "false")]
 public class ActionEnumCompletenessTests(ITestOutputHelper output)
 {
 

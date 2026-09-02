@@ -4,8 +4,7 @@ namespace OutlookMcp.SkillGeneration.Tests;
 
 /// <summary>
 /// Validates the active Outlook migration skill surfaces.
-/// The legacy ppt-* skills may still exist during migration, but the
-/// repo's primary skill story should now be Outlook-first.
+/// Validates the active Outlook skill surfaces: the repo's skill story is Outlook-first.
 /// </summary>
 public class SkillMdQualityTests
 {

@@ -18,7 +18,6 @@ public static class ServiceInfoExtractor
         string? category = null;
         string? pascalName = null;
         string? mcpTool = null;
-        bool noSession = false;
         string? mcpToolTitle = null;
         bool mcpToolDestructive = true;
         string? mcpToolCategory = null;
@@ -67,10 +66,6 @@ public static class ServiceInfoExtractor
                     }
                 }
             }
-            else if (attrName == "NoSessionAttribute")
-            {
-                noSession = true;
-            }
         }
 
         if (category is null)
@@ -90,10 +85,9 @@ public static class ServiceInfoExtractor
                 var xmlDoc = ExtractXmlDocumentation(method);
                 var isDestructive = GetActionDestructive(method) ?? mcpToolDestructive;
 
-                var hasBatchParameter = method.Parameters.Any(p => p.Type.Name == "IPptBatch");
                 var hasProgressParameter = method.Parameters.Any(p => p.Type.Name == "IProgress");
                 var parameters = method.Parameters
-                    .Where(p => p.Type.Name != "IPptBatch" && p.Type.Name != "IProgress") // Skip batch and progress parameters
+                    .Where(p => p.Type.Name != "IProgress") // Skip the progress parameter
                     .Select(p => ExtractParameterInfo(p, xmlDoc))
                     .ToList();
 
@@ -104,7 +98,6 @@ public static class ServiceInfoExtractor
                     methodMcpTool ?? category,
                     parameters,
                     xmlDoc?.Summary,
-                    hasBatchParameter,
                     hasProgressParameter,
                     isDestructive));
             }
@@ -126,7 +119,6 @@ public static class ServiceInfoExtractor
             category,
             categoryPascal,
             mcpTool ?? category,
-            noSession,
             methods,
             interfaceSummary,
             mcpToolTitle,

@@ -6,8 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Issue forms replace the legacy markdown issue templates** (#1). The three templates were markdown,
+  so every field in them was a suggestion; a reporter could delete the whole body and submit. They are
+  now YAML forms with the fields that actually make an Outlook bug actionable marked required:
+  `application.get-status` output, whether Outlook is classic or new, reproduction steps, and expected
+  versus actual behaviour. Each form also carries a required acknowledgement not to paste mailbox
+  contents, since Outlook issues attract real subjects and addresses. Blank issues are disabled and
+  `config.yml` routes security reports to the policy rather than a public issue.
+- **Dependabot now covers npm** (#1). `vscode-extension/` has a `package-lock.json` and had no
+  Dependabot `updates` entry, so its vulnerability alerts had no update PR to fix them - which is why a
+  high-severity advisory sat open with no action. npm is configured for that directory with the same
+  weekly schedule, labels and grouping as the existing ecosystems.
+
+  Note that the labels these files reference (`mcp-server`, `npm`, `nuget`, `github-actions`,
+  `automated`) did not exist on the repository and have been created. GitHub does not create a missing
+  label on demand: an issue form referencing one fails to apply it, and Dependabot refuses the update
+  config outright, so the existing `nuget` and `github-actions` entries had been mislabelled all along.
+
 ### Changed
 
+- **Removed the `docker` Dependabot ecosystem** (#1). The repository contains no Dockerfile or compose
+  file, and the entry was commented ".NET SDK (via global.json if present)", which is not what a docker
+  ecosystem watches. It was configuration that could never produce a PR.
+- **`docs/CONTRIBUTING.md` documents dependency-update ownership** (#1), points bug and feature
+  reporters at the new forms, and warns against hand-bumping `package-lock.json` behind a corporate
+  registry mirror, which rewrites `resolved` URLs and can downgrade `integrity` from sha512 to sha1.
 - **`Items` collections are now early-bound instead of `object` + `((dynamic))`** (#74). Six locals in
   `CalendarCommands`, `FolderCommands` and `MailCommands` were declared `object?` and then late-bound
   on every use, which cost a DLR call site per `.Count`, per indexer read and per `Sort`/`Restrict`,

@@ -1,0 +1,133 @@
+name: Bug report
+description: Something in OutlookMcp behaves incorrectly
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Read this first
+
+        Run `outlookcli application get-status` (or ask your assistant to call
+        `application.get-status`) before filing.
+
+        If it reports **`NewOutlookOnly`, this is not a bug.** The new Outlook for Windows exposes
+        no COM object model and cannot be automated at all. Install or switch to the classic
+        Outlook for Windows desktop app.
+
+        **Never paste real mailbox content.** No addresses, subjects, bodies, entry IDs, or
+        `.pst` / `.ost` files. Describe the shape of the data instead.
+
+  - type: textarea
+    id: status
+    attributes:
+      label: application.get-status output
+      description: Redact the display name and SMTP address if the payload includes them.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What is wrong
+      description: One or two sentences. Detail goes in the fields below.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - MCP Server
+        - CLI (outlookcli)
+        - Core library
+        - VS Code extension
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Numbered steps, starting from a known state. Include the exact command or the tool and
+        action you invoked.
+      placeholder: |
+        1. Start classic Outlook and sign in
+        2. outlookcli mail list --folder inbox --max-count 5
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: >-
+        Paste the full result payload. It carries `success`, `errorMessage` and
+        `suggestedNextActions`; all three are useful. Redact mailbox content first.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Windows version:
+        - Outlook edition (classic desktop only):
+        - OutlookMcp version:
+        - .NET version (`dotnet --version`):
+        - Installation method (NuGet tool / binary / MCPB bundle / VS Code extension / source):
+        - AI assistant, if using the MCP Server:
+        - Mailbox type (Exchange / Microsoft 365 / IMAP / POP / local PST):
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: preconditions
+    attributes:
+      label: Preconditions
+      description: >-
+        Each of these causes failures that look like bugs but are not. Please confirm before
+        filing.
+      options:
+        - label: Classic Outlook was installed and **already running** when the command ran
+          required: true
+        - label: Outlook had no modal dialog open (a dialog blocks every COM call)
+          required: true
+        - label: Outlook and OutlookMcp run as the **same Windows user**, at the same elevation
+          required: true
+        - label: >-
+            Any entry ID involved came from a fresh `list`, `search` or `read-active` in the same
+            session. Entry IDs change when an item moves between stores.
+          required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: >-
+            I have removed real mailbox content, addresses, entry IDs and file paths from
+            everything above
+          required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+    validations:
+      required: false

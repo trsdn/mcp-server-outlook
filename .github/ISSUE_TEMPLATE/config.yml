@@ -1,0 +1,16 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/trsdn/mcp-server-outlook/security/policy
+    about: >-
+      Report privately, following SECURITY.md. Never open a public issue for a vulnerability.
+  - name: Roadmap and current state
+    url: https://github.com/trsdn/mcp-server-outlook/issues/41
+    about: >-
+      What is implemented, what is missing, and the order it is being worked in. Worth checking
+      before filing a feature request.
+  - name: New Outlook for Windows is not supported
+    url: https://github.com/trsdn/mcp-server-outlook/blob/master/README.md
+    about: >-
+      If application.get-status reports NewOutlookOnly, that is expected rather than a bug. The new
+      Outlook exposes no COM object model. Switch to the classic Outlook for Windows desktop app.

@@ -1,5 +1,12 @@
 # GitHub Dependabot configuration for OutlookMcp
-# Automatically keeps dependencies up-to-date and secure
+#
+# Ecosystems below must match the manifests that actually exist in the repo. Adding an ecosystem
+# with nothing to update is harmless but misleading; omitting one is not, because Dependabot alerts
+# then flag a vulnerability that no update PR ever arrives to fix.
+#
+# Triage ownership: @trsdn reviews and merges every Dependabot PR. Security updates take priority
+# and are merged as soon as CI is green. Grouped minor and patch updates are reviewed weekly. A
+# Dependabot PR is merged only when the same required checks pass that any other PR must pass.
 
 version: 2
 updates:
@@ -64,9 +71,11 @@ updates:
         patterns:
           - "*"
 
-  # .NET SDK (via global.json if present)
-  - package-ecosystem: "docker"
-    directory: "/"
+  # npm - the VS Code extension. This is the only npm manifest with dependencies;
+  # packages/outlook-cli-skill and packages/outlook-mcp-skill are publish-only manifests
+  # with no dependencies to update.
+  - package-ecosystem: "npm"
+    directory: "/vscode-extension"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -75,9 +84,23 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
-      - "docker"
+      - "npm"
       - "automated"
     commit-message:
-      prefix: "chore(docker)"
+      prefix: "chore(deps)"
+      include: "scope"
     reviewers:
       - "trsdn"
+    groups:
+      npm-development:
+        applies-to: version-updates
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"

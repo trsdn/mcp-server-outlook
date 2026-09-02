@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **`VS Code Extension CI` workflow**: runs `npm ci` and `tsc` for `vscode-extension/` on pull requests. Previously nothing installed those dependencies on a PR -- only the manually dispatched `release.yml` did -- so an uninstallable lockfile would first have surfaced mid-release.
+- **`Node Projects CI` workflow**: runs `npm ci` and `tsc` for `vscode-extension/`, and `npm ci` for `eval/`, on pull requests. Previously nothing installed those dependencies on a PR -- only the manually dispatched `release.yml` did -- so an uninstallable lockfile would first have surfaced mid-release.
 
 ### Changed
 

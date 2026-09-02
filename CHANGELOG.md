@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A timed-out Outlook operation no longer runs after its caller gave up** (#19). Work items were
+  queued onto the shared STA dispatcher and executed unconditionally when the thread became free, even
+  if the caller had already thrown `TimeoutException` minutes earlier. Outlook operations are not all
+  read-only, so an abandoned `mail.send`, `mail.delete` or `folder.create` performed a real mailbox
+  side effect that the caller was told had timed out and may legitimately have retried. Work items now
+  check their caller's deadline immediately before running and are dropped if it has passed. This
+  narrows the window rather than closing it - a caller can still time out in the instant between the
+  check and the call - but that residual race is unavoidable without cancellable COM and is orders of
+  magnitude smaller than the queue wait it replaces.
+- **A wedged dispatcher is now quarantined instead of silently swallowing every later call** (#19). A
+  blocking cross-apartment COM call cannot be interrupted: `Thread.Abort` is unsupported on .NET 5+,
+  and `OleMessageFilter` only governs *incoming* calls, so it cannot rescue an outgoing call parked on
+  a modal Object Model Guard prompt. Previously every subsequent caller queued behind such a call and
+  burned its own full `DefaultOperationTimeout` - five minutes each - before reporting a generic
+  timeout that named the wrong operation. Once the in-flight operation is past its own deadline, new
+  callers are now rejected immediately with a message naming the stuck operation and pointing at the
+  likely dialog. The condition clears itself as soon as the blocked call returns.
+
 ### Added
 
 - **Issue forms replace the legacy markdown issue templates** (#1). The three templates were markdown,

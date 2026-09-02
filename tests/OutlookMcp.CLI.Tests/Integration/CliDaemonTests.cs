@@ -58,8 +58,14 @@ public sealed class CliDaemonTests : IAsyncLifetime
         Assert.True(json.RootElement.GetProperty("processId").GetInt32() > 0);
     }
 
+    /// <summary>
+    /// Pins the exact shape of the <c>service status</c> payload.
+    /// The Outlook daemon holds a single shared Application, so there is no per-document
+    /// session concept and no <c>sessionCount</c> field: that was inherited from the
+    /// PowerPoint origin, where one session existed per open presentation.
+    /// </summary>
     [Fact]
-    public async Task ServiceRun_ReportsZeroSessionsInitially()
+    public async Task ServiceStatus_ExposesExpectedFieldsAndNoSessionCount()
     {
         _daemonProcess = StartDaemon();
         await WaitForDaemonReadyAsync();
@@ -68,7 +74,11 @@ public sealed class CliDaemonTests : IAsyncLifetime
         _output.WriteLine($"Status response: {result.Stdout}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal(0, json.RootElement.GetProperty("sessionCount").GetInt32());
+
+        var root = json.RootElement;
+        Assert.True(root.TryGetProperty("startTime", out _));
+        Assert.True(root.TryGetProperty("uptime", out _));
+        Assert.False(root.TryGetProperty("sessionCount", out _));
     }
 
     [Fact]

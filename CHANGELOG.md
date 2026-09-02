@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The CLI no longer silently ignores unknown options** (#81). `Spectre.Console.Cli` defaults to
+  non-strict parsing, which collects unrecognised options into the remaining-arguments bag instead of
+  rejecting them, and `Program.cs` never opted out. A typo therefore produced a confidently wrong
+  answer rather than an error: `outlookcli mail list --folder inbox --limit 3` (the real option is
+  `--max-count`) returned 25 messages with `"success": true` and exit code 0. That is a direct
+  violation of the project's own rule that `success` must match reality, and it is worst for the
+  primary consumer - an LLM guessing a plausible flag name is given no signal that it guessed wrong.
+  Strict parsing is now enabled, so unknown options fail the command. Parse and runtime failures also
+  report as `Command error:` with a `--help` hint instead of `Unhandled error:`, which read like a
+  crash for what is usually a typo. Found by running the CLI against a live classic Outlook mailbox.
+- **`service status` contract test no longer asserts a field that does not exist.**
+  `ServiceRun_ReportsZeroSessionsInitially` asserted a `sessionCount` property inherited from the
+  PowerPoint origin, where one session existed per open presentation. The Outlook daemon holds a
+  single shared `Application` and has no session concept, so the assertion threw
+  `KeyNotFoundException` on every run. Replaced with a test that pins the payload's real shape and
+  guards against the stale field returning.
+- **The `((dynamic))` cast pre-commit gate was silently not running** (#82). Three defects combined
+  so that `pre-commit.ps1` printed `All pre-commit checks passed!` without the check having verified
+  anything. First, `scripts/check-dynamic-casts.ps1` is UTF-8 without a BOM and contained em dashes;
+  Windows PowerShell 5.1 decodes a BOM-less file using the ANSI code page, mangling those bytes so
+  the file no longer parses - and `powershell.exe` is what a git hook invokes by default, so the gate
+  had never run for anyone using it. Second, `pre-commit.ps1` caught the resulting error, printed
+  `Continuing...`, and still reported overall success; the COM leak check had the same swallow. Both
+  now exit non-zero, because a check that cannot run has not passed. Third, the scan used
+  `Get-Content` unwrapped, which returns a bare string for a single-line file, and indexing a string
+  yields characters - so a single-line `.cs` file was never scanned. All three are fixed and the gate
+  is verified to detect an undocumented cast and to accept a documented one under both shells.
 - **A timed-out Outlook operation no longer runs after its caller gave up** (#19). Work items were
   queued onto the shared STA dispatcher and executed unconditionally when the thread became free, even
   if the caller had already thrown `TimeoutException` minutes earlier. Outlook operations are not all

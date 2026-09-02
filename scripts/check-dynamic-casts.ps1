@@ -9,9 +9,9 @@
     that weren't investigated.
 
     Valid comment prefixes (on the line immediately before the cast):
-      // PIA gap: ...    — Type not in v16 Microsoft.Office.Interop.Outlook PIA
-      // TODO: ...       — Type IS in PIA but migration not yet done (tracked for removal)
-      // Reason: ...     — Other documented reason for dynamic cast
+      // PIA gap: ...    - Type not in v16 Microsoft.Office.Interop.Outlook PIA
+      // TODO: ...       - Type IS in PIA but migration not yet done (tracked for removal)
+      // Reason: ...     - Other documented reason for dynamic cast
 
     False positives are excluded:
       - Lines inside comments
@@ -52,7 +52,9 @@ foreach ($dir in $searchDirs) {
         }
 
         $checkedFiles++
-        $lines = Get-Content $file.FullName
+        # Wrap in @() - Get-Content returns a bare string for a single-line file, and
+        # indexing a string yields characters, so such a file would silently never be scanned.
+        $lines = @(Get-Content $file.FullName)
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $line = $lines[$i]
 
@@ -104,7 +106,7 @@ Write-Host "UNDOCUMENTED ((dynamic)) CASTS FOUND: $($violations.Count)" -Foregro
 Write-Host ""
 Write-Host "Every ((dynamic)) cast must have a comment on the preceding line explaining why:" -ForegroundColor Yellow
 Write-Host "  // PIA gap: <type> not in Microsoft.Office.Interop.Outlook v16 PIA because..." -ForegroundColor Gray
-Write-Host "  // TODO: <type> IS in PIA, migration tracked — left as dynamic temporarily" -ForegroundColor Gray
+Write-Host "  // TODO: <type> IS in PIA, migration tracked - left as dynamic temporarily" -ForegroundColor Gray
 Write-Host "  // Reason: <explanation>" -ForegroundColor Gray
 Write-Host ""
 

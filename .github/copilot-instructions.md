@@ -1,191 +1,205 @@
 # GitHub Copilot Instructions - OutlookMcp
 
-> **🎯 Optimized for AI Coding Agents** - Modular, path-specific instructions
+> Modular, path-specific instructions for AI coding agents working in this repository.
 
-## 📋 Critical Files (Read These First)
+## Critical files (read these first)
 
-**ALWAYS read when working on code:**
-- [CRITICAL-RULES.md](instructions/critical-rules.instructions.md) - 27 mandatory rules (Success flag, COM cleanup, tests, etc.)
-- [Architecture Patterns](instructions/architecture-patterns.instructions.md) - Batch API, command pattern, resource management
+**Always read when working on code:**
+- [Critical Rules](instructions/critical-rules.instructions.md) - the mandatory rules (Success flag, COM cleanup, tests, PR process)
+- [Architecture Patterns](instructions/architecture-patterns.instructions.md) - dispatcher execution model, command pattern, resource management
 
 **Read based on task type:**
-- Adding/fixing commands → [PowerPoint COM Interop](instructions/ppt-com-interop.instructions.md)
-- Writing tests → [Testing Strategy](instructions/testing-strategy.instructions.md)
-- MCP Server work → [MCP Server Guide](instructions/mcp-server-guide.instructions.md)
-- Creating PR → [Development Workflow](instructions/development-workflow.instructions.md)
-- Fixing bugs → [Bug Fixing Checklist](instructions/bug-fixing-checklist.instructions.md)
+- Adding or fixing commands -> [Outlook COM Interop](instructions/outlook-com-interop.instructions.md)
+- Writing tests -> [Testing Strategy](instructions/testing-strategy.instructions.md)
+- MCP Server work -> [MCP Server Guide](instructions/mcp-server-guide.instructions.md)
+- Creating a PR -> [Development Workflow](instructions/development-workflow.instructions.md)
+- Fixing bugs -> [Bug Fixing Checklist](instructions/bug-fixing-checklist.instructions.md)
 
 **Less frequently needed:**
-- [PowerPoint Connection Types](instructions/ppt-com-patterns-guide.instructions.md) - Only for connection-specific work
-- [README Management](instructions/readme-management.instructions.md) - Only when updating READMEs
-- [Documentation Structure](instructions/documentation-structure.instructions.md) - Only when creating docs
+- [README Management](instructions/readme-management.instructions.md) - only when updating READMEs
+- [Documentation Structure](instructions/documentation-structure.instructions.md) - only when creating docs
 
 ---
 
 ## What is OutlookMcp?
 
-**OutlookMcp** is a Windows-only toolset for programmatic PowerPoint automation via COM interop, designed for coding agents and automation scripts.
+**OutlookMcp** is a Windows-only toolset for programmatic **Outlook** automation via COM
+interop, designed for coding agents and automation scripts. It drives the user's already
+running classic Outlook for Windows; it never launches its own instance.
 
-> **⚠️ CRITICAL: OutlookMcp has TWO equal entry points — MCP Server AND CLI.**
-> Both are first-class citizens. Every feature, action, and parameter must work identically through both.
-> When adding/changing features, ALWAYS verify BOTH MCP Server tools AND CLI commands are updated.
-> See Rule 24 (Post-Change Sync) for the full checklist.
+> **OutlookMcp has TWO equal entry points: MCP Server AND CLI.**
+> Both are first-class. Every feature, action and parameter must work identically through both.
+> When adding or changing features, always verify both are updated. See Rule 24.
 
-**Core Layers:**
-1. **ComInterop** (`src/OutlookMcp.ComInterop`) - Reusable COM automation patterns (STA threading, session management, batch operations, OLE message filter)
-2. **Core** (`src/OutlookMcp.Core`) - PowerPoint-specific business logic (slides, shapes, VBA, parameters)
-3. **Service** (`src/OutlookMcp.Service`) - PowerPoint session management and command routing (in-process for MCP Server, named pipe for CLI daemon)
-4. **CLI** (`src/OutlookMcp.CLI`) - Command-line interface for scripting (EQUAL entry point)
-5. **MCP Server** (`src/OutlookMcp.McpServer`) - Model Context Protocol for AI assistants (EQUAL entry point)
+**Core layers:**
+1. **ComInterop** (`src/OutlookMcp.ComInterop`) - `OutlookDispatcher` (the process-wide STA
+   thread that every Outlook call is marshalled onto), the OLE message filter, resilience
+   pipelines, and a retained product-neutral document-session layer that Outlook does not use.
+2. **Core** (`src/OutlookMcp.Core`) - Outlook business logic. `Commands/` contains exactly
+   six directories: `Application`, `Attachment`, `Calendar`, `Folder`, `Mail`, and the
+   `OutlookInterop` helper that hosts `OutlookInteropRunner`.
+3. **Service** (`src/OutlookMcp.Service`) - command routing and registry (in-process for the
+   MCP Server, named pipe for the CLI daemon).
+4. **CLI** (`src/OutlookMcp.CLI`) - `outlookcli`, for scripting. Equal entry point.
+5. **MCP Server** (`src/OutlookMcp.McpServer`) - Model Context Protocol for AI assistants.
+   Equal entry point.
 
-**Source Generators** (`src/OutlookMcp.Generators*`) - Generate CLI commands and MCP tools from Core interfaces
+**Source generators** (`src/OutlookMcp.Generators*`) - generate CLI commands and MCP tools
+from Core interfaces annotated with `[ServiceCategory]` and `[ServiceAction]`. You do not
+hand-write tool or command plumbing; you annotate the Core interface and the surface follows.
 
 ---
 
-## 🎯 Quick Reference
+## Quick reference
 
-### Test Commands
+### Test commands
+
+Integration tests require a real running Outlook and are gated behind a self-hosted runner
+(see #31). Locally, run the non-integration suite plus the targeted trait for what you changed.
+
 ```powershell
-# ⚠️ CRITICAL: Integration tests take 45+ MINUTES for full suite
-# ALWAYS use surgical testing - test only what you changed!
+# Everything that runs without Outlook installed
+dotnet test --filter "Category!=Integration"
 
-# Fast feedback (excludes VBA) - Still takes 10-15 minutes
-dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust"
-
-# Surgical testing - Feature-specific (2-5 minutes per feature)
-dotnet test --filter "Feature=Slide&RunType!=OnDemand"
-dotnet test --filter "Feature=Shape&RunType!=OnDemand"
-dotnet test --filter "Feature=Text&RunType!=OnDemand"
-
-# Session/batch changes (MANDATORY)
-dotnet test --filter "RunType=OnDemand"
+# Targeted by Feature trait
+dotnet test --filter "Feature=OutlookDispatcher"
+dotnet test --filter "Feature=McpProtocol"
+dotnet test --filter "Feature=ServiceDaemon"
 ```
 
-### Code Patterns
+Valid `Feature` trait values today: `ActionEnums`, `ActionValidation`, `Batch`, `CliExitCode`,
+`Configuration`, `DestructiveAnnotations`, `Diag`, `FileLocking`, `McpProtocol`,
+`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`, `PptBatch`,
+`PptSession`, `ServiceDaemon`, `ServiceRegistry`, `SessionManager`, `SkillGeneration`,
+`StreamJsonRpc`, `VersionCheck`. Confirm against the source before relying on any of them.
+
+### Code patterns
+
 ```csharp
-// Core: NEVER wrap batch.Execute() in try-catch that returns error result
-// Let exceptions propagate naturally - batch.Execute() handles them via TaskCompletionSource
-public DataType Method(IPptBatch batch, string arg1)
+// Core: every Outlook operation goes through OutlookInteropRunner.Execute.
+// The runner owns STA marshalling, Application resolution, timeouts and OMG detection.
+[SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+public OutlookFolderListResult ListDefault()
 {
-    return batch.Execute((ctx, ct) => {
-        dynamic? item = null;
-        try {
-            // Operation code here
-            item = ctx.Presentation.SomeObject;
-            // For CRUD: return void (throws on error)
-            // For queries: return actual data
-            return someData;
-        }
-        finally {
-            // ✅ ONLY finally blocks for COM cleanup
-            ComUtilities.Release(ref item!);
-        }
-        // ❌ NO catch blocks that return error results
-    });
-}
-
-
-// CLI: Wrap Core calls
-public int Method(string[] args)
-{
-    try {
-        using var batch = PptSession.BeginBatch(filePath);
-        _coreCommands.Method(batch, arg1);
-        return 0;
-    } catch (Exception ex) {
-        AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message.EscapeMarkup()}");
-        return 1;
-    }
-}
-
-// Tests: Use batch API
-[Fact]
-public void TestMethod()
-{
-    using var batch = PptSession.BeginBatch(_testFile);
-    var result = _commands.Method(batch, args);
-    Assert.NotNull(result); // Or other appropriate assertion
+    return OutlookInteropRunner.Execute(
+        "OutlookFolderListDefault",
+        (application, session) =>
+        {
+            Outlook.MAPIFolder? folder = null;
+            try
+            {
+                folder = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderInbox);
+                return new OutlookFolderListResult { Success = true /* ... */ };
+            }
+            finally
+            {
+                // Only finally blocks for COM cleanup. No catch returning a failure result.
+                OutlookInteropRunner.ReleaseComObject(ref folder);
+            }
+        },
+        ex => new OutlookFolderListResult
+        {
+            Success = false,
+            ErrorMessage = $"Failed to read Outlook default folders: {ex.Message}"
+        });
 }
 ```
 
-### Tool Selection
-- Code changes → `replace_string_in_file` (3-5 lines context)
-- Find code → `grep_search` or `semantic_search`
-- Check errors → `get_errors`
-- Build/test/git → `run_in_terminal`
+The CLI and MCP surfaces for that method are generated. You do not write them.
 
 ---
 
-## 🔄 Key Lessons (Update After Major Work)
+## Key lessons
 
-**Success Flag:** NEVER `Success = true` with `ErrorMessage`. Set Success in try block, always false in catch.
+**Success flag:** never `Success = true` alongside an `ErrorMessage`. Set `Success = true`
+only on the real success path; the `onException` delegate always sets it false.
 
-**Batch API:** Create NEW simple tests. CLI needs try-catch wrapping.
+**No batch API for Outlook.** `PptSession`, `PptBatch`, `PptContext` and `IPptBatch` still
+exist under `src/OutlookMcp.ComInterop/Session/` but no Outlook code path touches them. See
+`docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md` and `src/OutlookMcp.ComInterop/README.md`. Do
+not introduce a batch API into an Outlook command.
 
-**PowerPoint Quirks:** Shape Z-order requires explicit reordering. Slide indices are 1-based. Use `Slides.Item(index)` not zero-based access.
+**Never final-release the shared `Outlook.Application`.** It is the user's single running
+instance and its RCW is shared process-wide. Use `ReleaseSharedComObject` for it and
+`ReleaseComObject` for everything your call navigated to. See #19.
 
-**MCP Design:** Prompts are shortcuts, not tutorials. LLMs know PowerPoint/programming.
+**Outlook quirks:** collections are 1-based. `Items.Restrict` uses the DASL/Jet dialect, not
+SQL. `GetActiveObject` cannot see across integrity levels, so an elevated process cannot
+reach an unelevated Outlook. `EntryId` is only meaningful together with `StoreId`.
 
-**Tool Priority:** `replace_string_in_file` > `grep_search` > `run_in_terminal`. Avoid PowerShell for code.
+**Object Model Guard:** Outlook raises a modal prompt for out-of-process callers touching
+protected members such as `SenderEmailAddress`, `Recipients` and `MailItem.Send()`. It cannot
+be answered programmatically. The runner detects it and reports it distinctly.
 
-**Pre-Commit:** Search TODO/FIXME/HACK, delete commented code, verify tests, check docs.
+**MCP design:** prompts are shortcuts, not tutorials. LLMs already know Outlook concepts and
+programming; document what is specific to this server.
 
-**PR Review:** Check automated comments immediately (Copilot, GitHub Security). Fix before human review.
+**Pre-commit:** search for TODO/FIXME/HACK, delete commented-out code, verify tests, check docs.
 
-**Surgical Testing:** Integration tests take 45+ minutes. ALWAYS test only the feature you changed using `--filter "Feature=<name>"`.
+**PR review:** check automated review comments (Copilot, GitHub Advanced Security) immediately
+and fix them before requesting human review.
 
-**MCP Parameter Naming:** NEVER use underscores in C# Core interface parameter names. The `McpToolGenerator` calls `StringHelper.ToSnakeCase()` on the C# parameter name to produce the MCP snake_case parameter automatically. Use camelCase in C# that produces the desired snake_case output: `rangeAddress` → `range_address`, `sourceRangeAddress` → `source_range_address`. If the C# name can't produce the desired MCP name via ToSnakeCase, use `[FromString("desiredName")]` attribute instead of underscores in C# names.
+**MCP parameter naming:** never use underscores in C# Core interface parameter names. The
+generator calls `StringHelper.ToSnakeCase()` on the C# name to produce the MCP snake_case
+parameter. Choose a camelCase name that produces the snake_case you want (`entryId` ->
+`entry_id`, `storeId` -> `store_id`). If it cannot, use `[FromString("desiredName")]` rather
+than an underscore in the C# name.
 
 ---
 
-## 📚 How Path-Specific Instructions Work
+## How path-specific instructions work
 
-GitHub Copilot auto-loads instructions based on files you're editing:
+GitHub Copilot auto-loads instructions based on the files you are editing:
 
-- `tests/**/*.cs` → [Testing Strategy](instructions/testing-strategy.instructions.md)
-- `src/OutlookMcp.Core/**/*.cs` → [PowerPoint COM Interop](instructions/ppt-com-interop.instructions.md)
-- `src/OutlookMcp.McpServer/**/*.cs` → [MCP Server Guide](instructions/mcp-server-guide.instructions.md)
-- `.github/workflows/**/*.yml` → [Development Workflow](instructions/development-workflow.instructions.md)
-- `**` (all files) → [CRITICAL-RULES.md](instructions/critical-rules.instructions.md)
-
-Modular approach = relevant context without overload.
+- `**` (all files) -> [Critical Rules](instructions/critical-rules.instructions.md)
+- `src/**/*.cs` -> [Architecture Patterns](instructions/architecture-patterns.instructions.md)
+- `src/OutlookMcp.Core/**/*.cs` -> [Outlook COM Interop](instructions/outlook-com-interop.instructions.md)
+- `src/OutlookMcp.McpServer/**/*.cs` -> [MCP Server Guide](instructions/mcp-server-guide.instructions.md)
+- `tests/**/*.cs` -> [Testing Strategy](instructions/testing-strategy.instructions.md)
+- `.github/workflows/**/*.yml` -> [Development Workflow](instructions/development-workflow.instructions.md)
 
 ---
 
-## 🔒 Pre-Commit Hooks (10 Automated Checks)
+## Pre-commit hooks
 
-Pre-commit runs `scripts/pre-commit.ps1` which blocks commits if any check fails:
+`scripts/pre-commit.ps1` blocks the commit if any check fails:
 
-| # | Check | Script | What It Validates |
+| # | Check | Script | What it validates |
 |---|-------|--------|-------------------|
-| 1 | Branch | (inline) | Never commit to `main` directly (Rule 6) |
-| 2 | COM Leaks | `check-com-leaks.ps1` | All `dynamic` COM objects have `ComUtilities.Release()` in finally |
-| 3 | Coverage | `CoreCommandsCoverageTests` (dotnet test) | Core methods exposed via MCP Server with a matching enum action |
-| 4 | Success Flag | `check-success-flag.ps1` | Rule 0: Never `Success=true` with `ErrorMessage` |
-| 5 | CLI Settings Usage | `check-cli-settings-usage.ps1` | All Settings properties used in args |
-| 6 | CLI Workflow Test | `Test-CliWorkflow.ps1` | E2E CLI workflow smoke test |
-| 7 | MCP Smoke Test | `dotnet test --filter "...SmokeTest..."` | All MCP tools functional |
+| 1 | Branch | (inline) | Never commit to `master` directly (Rule 6) |
+| 2 | COM leaks | `check-com-leaks.ps1` | COM objects are released in `finally` blocks |
+| 3 | Coverage | `CoreCommandsCoverageTests` | Core methods exposed via MCP Server with a matching enum action |
+| 4 | Success flag | `check-success-flag.ps1` | Rule 1: never `Success=true` with `ErrorMessage` |
+| 5 | CLI settings usage | `check-cli-settings-usage.ps1` | All Settings properties are used in args |
+| 6 | CLI workflow test | `Test-CliWorkflow.ps1` | End-to-end CLI smoke test |
+| 7 | MCP smoke test | `dotnet test --filter "...SmokeTest..."` | All MCP tools functional |
 
-**Note (#25):** `audit-core-coverage.ps1`, `check-mcp-core-implementations.ps1`, `check-cli-coverage.ps1`, and `check-cli-action-coverage.ps1` were removed -- they regex-scraped a hand-authored `ToolActions.cs` that predates the move to Roslyn source generators (#5/#11) and no longer exists (actions are generated directly from `[ServiceAction]` attributes), so they either false-greened ("0/0 = 100% coverage") or hard-failed on a missing file. `CoreCommandsCoverageTests` (a reflection-based xUnit test enumerating the live Outlook Core interfaces/generated enums) replaces their role and is wired into both the pre-commit hook and CI (`build-cli.yml`/`build-mcp-server.yml`).
+> **Known issue (#65):** check 6 still drives the PowerPoint CLI surface deleted by #26, so the
+> hook currently fails for everyone who installs it. Do not install the hook until #65 lands.
+
+**Note (#25):** `audit-core-coverage.ps1`, `check-mcp-core-implementations.ps1`,
+`check-cli-coverage.ps1` and `check-cli-action-coverage.ps1` were removed. They regex-scraped a
+hand-authored `ToolActions.cs` that predates the move to Roslyn source generators (#5/#11) and
+no longer exists, so they either false-greened ("0/0 = 100% coverage") or hard-failed on a
+missing file. `CoreCommandsCoverageTests` - a reflection-based xUnit test enumerating the live
+Outlook Core interfaces and generated enums - replaces their role and is wired into both the
+pre-commit hook and CI (`build-cli.yml` / `build-mcp-server.yml`).
 
 **Install hook:**
 ```powershell
-# From repo root
 Copy-Item scripts\pre-commit.ps1 .git\hooks\pre-commit
 ```
 
 ---
 
-## 🧪 LLM Integration Tests (`llm-tests/`)
+## LLM integration tests (`llm-tests/`)
 
-Separate pytest-based project validating LLM behavior using `pytest-aitest`:
+A separate pytest project validating LLM behaviour using `pytest-aitest`:
 
 ```powershell
-# Setup
 cd llm-tests
 uv sync
 
-# Run tests
 uv run pytest -m mcp -v      # MCP Server tests
 uv run pytest -m cli -v      # CLI tests
 uv run pytest -m aitest -v   # All LLM tests
@@ -193,84 +207,79 @@ uv run pytest -m aitest -v   # All LLM tests
 
 **Prerequisites:**
 - Azure OpenAI endpoint: `$env:AZURE_OPENAI_ENDPOINT = "https://<resource>.openai.azure.com/"`
-- Build MCP Server: `dotnet build src\OutlookMcp.McpServer -c Release`
-
-**Structure:**
-- `test_mcp_*.py` - MCP Server workflows
-- `test_cli_*.py` - CLI workflows
-- `Fixtures/` - Shared test inputs (CSV/JSON/M files)
+- Build the MCP Server: `dotnet build src\OutlookMcp.McpServer -c Release`
 
 ---
 
-## 📦 Agent Skills (`skills/`)
+## Agent skills (`skills/`)
 
-Two cross-platform AI assistant skill packages:
-
-| Skill | File | Target | Best For |
+| Skill | File | Target | Best for |
 |-------|------|--------|----------|
-| **outlook-cli** | `skills/outlook-cli/SKILL.md` | CLI Tool | Coding agents (token-efficient, `--help` discoverable) |
+| **outlook-cli** | `skills/outlook-cli/SKILL.md` | CLI tool | Coding agents (token-efficient, `--help` discoverable) |
 | **outlook-mcp** | `skills/outlook-mcp/SKILL.md` | MCP Server | Conversational AI (rich tool schemas) |
 
 **Build skills from source:**
 ```powershell
-dotnet build -c Release  # Generates SKILL.md, copies references, and generates MCP prompts
+dotnet build -c Release  # Generates SKILL.md, copies references, generates MCP prompts
 ```
 
 **Guidance architecture (single source of truth):**
-- `skills/shared/*.md` → auto-copied to skill references AND auto-generated as MCP prompts
+- `skills/shared/*.md` is auto-copied to skill references AND auto-generated as MCP prompts
 - Skill-based clients (VS Code, Cursor) read `skills/outlook-*/references/`
-- MCP-only clients (Claude Desktop) read auto-generated `[McpServerPrompt]` methods
-- NEVER create separate prompt files for content that belongs in `skills/shared/`
+- MCP-only clients (Claude Desktop) read the auto-generated `[McpServerPrompt]` methods
+- Never create separate prompt files for content that belongs in `skills/shared/`
 
 **Install via npx:**
-```bash
+```powershell
 npx skills add trsdn/mcp-server-outlook --skill outlook-cli   # Coding agents
 npx skills add trsdn/mcp-server-outlook --skill outlook-mcp   # Conversational AI
 ```
 
 ---
 
-## 🏗️ Architecture Patterns
+## Architecture patterns
 
-### Command File Structure
+### Command file structure
+
 ```
-Commands/Slide/
-├── ISlideCommands.cs           # Interface (defines contract)
-├── SlideCommands.cs            # Partial class (constructor, DI)
-├── SlideCommands.Lifecycle.cs  # Partial (Create, Delete, Rename...)
-└── SlideCommands.Style.cs      # Partial (formatting operations)
+Commands/Mail/
+  IMailCommands.cs   # Interface with [ServiceCategory] / [ServiceAction] - drives generation
+  MailCommands.cs    # Implementation
 ```
 
-**Rules:**
-- One public class per file
-- File name = class name
-- Partial classes for 15+ methods (split by feature domain)
+Split into partial classes by feature domain once a class grows past roughly 15 methods.
+One public class per file; file name matches class name.
 
-### Exception Propagation (CRITICAL)
+### Exception handling
+
+`OutlookInteropRunner.Execute` takes an `onException` delegate. That is the single place a
+Core command converts an exception into a failed result.
+
 ```csharp
-// ✅ CORRECT: Let batch.Execute() handle exceptions
-return await batch.Execute((ctx, ct) => {
-    var result = DoSomething();
-    return ValueTask.FromResult(result);
-});
-// Exception auto-caught by TaskCompletionSource → OperationResult { Success = false }
+// CORRECT: the runner's onException owns failure mapping
+return OutlookInteropRunner.Execute(
+    "OutlookMailRead",
+    (application, session) => { /* ... */ },
+    ex => new ActiveMailResult { Success = false, ErrorMessage = ex.Message });
 
-// ❌ WRONG: Never suppress with catch returning error result
-catch (Exception ex) { 
-    return new OperationResult { Success = false, ErrorMessage = ex.Message }; 
-}
+// WRONG: a catch inside the action that returns a failure result.
+// It shadows the runner's Object Model Guard classification and loses the real cause.
 ```
 
-### Service Architecture (TWO EQUAL ENTRY POINTS)
+`finally` blocks for COM release are required and are not affected by this rule.
+
+### Service architecture (two equal entry points)
 
 ```
-MCP Server ──► In-process OutlookMcpService ──► Core Commands ──► PowerPoint COM
-CLI ─────────► CLI Daemon (named pipe) ─────► Core Commands ──► PowerPoint COM
+MCP Server --> in-process OutlookMcpService --> Core Commands --> OutlookDispatcher --> Outlook COM
+CLI --------> CLI daemon (named pipe) ------> Core Commands --> OutlookDispatcher --> Outlook COM
 ```
 
-**⚠️ MCP Server and CLI are BOTH first-class entry points.** Each hosts its own OutlookMcpService instance:
-- **MCP Server**: Fully in-process, direct method calls (no pipe)
-- **CLI**: Daemon process with named pipe (`OutlookMcp-cli-{SID}`), sessions persist across CLI invocations
-- **Feature parity**: Every action available in MCP must be available in CLI and vice versa
-- **Parameter parity**: Same parameters, same defaults, same validation
+Both entry points are first-class. Each hosts its own `OutlookMcpService` instance:
+- **MCP Server**: fully in-process, direct method calls, no pipe
+- **CLI**: daemon process behind a named pipe (`OutlookMcp-cli-{SID}`) that persists across
+  CLI invocations
+- **Feature parity**: every action in MCP must exist in the CLI and vice versa
+- **Parameter parity**: same parameters, same defaults, same validation
 
+Both funnel into the same single process-wide `OutlookDispatcher` STA thread.

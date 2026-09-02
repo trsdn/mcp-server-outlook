@@ -46,22 +46,22 @@ applyTo: "**"
 
 **Forbidden in commits/PRs/issues:**
 - Customer project names (e.g., "CP Toolkit", "Contoso Deal")
-- Specific file paths from customer projects (e.g., "MSX Plan.pptx", "Milestone_Export")
+- Specific file paths or mailbox names from customer environments
 - Internal tool names that reveal customer context
 - Any information that could identify a specific customer engagement
 
 **Allowed:**
-- Generic descriptions ("a slide shape", "a PowerPoint presentation")
+- Generic descriptions ("a mail item", "a shared mailbox")
 - Technical details that don't identify the source ("a column with a hyphen in the name")
 - Error messages and stack traces (sanitized of paths/names)
 
 **Example:**
 ```
 # ❌ WRONG: Reveals confidential project
-Discovered while debugging Milestone_Export query in CP Toolkit's MSX Plan.pptx
+Discovered while debugging the Q4 Migration mailbox for Contoso
 
 # ✅ CORRECT: Generic description
-Discovered while debugging a slide shape that referenced an embedded object
+Discovered while debugging a mail item whose sender address could not be resolved
 ```
 
 **Enforcement:**
@@ -79,7 +79,7 @@ Discovered while debugging a slide shape that referenced an embedded object
 |------|--------|--------------|
 | 0. Test before commit | ALWAYS run tests before committing | Prevents breaking changes |
 | 1. Success flag | NEVER `Success=true` with `ErrorMessage` | Confuses LLMs, causes silent failures |
-| 1b. No exception wrapping | Never catch exceptions in Core commands, let batch.Execute() handle | Prevents double-wrapping, preserves stack context |
+| 1b. No exception wrapping | Never catch in the action lambda; use the runner's onException | Prevents double-wrapping, preserves the runner's error classification |
 | 16. Test scope | Only run tests for code you changed | Saves 10+ minutes per test run |
 | 8. TODO markers | Must resolve before commit | Pre-commit hook blocks |
 | 23. IDE warnings | TRUST them - never dismiss as false positives without verification | Prevents broken code |
@@ -90,8 +90,8 @@ Discovered while debugging a slide shape that referenced an embedded object
 | 29. TDD | Write test FIRST → RED → implement → GREEN | Proves tests catch real bugs |
 | 30. Integration tests | No mocked-COM unit tests; narrow pure-logic exception only | Unit tests prove nothing for COM interop |
 | 22. COM cleanup | ALWAYS use try-finally, NEVER swallow exceptions | Prevents leaks and silent failures |
-| 7. COM API | Use PowerPoint COM first, validate docs | Prevents wrong dependencies |
-| 9. GitHub search | Search OTHER repos for VBA/COM examples FIRST | Learn from working code |
+| 7. COM API | Use Outlook COM first, validate docs | Prevents wrong dependencies |
+| 9. GitHub search | Search OTHER repos for Outlook VBA/COM examples FIRST | Learn from working code |
 | 2. NotImplementedException | Never use, full implementation only | No placeholders allowed |
 | 15. Enum mappings | All enum values mapped in ToActionString() | Runtime errors otherwise |
 | 17. MCP error checks | Always return JSON, check result.Success | MCP protocol requirement |
@@ -139,7 +139,7 @@ Discovered while debugging a slide shape that referenced an embedded object
 ```csharp
 // ❌ CRITICAL BUG: Confuses LLMs and users
 result.Success = true;
-result.ErrorMessage = "Shape added but failed to format...";
+result.ErrorMessage = "Draft created but recipients could not be resolved...";
 
 // ✅ CORRECT: Success only when NO errors
 if (!loadResult.Success) {
@@ -188,102 +188,103 @@ try {
 - Search pattern: `Success.*true.*ErrorMessage`
 
 **Examples of bugs found:**
-- 43 violations across Slide, Shape, Text, VBA, Chart, Animation commands
+- 43 violations were found and fixed across the Core command surface
 - All followed pattern: `Success = true` at start, `ErrorMessage` set in catch without `Success = false`
 
 ---
 
 ## Rule 1b: Never Suppress Exceptions with Try-Catch (CRITICAL)
 
-**Core Commands: NEVER wrap operations in try-catch blocks that return error results. Let exceptions propagate naturally.**
+**Core Commands: NEVER add a catch inside the action lambda that returns an error result. Let exceptions reach the runner's `onException` delegate.**
 
 ```csharp
-// ❌ CRITICAL BUG: Suppressing exceptions with error result
-public async Task<OperationResult> CreateAsync(IPptBatch batch, string name)
+// CRITICAL BUG: suppressing the exception with a local error result
+public OperationResult CreateDraft(string subject)
 {
-    try
-    {
-        return await batch.Execute((ctx, ct) => {
-            var slide = ctx.Presentation.Slides.Add(1, 1);
-            slide.Name = name;
-            return ValueTask.FromResult(new OperationResult { Success = true });
-        });
-    }
-    catch (Exception ex)
-    {
-        // ❌ WRONG: Suppresses exception with error result
-        return new OperationResult 
-        { 
-            Success = false, 
-            ErrorMessage = ex.Message 
-        };
-    }
-}
-
-// ✅ CORRECT: Let exception propagate to batch.Execute()
-public async Task<OperationResult> CreateAsync(IPptBatch batch, string name)
-{
-    return await batch.Execute((ctx, ct) => {
-        var slide = ctx.Presentation.Slides.Add(1, 1);
-        slide.Name = name;
-        return ValueTask.FromResult(new OperationResult { Success = true });
-    });
-    // batch.Execute() catches via TaskCompletionSource → returns OperationResult { Success = false }
-}
-
-// ✅ CORRECT: Finally blocks are allowed for COM resource cleanup
-public async Task<OperationResult> ComplexAsync(IPptBatch batch, dynamic item)
-{
-    dynamic? temp = null;
-    try
-    {
-        return await batch.Execute((ctx, ct) => {
-            temp = CreateItem(item);
-            // ... operation ...
-            return ValueTask.FromResult(new OperationResult { Success = true });
-        });
-    }
-    finally
-    {
-        if (temp != null)
+    return OutlookInteropRunner.Execute(
+        "OutlookMailCreateDraft",
+        (application, session) =>
         {
-            ComUtilities.Release(ref temp!);  // ✅ Finally for cleanup, not error handling
-        }
-    }
+            try
+            {
+                Outlook.MailItem mail = (Outlook.MailItem)application.CreateItem(
+                    Outlook.OlItemType.olMailItem);
+                mail.Subject = subject;
+                mail.Save();
+                return new OperationResult { Success = true };
+            }
+            catch (Exception ex)
+            {
+                // WRONG: replaces the runner's classified error with a generic one
+                return new OperationResult { Success = false, ErrorMessage = ex.Message };
+            }
+        },
+        ex => new OperationResult { Success = false, ErrorMessage = ex.Message });
+}
+
+// CORRECT: let it propagate to onException
+public OperationResult CreateDraft(string subject)
+{
+    return OutlookInteropRunner.Execute(
+        "OutlookMailCreateDraft",
+        (application, session) =>
+        {
+            Outlook.MailItem? mail = null;
+            try
+            {
+                mail = (Outlook.MailItem)application.CreateItem(Outlook.OlItemType.olMailItem);
+                mail.Subject = subject;
+                mail.Save();
+                return new OperationResult { Success = true };
+            }
+            finally
+            {
+                // Finally for cleanup, not catch for error handling
+                OutlookInteropRunner.ReleaseComObject(ref mail);
+            }
+        },
+        ex => new OperationResult
+        {
+            Success = false,
+            ErrorMessage = $"Failed to create the draft: {ex.Message}"
+        });
 }
 ```
 
 **Why Critical:**
-- `batch.Execute()` ALREADY catches exceptions via `TaskCompletionSource`
-- Inner try-catch (method level) causes **double-wrapping** - loses stack context
-- Exceptions become `OperationResult { Success = false, ErrorMessage }` from batch layer (correct layer)
-- Finally blocks are CORRECT for resource cleanup, NOT catch blocks for error suppression
-- Pattern removed from 200+ methods across all command layers in Nov 2025
+- `OutlookInteropRunner.Execute` already classifies COM failures, Object Model Guard denials,
+  "Outlook not running", and elevation mismatches into actionable messages
+- A local catch replaces those messages with a generic one and originates from the wrong layer
+- `onException` is the single, predictable place a failure becomes a result
+- Finally blocks are CORRECT for resource cleanup; catch blocks are not for error suppression
 
 **Safe Patterns (Keep these):**
-- ✅ Loop continuations: `catch { continue; }`
-- ✅ Optional property access: `catch { propValue = null; }`
-- ✅ Specific error routing: `catch (COMException ex) when (ex.HResult == code) { handle... }`
-- ✅ Finally blocks: Resource cleanup for COM objects
+- Loop continuations: `catch { continue; }` when one inaccessible item should not fail a listing
+- Optional property access: `catch { propValue = null; }` where absence is meaningful and handled
+- Specific error routing: `catch (COMException ex) when (ex.HResult == code) { handle... }`
+- Finally blocks: resource cleanup for COM objects
 
 **Pattern to Remove:**
-- ❌ `catch (Exception ex) { return new Result { Success = false, ErrorMessage = ex.Message }; }`
+- `catch (Exception ex) { return new Result { Success = false, ErrorMessage = ex.Message }; }`
+  inside the action lambda
 
 **Architecture Foundation:**
 ```
-Core Command Method (NO try-catch wrapping)
-  └─> await batch.Execute()
-      └─> TaskCompletionSource catches exceptions
-          └─> Returns OperationResult { Success = false, ErrorMessage }
+Core Command Method
+  --> OutlookInteropRunner.Execute(operationName, action, onException)
+      --> OutlookDispatcher.Shared marshals onto the STA thread
+          --> action throws
+              --> runner classifies (COM / OMG / not-running / elevation)
+                  --> onException returns Result { Success = false, ErrorMessage }
 ```
 
-**See:** architecture-patterns.instructions.md for complete exception propagation pattern and examples.
+**See:** architecture-patterns.instructions.md for the complete exception propagation pattern.
 
 ---
 
 ## Rule 2: No NotImplementedException
 
-**Every feature must be fully implemented with real PowerPoint COM operations and passing tests. No placeholders.**
+**Every feature must be fully implemented with real Outlook COM operations and passing tests. No placeholders.**
 
 ---
 
@@ -303,9 +304,9 @@ Core Command Method (NO try-catch wrapping)
 
 **Before commit: `& "scripts\check-com-leaks.ps1"` must report 0 leaks.**
 
-All `dynamic` COM objects must be released in `finally` blocks using `ComUtilities.Release(ref obj!)`.
+All COM objects must be released in `finally` blocks using `OutlookInteropRunner.ReleaseComObject(ref obj)`. Never final-release the shared `Outlook.Application`: use `ReleaseSharedComObject` for it (see #19).
 
-Exception: Session management files (PptBatch.cs, PptSession.cs).
+Exception: session management files in `src/OutlookMcp.ComInterop/Session/`.
 
 ---
 
@@ -328,9 +329,9 @@ git commit -m "your message"                 # Commit to feature branch
 
 ## Rule 7: COM API First
 
-**Use PowerPoint COM API for everything it supports. Only use external libraries (TOM) for features PowerPoint COM doesn't provide.**
+**Use the Outlook COM API for everything it supports. Only reach for an external library for something Outlook COM genuinely cannot do.**
 
-Validate against [Microsoft docs](https://learn.microsoft.com/office/vba/api/overview/powerpoint) before adding dependencies.
+Validate against [the Outlook VBA reference](https://learn.microsoft.com/office/vba/api/overview/outlook) before adding dependencies.
 
 ---
 
@@ -344,21 +345,21 @@ Delete commented-out code (use git history). Exception: Documentation files only
 
 ## Rule 9: Search External GitHub Repositories for Working Examples First
 
-**BEFORE creating new PowerPoint COM Interop code or troubleshooting COM issues:**
+**BEFORE creating new Outlook COM Interop code or troubleshooting COM issues:**
 
 - **ALWAYS** search OTHER open source GitHub repositories for working examples
 - **NEVER** search your own repository - only search external projects
 - **NetOffice is THE BEST source for ALL COM Interop work**: https://github.com/NetOfficeFw/NetOffice
   - Strongly-typed C# wrappers for ALL Office COM APIs (Excel, Word, PowerPoint, Outlook, etc.)
-  - Search for ANY PowerPoint COM operation: slides, shapes, animations, transitions, text frames, formatting, etc.
+  - Search for ANY Outlook COM operation: MAPIFolder, Items.Restrict, MailItem, AppointmentItem, Attachments, Recipients, etc.
   - Study their patterns for dynamic interop conversion and proper COM object handling
-  - NetOffice source code is essentially a comprehensive reference for every PowerPoint COM API
-- Look for repositories with PowerPoint automation, VBA code, or Office interop projects
-- Search for the specific COM object/method you need (e.g., "Slide AddShape VBA", "Shape TextFrame VBA", "Presentation.Slides NetOffice")
+  - NetOffice source is essentially a comprehensive reference for every Outlook COM API
+- Look for repositories with Outlook automation, VBA code, or Office interop projects
+- Search for the specific COM object/method you need (e.g., "Items.Restrict VBA date", "MailItem.Attachments VBA", "NameSpace.GetDefaultFolder NetOffice")
 - Study proven patterns from other projects before writing new code
 - Avoid reinventing solutions - learn from working implementations in the wild
 
-**Why:** PowerPoint COM is quirky. Real-world VBA examples from other projects prevent common pitfalls (1-based indexing, object cleanup, async issues, variant types, etc.)
+**Why:** Outlook COM is quirky. Real-world VBA examples from other projects prevent common pitfalls (1-based indexing, the DASL/Jet dialect used by `Restrict`, object cleanup, the Object Model Guard, variant types).
 
 ---
 
@@ -387,7 +388,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 - ❌ Production business logic in helper classes that tests use
 
 **Correct Architecture:**
-- ✅ **COM utilities** → `ComInterop/ComUtilities.cs` (low-level COM helpers like SafeGetString, ForEach iterators)
+- ✅ **COM utilities** → `src/OutlookMcp.ComInterop/` (low-level COM helpers, dispatcher, message filter)
 - ✅ **Business logic** → Private methods inside production Commands classes
 - ✅ **Test helpers** → Call production commands, never duplicate logic
 - ✅ `InternalsVisibleTo` only for production-to-production (e.g., Core → MCP Server)
@@ -404,10 +405,10 @@ Delete commented-out code (use git history). Exception: Documentation files only
 - ✅ Uses `IClassFixture<TempDirectoryFixture>` (NOT manual IDisposable)
 - ✅ Each test creates unique file via `CoreTestHelper.CreateUniqueTestFile()`
 - ✅ NEVER shares test files between tests
-- ✅ VBA tests use `.pptm` extension (NOT .pptx renamed)
+- ✅ Tests that mutate the mailbox operate on drafts they created, and clean up
 - ✅ Binary assertions only (NO "accept both" patterns)
-- ✅ All required traits present (Category, Speed, Layer, RequiresPowerPoint, Feature)
-- ✅ Batch API pattern used correctly (no ValueTask.FromResult wrapper)
+- ✅ Required traits present (`Category`, `Feature`)
+- ✅ Calls the Core command directly; no mocked COM interfaces
 - ✅ NO duplicate helper methods (use CoreTestHelper)
 
 **Why:** Systematic compliance prevents test pollution, file lock issues, silent failures, and maintenance nightmares. See [testing-strategy.instructions.md](testing-strategy.instructions.md) for complete checklist.
@@ -432,7 +433,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 
 **Why:** Incomplete bug fixes lead to regressions, confusion, and wasted time. Comprehensive fixes prevent future issues.
 
-**Example:** Shape rotation + positioning bug = 1 code file + 13 tests + 5 doc files + detailed PR description = complete fix.
+**Example:** the CLI exit-code bug (#63) = 1 code file + 9 tests + 3 doc files + a detailed PR description = complete fix.
 
 ---
 
@@ -442,7 +443,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 
 **Quick Rules:**
 - ❌ FORBIDDEN: Tests only verifying operation success or in-memory state
-- ✅ REQUIRED: Round-trip tests verifying data persists after presentation close/reopen
+- ✅ REQUIRED: round-trip tests verifying the change is visible on a subsequent read
 - ⚡ REASON: Save is slow (~2-5s). Removing unnecessary saves makes tests 50%+ faster
 
 **See:** [testing-strategy.instructions.md](testing-strategy.instructions.md) for complete Save patterns, when to use, and detailed examples.
@@ -460,9 +461,9 @@ Delete commented-out code (use git history). Exception: Documentation files only
 | 4. Instructions | Update after significant work | 5-10 min |
 | 5. COM leaks | Run `scripts\check-com-leaks.ps1` | 1 min |
 | 6. PRs | Always use PRs, never direct commit | Always |
-| 7. COM API | Use PowerPoint COM first, validate docs | Always |
+| 7. COM API | Use Outlook COM first, validate docs | Always |
 | 8. TODO markers | Must resolve before commit | 1 min |
-| 9. GitHub search | Search OTHER repos for VBA/COM examples FIRST | 1-2 min |
+| 9. GitHub search | Search OTHER repos for Outlook VBA/COM examples FIRST | 1-2 min |
 | 10. Test debugging | Run tests one by one, never all together | Per test |
 | 11. No test refs | Production NEVER references tests | Always |
 | 12. Test compliance | Pass checklist before PR submission | 2-3 min |
@@ -532,12 +533,12 @@ dotnet test --filter "Category=Integration&RunType!=OnDemand"
 **Correct:**
 ```bash
 # ✅ CORRECT: Test only the feature you changed
-dotnet test --filter "Feature=Slide&RunType!=OnDemand"       # Slide changes only
-dotnet test --filter "Feature=Shape&RunType!=OnDemand"      # Shape changes only
-dotnet test --filter "Feature=Text&RunType!=OnDemand"       # Text changes only
+dotnet test --filter "Feature=OutlookDispatcher"   # Dispatcher / COM plumbing changes
+dotnet test --filter "Feature=McpProtocol"         # MCP surface changes
+dotnet test --filter "Feature=CliExitCode"         # CLI behaviour changes
 ```
 
-**Why Critical:** Integration tests require PowerPoint COM automation and are SLOW. Running all tests wastes time and resources.
+**Why Critical:** integration tests require live Outlook COM automation and are slow. They also currently do not run in CI at all (#31), so a local run is the only signal you get.
 
 **Enforcement:**
 - Only run tests for files you modified
@@ -587,10 +588,10 @@ private static async Task<string> SomeAction(...)
 
 **Example - Business Error (return JSON):**
 ```csharp
-// Core returns: { Success = false, ErrorMessage = "Shape 'Title' not found" }
+// Core returns: { Success = false, ErrorMessage = "Folder 'Archive' not found" }
 // MCP Tool: Return this as-is
 return JsonSerializer.Serialize(result, JsonOptions);
-// Client gets: {"success": false, "errorMessage": "Shape 'Title' not found"}
+// Client gets: {"success": false, "errorMessage": "Folder 'Archive' not found"}
 ```
 
 **Example - Validation Error (throw exception):**
@@ -619,24 +620,25 @@ if (string.IsNullOrWhiteSpace(tableName))
    
    // ✅ CORRECT: Clear purpose and use cases
    /// <summary>
-   /// Manage PowerPoint slide lifecycle: create, rename, copy, delete slides.
+   /// Read, list and search mail items in the running Outlook session.
    /// </summary>
    ```
 
 2. **Non-Enum Parameter Values Documented**:
    ```csharp
    // ❌ WRONG: Parameter values not explained
-   /// <summary>Add shape with shapeType parameter</summary>
+   /// <summary>List mail with a folder parameter</summary>
    
    // ✅ CORRECT: Non-enum parameter values explained
    /// <summary>
-   /// Add shape to slide.
-   /// 
-   /// SHAPE TYPES:
-   /// - 'rectangle': Add rectangle shape (DEFAULT)
-   /// - 'oval': Add oval shape
-   /// - 'textbox': Add text box
-   /// - 'line': Add line shape
+   /// List mail items in a folder.
+   ///
+   /// FOLDER ALIASES (non-enum parameter):
+   /// - 'inbox': the default Inbox (DEFAULT)
+   /// - 'drafts': the Drafts folder
+   /// - 'sent': the Sent Items folder
+   /// - 'deleted': the Deleted Items folder
+   /// A full folder path is also accepted.
    /// </summary>
    ```
 
@@ -721,55 +723,57 @@ mcp_github_github_pull_request_read(method="get_review_comments", owner="trsdn",
 **ALWAYS use try-finally for COM object cleanup. NEVER swallow exceptions with empty catch blocks.**
 
 ```csharp
-// ❌ WRONG: Swallows exception, sets fallback value
+// WRONG: swallows the exception and sets a fallback value
 try
 {
-    dynamic slideLayout = slide.CustomLayout;
-    dynamic shapePlaceholder = slideLayout.SlideMaster;
-    name = shapePlaceholder.Name?.ToString() ?? string.Empty;
-    ComUtilities.Release(ref shapePlaceholder!);  // Won't execute if exception occurs!
-    ComUtilities.Release(ref slideLayout!);
+    Outlook.MAPIFolder parent = folder.Parent;
+    Outlook.NameSpace ns = parent.Session;
+    name = ns.CurrentUser.Name;
+    OutlookInteropRunner.ReleaseComObject(ref ns);      // Not reached if anything throws
+    OutlookInteropRunner.ReleaseComObject(ref parent);
 }
 catch
 {
-    name = "(unknown)";  // Swallows exception!
+    name = "(unknown)";  // Swallows the exception, including an OMG security denial
 }
 
-// ✅ CORRECT: Finally ensures cleanup, exceptions propagate
-dynamic? slideLayout = null;
-dynamic? shapePlaceholder = null;
+// CORRECT: finally guarantees cleanup, the exception propagates
+Outlook.MAPIFolder? parent = null;
+Outlook.NameSpace? ns = null;
 try
 {
-    slideLayout = slide.CustomLayout;
-    shapePlaceholder = slideLayout.SlideMaster;
-    name = shapePlaceholder.Name?.ToString() ?? string.Empty;
+    parent = folder.Parent;
+    ns = parent.Session;
+    name = ns.CurrentUser.Name;
 }
 finally
 {
-    if (shapePlaceholder != null) ComUtilities.Release(ref shapePlaceholder!);
-    if (slideLayout != null) ComUtilities.Release(ref slideLayout!);
+    OutlookInteropRunner.ReleaseComObject(ref ns);
+    OutlookInteropRunner.ReleaseComObject(ref parent);
 }
-// Exception propagates naturally, COM objects always released
+// Exception reaches the runner, COM objects are always released
 ```
 
 **Why Critical:**
 - Finally blocks execute **regardless** of exceptions
-- COM objects leak if Release() not reached before exception
-- Swallowing exceptions hides real problems
-- Empty catch blocks are code smell - remove them
-- Let exceptions propagate naturally to batch.Execute()
+- COM objects leak if release is not reached before the exception
+- Swallowing exceptions hides real problems. `"(unknown)"` is indistinguishable from a
+  successful read of a mailbox literally named "(unknown)", and it silently hides Object Model
+  Guard denials, which is exactly the case a caller most needs to know about
+- Empty catch blocks are a code smell - remove them
 
 **Pattern Requirements:**
-1. Declare COM objects as `dynamic?` nullable before try block
+1. Declare COM objects as nullable (`Outlook.MAPIFolder?`) before the try block
 2. Initialize to `null`
-3. Acquire COM objects in try block
-4. Release in finally block with null checks
-5. **NO catch blocks** unless specific exception handling needed
-6. **NEVER** catch just to set fallback values like "(unknown)"
+3. Acquire COM objects inside the try block
+4. Release in the finally block, children before parents
+5. **NO catch blocks** unless a specific exception genuinely needs different handling
+6. **NEVER** catch just to set a fallback value
+7. Use `ReleaseSharedComObject` for the shared `Outlook.Application`, never `ReleaseComObject`
 
 **See Also:**
 - Rule 1b: Exception propagation pattern
-- ppt-com-interop.instructions.md for complete patterns
+- outlook-com-interop.instructions.md for complete patterns
 
 ---
 
@@ -828,51 +832,55 @@ run: |
 
 **Sync Points Checklist:**
 
+The MCP tool, its action enum, the action-to-string mapping and the CLI command are all
+**generated** from the Core interface attributes by `src/OutlookMcp.Generators*`. There is no
+`ToolActions.cs` and no `ActionExtensions.cs`; they were deleted when the generators landed
+(#5/#11). You therefore cannot forget a switch case. What you can forget is everything the
+generator does not produce.
+
 When adding a NEW action to an existing tool:
-| Sync Point | Files to Update |
-|------------|-----------------|
-| 1. Enum | `ToolActions.cs` - Add enum value |
-| 2. Mapping | `ActionExtensions.cs` - Add ToActionString() case |
-| 3. Interface | `I*Commands.cs` - Add interface method |
-| 4. Core | `*Commands.*.cs` - Implement method |
-| 5. MCP Server | `Ppt*Tool.cs` - Add switch case + handler |
-| 6. CLI Daemon | `PptDaemon.cs` - Add switch case |
-| 7. Feature Count | `FEATURES.md` - Update operation count |
-| 8. README Files | All READMEs with operation counts (main, MCP, CLI, mcpb, vscode) |
-| 9. Skills Docs | `skills/shared/ppt_*.md` - Document new action |
+
+| Sync Point | What to update |
+|------------|----------------|
+| 1. Interface | `I*Commands.cs` - add the method **with a `[ServiceAction]` attribute** |
+| 2. Core | `*Commands.cs` - implement via `OutlookInteropRunner.Execute` |
+| 3. Destructive flag | `[ServiceAction("...", Destructive = true)]` for anything that mutates or deletes |
+| 4. XML summary | The `/// <summary>` becomes the MCP tool description. Document preconditions and Object Model Guard exposure. |
+| 5. Build | `dotnet build -c Release` - the tool, enum and CLI command appear |
+| 6. Coverage test | `dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"` |
+| 7. Feature count | `FEATURES.md` - update the operation count |
+| 8. README files | Every README carrying an operation count (main, MCP, CLI, mcpb, vscode) |
+| 9. Skills docs | `skills/shared/*.md` - document the new action. This is the single source of truth for both skill references and the generated MCP prompts. |
+| 10. CHANGELOG | Rule 27 |
 
 **Quick Check Commands:**
 ```powershell
-# Find all files with operation counts
-grep -r "209 operations\|210 operations\|10 ops\|11 ops" --include="*.md"
+# Find every file carrying an operation count, so none is missed
+Get-ChildItem -Recurse -Filter *.md | Select-String -Pattern '\d+ operations|\d+ ops'
 
-# Verify enum/mapping consistency
-# Count enum values vs switch cases in CLI and MCP
+# Confirm what the surface actually is - [ServiceCategory] in Core is the source of truth,
+# NOT the generated files under obj/, which can be stale
+Get-ChildItem src\OutlookMcp.Core\Commands -Recurse -Filter I*.cs |
+    Select-String -Pattern 'ServiceCategory\("([^"]+)"\)'
 ```
 
-**Why Critical:** 
-- MCP tool without CLI = broken parity (agents confused by inconsistent behavior)
-- Outdated READMEs = user confusion about capabilities
+**Why Critical:**
+- Missing `[ServiceAction]` = the action never reaches either entry point
+- Outdated READMEs = users misjudge what the server can do
 - Skills docs out of sync = LLMs give wrong instructions
+- A stale `obj/` will happily show you tools for a product this repository no longer automates
 
 **When to Run This Checklist:**
 - After adding ANY new action to ANY tool
 - After adding ANY new tool
-- After removing/deprecating actions
-- Before EVERY commit that touches tool/action code
+- After removing or deprecating actions
+- Before EVERY commit that touches tool or action code
 
-**Historical Example (Jan 2026):**
-Slide `duplicate` action was added to:
-- ✅ ToolActions.cs enum
-- ✅ ActionExtensions.cs mapping
-- ✅ ISlideCommands.cs interface
-- ✅ SlideCommands.Lifecycle.cs implementation
-- ✅ PptSlideTool.cs MCP handler
-- ❌ PptDaemon.cs CLI handler (MISSED!)
-- ❌ FEATURES.md count (MISSED!)
-- ❌ README files (MISSED!)
-
-Result: Caught during commit review, required additional fixes.
+**Historical Example:**
+A `duplicate` action was added to the interface, the implementation and the MCP handler, but
+its CLI handler, the `FEATURES.md` count and the README counts were all missed. That was under
+the old hand-written routing. The generators removed the first class of miss entirely; items
+7 to 10 above are the ones that still bite, because no compiler checks them.
 
 ---
 
@@ -884,18 +892,18 @@ Result: Caught during commit review, required additional fixes.
 # ❌ WRONG: bash syntax
 ```bash
 dotnet build
-outlookcli sheet list --file "test.pptx"
+outlookcli folder list-default
 ```
 
 # ✅ CORRECT: PowerShell syntax
 ```powershell
 dotnet build
-outlookcli sheet list --file "test.pptx"
+outlookcli folder list-default
 ```
 ```
 
 **Why Critical:**
-- OutlookMcp requires Windows + PowerPoint COM interop
+- OutlookMcp requires Windows + a running classic Outlook for Windows
 - bash syntax confuses Windows users
 - PowerShell is the native Windows shell
 - Syntax highlighting differs between bash/powershell
@@ -970,28 +978,28 @@ Select-String -Path "**/*.md" -Pattern '```bash' -Recurse
 > **If the COM method's parameter name is clear and self-describing in our flat tool schema, use it.
 > If the COM name is opaque or ambiguous without its parent context, keep a more descriptive name.**
 
-**Why:** MCP tool parameters appear in a flat schema — they lose the context of the parent class/method. A name that works when you see `Shape.Rotation` may be opaque when the LLM just sees a `rotation` parameter. Conversely, inventing a name like `rotationAngle` when COM already calls it `Rotation` adds unnecessary indirection.
+**Why:** MCP tool parameters appear in a flat schema — they lose the context of the parent class/method. A name that works when you see `MailItem.Subject` may be opaque when the LLM just sees a `subject` parameter. Conversely, inventing a name like `subjectLine` when COM already calls it `Subject` adds unnecessary indirection.
 
 **Decision Framework:**
 
 | COM API | COM Param | Our Param | Rationale |
 |---------|-----------|-----------|-----------|
 | `Slides.Add(Index, Layout)` | `Index` | `slideIndex` | ✅ Keep descriptive — `index` alone is ambiguous |
-| `Shape.Rotation` | `Rotation` | `rotation` | ✅ `rotation` is self-describing in tool schema |
-| `Shape.Name` | `Name` | `shapeName` | ✅ Keep descriptive — COM's `Name` property is too generic in flat schema |
+| `MailItem.Subject` | `Subject` | `subject` | ✅ `subject` is self-describing in the tool schema |
+| `MAPIFolder.Name` | `Name` | `folderName` | ✅ Keep descriptive — COM's `Name` property is too generic in a flat schema |
 | `TextFrame.Text` | (property) | `text` | ✅ Clear in context |
 | `SlideRange.Item(Index)` | `Index` | `slideIndex` | ✅ Keep descriptive — `index` alone is ambiguous |
 
 **Implementation Pattern:**
 ```csharp
 // ✅ COM name is clear → use it directly
-void SetRotation(IPptBatch batch, string shapeName, float rotation, ...);
+OperationResult SetSubject(string entryId, string subject);
 
 // ✅ COM name works in flat schema → use it
-OperationResult SetText(IPptBatch batch, string shapeName, string text);
+OperationResult SetBody(string entryId, string body);
 
 // ✅ COM name too generic → keep descriptive
-void AddShape(IPptBatch batch, int slideIndex, string shapeName, string shapeType);
+OperationResult Move(string entryId, string folderName, string? storeId = null);
 ```
 
 **When Adding New Parameters:**
@@ -1079,7 +1087,7 @@ public void ProgressAdapter_Maps_Current_To_Progress()
 
 **NEVER write unit tests that mock COM objects, fake contexts, or test adapter mappings in isolation — they prove NOTHING. Write integration tests that exercise real COM automation. A narrow exception for genuinely pure logic is defined below and enumerated in ADR-001.**
 
-**Why Critical:** OutlookMcp is a COM interop project. The bugs that matter — STA threading deadlocks, COM object leaks, OleMessageFilter re-entrancy, type conversion failures (`double` vs `int`), shape persistence — **only manifest when real PowerPoint is running**. A unit test that verifies an adapter maps field A to field B catches zero real bugs. An integration test that opens a presentation, adds a shape, and verifies the result catches ALL of them.
+**Why Critical:** OutlookMcp is a COM interop project. The bugs that matter — STA threading deadlocks, RCW lifetime bugs, `OleMessageFilter` re-entrancy, Object Model Guard denials, type conversion failures — **only manifest when a real Outlook is running**. A unit test that verifies an adapter maps field A to field B catches zero real bugs. An integration test that reads a real folder and verifies the result catches all of them.
 
 ```csharp
 // ❌ WRONG: Unit test that proves nothing
@@ -1095,29 +1103,28 @@ public void Adapter_Maps_Field_A_To_Field_B()
 // ✅ CORRECT: Integration test that catches real bugs
 [Fact]
 [Trait("Category", "Integration")]
-[Trait("Feature", "Slide")]
-public void AddShape_ReportsProgress_DuringExecution()
+[Trait("Feature", "Mail")]
+public void List_Inbox_ReturnsItems_FromRunningOutlook()
 {
-    using var batch = PptSession.BeginBatch(_testFile);
-    var progress = new List<ProgressInfo>();
-    var result = _commands.AddShape(batch, 1, "Rectangle",
-        new Progress<ProgressInfo>(p => progress.Add(p)));
+    var result = _commands.List(folder: "inbox", maxResults: 5);
+
     Assert.True(result.Success);
-    Assert.NotEmpty(progress);  // Real PowerPoint, real shape creation, real progress
+    Assert.Null(result.ErrorMessage);
+    Assert.NotEmpty(result.Items);  // Real Outlook, real store, real marshalling
 }
 ```
 
 **What Counts as Integration:**
-- ✅ Opens a real PowerPoint presentation via COM
-- ✅ Exercises real batch.Execute() on STA thread
+- ✅ Reaches a real running Outlook via COM
+- ✅ Exercises `OutlookInteropRunner.Execute` on the real dispatcher STA thread
 - ✅ Verifies real data flows through the full pipeline
-- ✅ Catches COM threading, type conversion, and persistence bugs
+- ✅ Catches COM threading, RCW lifetime, marshalling and Object Model Guard bugs
 
 **What Does NOT Count:**
-- ❌ Mocking IProgress, IPptBatch, or any COM interface
+- ❌ Mocking `Outlook.Application`, `Outlook.NameSpace`, or any COM interface
 - ❌ Testing adapter/mapper classes in isolation
-- ❌ Verifying AsyncLocal behavior without COM context
-- ❌ Any test that passes without PowerPoint.exe running
+- ❌ Verifying AsyncLocal behaviour without a COM context
+- ❌ Any test of COM behaviour that passes without OUTLOOK.EXE running
 
 **Enforcement:**
 - Code review MUST reject unit tests for COM-dependent features
@@ -1137,7 +1144,7 @@ If a test needs a COM object to mean anything and you are substituting something
 
 `docs/ADR-001-NO-UNIT-TESTS.md` holds the normative list of files currently permitted under this exception. Adding to that list requires updating the ADR in the same PR.
 
-**Historical Lesson:** 10 unit tests were written for the MCP progress feature (McpProgressAdapter mapping, ProgressContext AsyncLocal). All 10 passed. Zero of them would have caught the real bugs: STA thread affinity issues, COM callback re-entrancy during shape operations, or progress notifications not flowing through the generated code pipeline. The unit tests tested the unit tests.
+**Historical Lesson:** 10 unit tests were written for the MCP progress feature (McpProgressAdapter mapping, ProgressContext AsyncLocal). All 10 passed. Zero of them would have caught the real bugs: STA thread affinity issues, COM callback re-entrancy during a live operation, or notifications not flowing through the generated code pipeline. The unit tests tested the unit tests.
 
 **Second lesson (#37):** the rule as originally written said "never", while 16 unit test files sat in the repository. Three of them mocked COM outright — one was named `Release_WithComObject_DoesNotThrow` above a comment conceding no COM object was used. An absolute rule that the codebase visibly contradicts gets ignored wholesale rather than obeyed selectively, which is why the exception is now stated explicitly and its members enumerated.
 

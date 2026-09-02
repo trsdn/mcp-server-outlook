@@ -4,6 +4,19 @@ applyTo: "llm-tests/**"
 
 # LLM Testing Philosophy
 
+> **STATUS (#68): this suite does not currently test anything that exists.**
+>
+> Every scenario in `llm-tests/` targets the PowerPoint surface deleted by #26 - charts,
+> tables, ranges, slides and styling. None of those CLI commands or MCP actions exist any
+> more, and `scripts/Test-LlmRegressionGate.ps1` names six of those dead modules as its
+> canonical gate. #68 tracks the decision to delete the harness or rewrite it for Outlook.
+>
+> The principles below - write prompts as a knowledgeable user would, assert on outcomes
+> rather than on tool call sequences, keep scenarios short - are sound and transferable.
+> The concrete examples are not: they are PowerPoint, and they are retained only so the
+> shape of a scenario is legible until #68 is resolved. Do not copy them as-is, and do not
+> add new PowerPoint scenarios.
+
 > **⚠️ CORE PRINCIPLE: Tests simulate real users. Failures expose product gaps, not test gaps.**
 
 ## What Are LLM Tests?
@@ -115,7 +128,7 @@ which file is open, then use that file path.
 
 ### Natural Language Prompts
 
-Write prompts as a knowledgeable PowerPoint user would. They know PowerPoint concepts but NOT our specific CLI/MCP tool syntax.
+Write prompts as a knowledgeable Outlook user would. They know Outlook concepts (mail, folders, appointments, attachments) but NOT our specific CLI/MCP tool syntax.
 
 ```python
 prompt = f"""

@@ -170,6 +170,107 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
     }
 
     [SkippableFact]
+    public void MailList_WithSubjectContains_FindsSeededDraftWithoutScanningWholeFolder()
+    {
+        // #27: subjectContains is pushed down through Items.Restrict. The seeded draft carries a
+        // GUID subject, so a correct filter returns exactly one item and, crucially, ScannedCount
+        // must stay at that one item rather than climbing to the folder's total -- that difference
+        // is the whole point of the change.
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            string token = draft.Subject!.Split(' ')[^1];
+
+            var commands = new MailCommands();
+            var result = commands.List(folder: "drafts", maxCount: 25, subjectContains: token);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains(result.Messages, message => message.EntryId == draft.EntryId);
+            Assert.Equal(1, result.ReturnedCount);
+            Assert.Equal(1, result.ScannedCount);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailList_WithReceivedWindowAroundItem_StillFindsIt()
+    {
+        // Regression test for a bug that only a live mailbox could expose. Outlook compares
+        // urn:schemas:httpmail:datereceived in UTC. An earlier build emitted the caller's local
+        // wall-clock time as the DASL literal, so on a UTC+02:00 machine Restrict silently dropped
+        // every message in a two-hour band -- and because Restrict runs inside Outlook, the
+        // client-side check never saw those items and the caller got a confident, wrong "no match".
+        //
+        // Centring the window on the item's own ReceivedTime makes this fail in any time zone with
+        // a non-zero offset, rather than only when the test machine happens to be east of UTC.
+        EnsureOutlookAvailable();
+
+        var draft = CreateSmokeDraft();
+
+        try
+        {
+            var commands = new MailCommands();
+
+            var unfiltered = commands.List(folder: "drafts", maxCount: 100);
+            Assert.True(unfiltered.Success, unfiltered.ErrorMessage);
+
+            var seeded = unfiltered.Messages.FirstOrDefault(message => message.EntryId == draft.EntryId);
+            Skip.If(seeded?.ReceivedTime is null, "Seeded draft exposed no ReceivedTime to centre the window on.");
+
+            DateTimeOffset centre = seeded!.ReceivedTime!.Value;
+
+            var result = commands.List(
+                folder: "drafts",
+                maxCount: 100,
+                receivedAfter: centre.AddMinutes(-30).ToString("O"),
+                receivedBefore: centre.AddMinutes(30).ToString("O"));
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains(result.Messages, message => message.EntryId == draft.EntryId);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    [SkippableFact]
+    public void MailList_WithUnmatchableStructuredFilter_SucceedsWithNoMatches()
+    {
+        // A filter that matches nothing must be an empty success, not an error and not a silent
+        // fallback to returning everything.
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var result = commands.List(
+            folder: "drafts",
+            maxCount: 25,
+            subjectContains: $"no-such-subject-{Guid.NewGuid():N}");
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Empty(result.Messages);
+        Assert.Equal(0, result.ReturnedCount);
+    }
+
+    [SkippableFact]
+    public void MailList_WithInvalidReceivedAfter_FailsWithoutTouchingOutlook()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var result = commands.List(folder: "drafts", maxCount: 25, receivedAfter: "not-a-date");
+
+        Assert.False(result.Success);
+        Assert.Contains("receivedAfter", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [SkippableFact]
     public void MailReply_WithExplicitEntryId_WorksHeadlessly()
     {
         // #36: reply must be targetable via entryId/storeId without any Outlook window focused

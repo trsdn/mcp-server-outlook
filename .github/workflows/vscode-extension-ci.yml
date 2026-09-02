@@ -33,7 +33,9 @@ concurrency:
 jobs:
   build:
     name: Install and compile
-    runs-on: ubuntu-latest
+    # windows-latest is required: vscode-extension/package.json declares
+    # "os": ["win32"], so npm ci fails with EBADPLATFORM on Linux runners.
+    runs-on: windows-latest
     timeout-minutes: 15
 
     steps:

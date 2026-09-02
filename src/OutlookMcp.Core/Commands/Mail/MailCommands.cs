@@ -1209,8 +1209,8 @@ public class MailCommands : IMailCommands
             {
                 Outlook.Explorer? explorer = null;
                 Outlook.MAPIFolder? resolvedFolder = null;
-                object? items = null;
-                object? restrictedItems = null;
+                Outlook.Items? items = null;
+                Outlook.Items? restrictedItems = null;
 
                 try
                 {
@@ -1226,7 +1226,7 @@ public class MailCommands : IMailCommands
                     }
 
                     items = resolvedFolder.Items;
-                    int totalItemCount = SafeGetInt(() => ((dynamic)items).Count);
+                    int totalItemCount = SafeGetInt(() => items.Count);
                     TrySortItemsByReceivedTime(items);
 
                     // Push the unreadOnly predicate down to Outlook via Items.Restrict (DASL)
@@ -1234,15 +1234,15 @@ public class MailCommands : IMailCommands
                     // both faster (Restrict returns a pre-filtered rowset) and correct (an unread
                     // message far back in a large folder is still found, since Restrict does not
                     // stop at any client-side scan cap). See #27.
-                    object itemsToScan = items;
+                    Outlook.Items itemsToScan = items;
                     int scanCount = totalItemCount;
                     if (unreadOnly)
                     {
                         try
                         {
-                            restrictedItems = ((dynamic)items).Restrict("[Unread] = true");
+                            restrictedItems = items.Restrict("[Unread] = true");
                             itemsToScan = restrictedItems;
-                            scanCount = SafeGetInt(() => ((dynamic)restrictedItems).Count);
+                            scanCount = SafeGetInt(() => restrictedItems.Count);
                         }
                         catch (COMException)
                         {
@@ -1272,7 +1272,7 @@ public class MailCommands : IMailCommands
 
                         try
                         {
-                            rawItem = ((dynamic)itemsToScan)[index];
+                            rawItem = itemsToScan[index];
                             scanned++;
                             mail = rawItem as Outlook.MailItem;
                             if (mail == null)
@@ -1491,11 +1491,11 @@ public class MailCommands : IMailCommands
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static void TrySortItemsByReceivedTime(object items)
+    private static void TrySortItemsByReceivedTime(Outlook.Items items)
     {
         try
         {
-            ((dynamic)items).Sort("[ReceivedTime]", true);
+            items.Sort("[ReceivedTime]", true);
         }
         catch
         {

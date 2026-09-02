@@ -39,7 +39,7 @@ public class CalendarCommands : ICalendarCommands
             {
                 Outlook.Explorer? explorer = null;
                 Outlook.MAPIFolder? calendarFolder = null;
-                object? items = null;
+                Outlook.Items? items = null;
 
                 try
                 {
@@ -56,7 +56,7 @@ public class CalendarCommands : ICalendarCommands
 
                     items = calendarFolder.Items;
                     TrySortItemsByStart(items);
-                    int totalItemCount = SafeGetInt(() => ((dynamic)items).Count);
+                    int totalItemCount = SafeGetInt(() => items.Count);
                     int scanLimit = rangeStart.HasValue || rangeEnd.HasValue
                         ? totalItemCount
                         : Math.Clamp(boundedMaxCount * 10, 25, 500);
@@ -80,7 +80,7 @@ public class CalendarCommands : ICalendarCommands
 
                         try
                         {
-                            rawItem = ((dynamic)items)[index];
+                            rawItem = items[index];
                             scanned++;
                             appointment = rawItem as Outlook.AppointmentItem;
                             if (appointment == null || !MatchesRange(appointment, rangeStart, rangeEnd))
@@ -699,11 +699,11 @@ public class CalendarCommands : ICalendarCommands
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static void TrySortItemsByStart(object items)
+    private static void TrySortItemsByStart(Outlook.Items items)
     {
         try
         {
-            ((dynamic)items).Sort("[Start]", false);
+            items.Sort("[Start]", false);
         }
         catch
         {

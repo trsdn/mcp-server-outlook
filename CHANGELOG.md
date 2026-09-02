@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`Items` collections are now early-bound instead of `object` + `((dynamic))`** (#74). Six locals in
+  `CalendarCommands`, `FolderCommands` and `MailCommands` were declared `object?` and then late-bound
+  on every use, which cost a DLR call site per `.Count`, per indexer read and per `Sort`/`Restrict`,
+  and gave up compile-time checking on `Outlook.Items` members that have always been in the PIA.
+  They are `Outlook.Items?` now, and 15 of the 16 `((dynamic))` casts are simply gone. The one
+  genuinely late-bound site remains: `CreateFolderItemInfo` reads `MessageClass`, `Subject`,
+  `FullName` and `Name` off an item whose type it could not identify, and the PIA gives those
+  classes no common interface. It is now a single named `dynamic` local carrying the explanation.
+
+### Fixed
+
+- **`scripts/check-dynamic-casts.ps1` no longer fails on `master`** (#74). It reported 16 undocumented
+  casts on every run, so the pre-commit hook could not pass on an unmodified checkout. A gate that is
+  always red trains people to bypass the hook, which is how a real defect gets through. All ten
+  pre-commit checks now pass end to end.
+
 ### Removed
 
 - **Last PowerPoint residue in build and repo config** (#70 follow-up). `dotnet build` no longer

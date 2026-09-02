@@ -51,7 +51,7 @@ public class FolderCommands : IFolderCommands
                 foreach (var entry in DefaultFolders)
                 {
                     Outlook.MAPIFolder? folder = null;
-                    object? items = null;
+                    Outlook.Items? items = null;
 
                     try
                     {
@@ -60,7 +60,7 @@ public class FolderCommands : IFolderCommands
                         if (includeItemCounts)
                         {
                             items = folder.Items;
-                            itemCount = ((dynamic)items).Count;
+                            itemCount = items.Count;
                         }
 
                         result.Folders.Add(new OutlookFolderInfo
@@ -137,7 +137,7 @@ public class FolderCommands : IFolderCommands
                     for (int index = 1; index <= childCount; index++)
                     {
                         Outlook.MAPIFolder? childFolder = null;
-                        object? items = null;
+                        Outlook.Items? items = null;
 
                         try
                         {
@@ -146,7 +146,7 @@ public class FolderCommands : IFolderCommands
                             if (includeItemCounts)
                             {
                                 items = childFolder.Items;
-                                itemCount = ((dynamic)items).Count;
+                                itemCount = items.Count;
                             }
 
                             result.Folders.Add(new OutlookFolderInfo
@@ -213,7 +213,7 @@ public class FolderCommands : IFolderCommands
                 Outlook.Explorer? explorer = null;
                 Outlook.MAPIFolder? resolvedFolder = null;
                 Outlook.Folders? childFolders = null;
-                object? items = null;
+                Outlook.Items? items = null;
 
                 try
                 {
@@ -240,7 +240,7 @@ public class FolderCommands : IFolderCommands
                     if (includeItemCount)
                     {
                         items = resolvedFolder.Items;
-                        itemCount = SafeGetInt(() => ((dynamic)items).Count);
+                        itemCount = SafeGetInt(() => items.Count);
                     }
 
                     return new OutlookFolderResolveResult
@@ -287,7 +287,7 @@ public class FolderCommands : IFolderCommands
             {
                 Outlook.Explorer? explorer = null;
                 Outlook.MAPIFolder? resolvedFolder = null;
-                object? items = null;
+                Outlook.Items? items = null;
 
                 try
                 {
@@ -308,7 +308,7 @@ public class FolderCommands : IFolderCommands
                     }
 
                     items = resolvedFolder.Items;
-                    int totalItemCount = SafeGetInt(() => ((dynamic)items).Count);
+                    int totalItemCount = SafeGetInt(() => items.Count);
                     var result = new OutlookFolderItemListResult
                     {
                         Success = true,
@@ -323,7 +323,7 @@ public class FolderCommands : IFolderCommands
 
                         try
                         {
-                            rawItem = ((dynamic)items)[index];
+                            rawItem = items[index];
                             var info = CreateFolderItemInfo(rawItem, includePreview);
                             if (info != null)
                             {
@@ -450,12 +450,19 @@ public class FolderCommands : IFolderCommands
             };
         }
 
+        // Reason: rawItem is an Outlook item of a type this method could not identify - a PostItem,
+        // JournalItem, DistListItem, or an item from a third-party add-in. The PIA models these as
+        // unrelated COM classes with no common interface exposing MessageClass, Subject, FullName or
+        // Name, so late binding is the only way to read them. SafeGet swallows the resulting
+        // RuntimeBinderException when a given type does not have the member.
+        dynamic untypedItem = rawItem;
+
         return new OutlookFolderItemInfo
         {
             ItemType = SafeGet(() => rawItem.GetType().Name),
-            MessageClass = SafeGet(() => ((dynamic)rawItem).MessageClass),
-            Subject = SafeGet(() => ((dynamic)rawItem).Subject),
-            Name = SafeGet(() => ((dynamic)rawItem).FullName) ?? SafeGet(() => ((dynamic)rawItem).Name)
+            MessageClass = SafeGet(() => (string?)untypedItem.MessageClass),
+            Subject = SafeGet(() => (string?)untypedItem.Subject),
+            Name = SafeGet(() => (string?)untypedItem.FullName) ?? SafeGet(() => (string?)untypedItem.Name)
         };
     }
 

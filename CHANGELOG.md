@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`mail.list` and `mail.search` accept structured filters that Outlook evaluates server-side**
+  (#27). Five new parameters - `fromAddress`, `subjectContains`, `receivedAfter`, `receivedBefore`
+  and `hasAttachment` - are compiled into a DASL `@SQL=` string and pushed down through
+  `Items.Restrict`, joining the `unreadOnly` filter that already worked this way. Previously the only
+  way to find mail by sender or date was to ask for a large listing and filter it client-side, which
+  could not see past the scan cap: in a busy folder a matching message simply never got read, and the
+  caller was told there was none.
+
+  The filter is deliberately built to be over-inclusive rather than exact. `Restrict` runs inside
+  Outlook, so anything it wrongly excludes is unrecoverable and surfaces as a confident "no such mail
+  exists"; anything it wrongly includes is removed by the client-side check that still runs
+  afterwards. Consequently a value containing a DASL `LIKE` wildcard (`%` or `_`) drops that one
+  predicate instead of emitting a filter that would distort the match, and date bounds carry a minute
+  of slack. Embedded single quotes are escaped by doubling. The `Restrict` call falls back to an
+  unfiltered scan if Outlook rejects the filter, and both paths return identical results.
+
+  Verified against classic Outlook 16.0.0.20430 on a live mailbox, including apostrophes, wildcards,
+  filter-injection attempts, and AND-combination. `search`'s free-text `query` is unchanged and still
+  applied client-side, because `Restrict` cannot see message bodies; server-side full-text search is
+  tracked separately as #42.
+
 ### Fixed
 
 - **The CLI no longer silently ignores unknown options** (#81). `Spectre.Console.Cli` defaults to

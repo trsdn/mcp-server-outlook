@@ -9,6 +9,12 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use read-active to inspect the currently selected or opened mail item. "
     + "Use read to inspect an explicit Outlook mail item by entry id/store id or fall back to the active mail item. "
     + "Use list and search to inspect the current folder or a default Outlook folder role such as inbox or drafts. "
+    + "Both accept structured filters that Outlook evaluates itself before any item is read - unreadOnly, fromAddress, "
+    + "subjectContains, receivedAfter, receivedBefore and hasAttachment - which combine with AND. Prefer them over "
+    + "listing a folder and filtering client-side, because they reach matches a plain listing would never scan as far as. "
+    + "Dates are ISO 8601 ('2024-03-07' or '2024-03-07T14:30'); a bare date means local midnight. "
+    + "search's query is a free-text match over subject, sender and a body preview, applied after the structured filters, "
+    + "because Outlook cannot search message bodies server-side; pair it with structured filters in large folders. "
     + "Use create-draft to create and save a new Outlook draft with optional recipients, subject, and body text. "
     + "Use reply, reply-all, and forward to create saved draft responses targeting an explicit mail item by entry id/store id, "
     + "or fall back to the active mail item; works headlessly with no Outlook window focused when entryId is supplied. "
@@ -35,7 +41,12 @@ public interface IMailCommands
         string? folder = null,
         int maxCount = 25,
         bool unreadOnly = false,
-        bool includeBodyPreview = false);
+        bool includeBodyPreview = false,
+        string? fromAddress = null,
+        string? subjectContains = null,
+        string? receivedAfter = null,
+        string? receivedBefore = null,
+        bool? hasAttachment = null);
 
     [ServiceAction("search", Destructive = false)]
     MailListResult Search(
@@ -43,7 +54,12 @@ public interface IMailCommands
         string? folder = null,
         int maxCount = 25,
         bool unreadOnly = false,
-        bool includeBodyPreview = false);
+        bool includeBodyPreview = false,
+        string? fromAddress = null,
+        string? subjectContains = null,
+        string? receivedAfter = null,
+        string? receivedBefore = null,
+        bool? hasAttachment = null);
 
     [ServiceAction("create-draft")]
     MailDraftResult CreateMailDraft(

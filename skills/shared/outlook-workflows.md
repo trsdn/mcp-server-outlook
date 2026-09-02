@@ -15,6 +15,27 @@ same action and parameter names (`outlookcli mail list --folder Inbox`).
 
 Summarise the set for the user before acting on it in bulk. Confirm before anything destructive.
 
+## Narrow a search before you scan
+
+`mail.list` and `mail.search` take structured filters that Outlook evaluates itself, before any item
+reaches this server: `unreadOnly`, `fromAddress`, `subjectContains`, `receivedAfter`,
+`receivedBefore` and `hasAttachment`. Prefer them over asking for a large list and filtering it
+yourself. A structured filter reads only the matching items, so it finds mail that a plain listing
+would never reach in a busy folder.
+
+```
+mail.list(folder: <inbox>, fromAddress: "anna@contoso.com", receivedAfter: "2024-03-01")
+mail.list(folder: <inbox>, subjectContains: "invoice", hasAttachment: true)
+```
+
+Dates are ISO 8601 (`2024-03-07` or `2024-03-07T14:30`). A bare date means local midnight. All the
+filters combine with AND.
+
+`query` is different: it is a free-text match over subject, sender and a preview of the body, and it
+is applied after the structured filters. Outlook cannot search message bodies server-side, so pair
+`query` with structured filters whenever you can, rather than relying on it alone in a large folder.
+
+
 ## Reply to the message the user is looking at
 
 ```

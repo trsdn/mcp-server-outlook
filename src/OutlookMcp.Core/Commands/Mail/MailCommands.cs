@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Core.Models;
@@ -98,14 +99,24 @@ public class MailCommands : IMailCommands
         string? folder = null,
         int maxCount = 25,
         bool unreadOnly = false,
-        bool includeBodyPreview = false)
+        bool includeBodyPreview = false,
+        string? fromAddress = null,
+        string? subjectContains = null,
+        string? receivedAfter = null,
+        string? receivedBefore = null,
+        bool? hasAttachment = null)
         => ExecuteMailList(
             "OutlookMailList",
             folder,
             query: null,
             maxCount,
             unreadOnly,
-            includeBodyPreview);
+            includeBodyPreview,
+            fromAddress,
+            subjectContains,
+            receivedAfter,
+            receivedBefore,
+            hasAttachment);
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailListResult Search(
@@ -113,7 +124,12 @@ public class MailCommands : IMailCommands
         string? folder = null,
         int maxCount = 25,
         bool unreadOnly = false,
-        bool includeBodyPreview = false)
+        bool includeBodyPreview = false,
+        string? fromAddress = null,
+        string? subjectContains = null,
+        string? receivedAfter = null,
+        string? receivedBefore = null,
+        bool? hasAttachment = null)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -130,7 +146,12 @@ public class MailCommands : IMailCommands
             query,
             maxCount,
             unreadOnly,
-            includeBodyPreview);
+            includeBodyPreview,
+            fromAddress,
+            subjectContains,
+            receivedAfter,
+            receivedBefore,
+            hasAttachment);
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -1191,17 +1212,45 @@ public class MailCommands : IMailCommands
         string? query,
         int maxCount,
         bool unreadOnly,
-        bool includeBodyPreview)
+        bool includeBodyPreview,
+        string? fromAddress = null,
+        string? subjectContains = null,
+        string? receivedAfter = null,
+        string? receivedBefore = null,
+        bool? hasAttachment = null)
     {
         int boundedMaxCount = Math.Clamp(maxCount, 1, 100);
         // Safety net only (not a "found" cutoff): protects against pathologically slow scans of
         // huge folders. Previously this doubled as an undocumented hard cap on how far back
         // mail.list/search could ever see -- anything beyond it was silently invisible, which an
         // LLM reads as "no such mail exists" (#27). Restrict() below now does the actual
-        // filtering for unreadOnly at the Outlook/MAPI layer instead of via client-side scanning,
-        // so this cap is only hit for very large folders/queries, and MailListResult.Truncated
-        // makes that explicit instead of silent.
+        // filtering at the Outlook/MAPI layer instead of via client-side scanning, so this cap is
+        // only hit for very large folders/queries, and MailListResult.Truncated makes that
+        // explicit instead of silent.
         const int ScanSafetyLimit = 5000;
+
+        if (!TryParseFilterDate(receivedAfter, nameof(receivedAfter), out DateTimeOffset? parsedAfter, out string? dateError)
+            || !TryParseFilterDate(receivedBefore, nameof(receivedBefore), out DateTimeOffset? parsedBefore, out dateError))
+        {
+            return new MailListResult { Success = false, ErrorMessage = dateError };
+        }
+
+        if (parsedAfter.HasValue && parsedBefore.HasValue && parsedBefore.Value < parsedAfter.Value)
+        {
+            return new MailListResult
+            {
+                Success = false,
+                ErrorMessage = "receivedBefore must be greater than or equal to receivedAfter."
+            };
+        }
+
+        string? restrictFilter = MailRestrictFilter.Build(
+            unreadOnly,
+            fromAddress,
+            subjectContains,
+            parsedAfter,
+            parsedBefore,
+            hasAttachment);
 
         return OutlookInteropRunner.Execute(
             operationName,
@@ -1229,25 +1278,27 @@ public class MailCommands : IMailCommands
                     int totalItemCount = SafeGetInt(() => items.Count);
                     TrySortItemsByReceivedTime(items);
 
-                    // Push the unreadOnly predicate down to Outlook via Items.Restrict (DASL)
-                    // instead of hydrating every item and checking UnRead client-side -- this is
-                    // both faster (Restrict returns a pre-filtered rowset) and correct (an unread
-                    // message far back in a large folder is still found, since Restrict does not
-                    // stop at any client-side scan cap). See #27.
+                    // Push the structured predicates down to Outlook via Items.Restrict (DASL)
+                    // instead of hydrating every item and checking client-side -- this is both
+                    // faster (Restrict returns a pre-filtered rowset) and correct (a match far back
+                    // in a large folder is still found, since Restrict does not stop at any
+                    // client-side scan cap). See #27.
                     Outlook.Items itemsToScan = items;
                     int scanCount = totalItemCount;
-                    if (unreadOnly)
+                    if (restrictFilter != null)
                     {
                         try
                         {
-                            restrictedItems = items.Restrict("[Unread] = true");
+                            restrictedItems = items.Restrict(restrictFilter);
                             itemsToScan = restrictedItems;
                             scanCount = SafeGetInt(() => restrictedItems.Count);
                         }
                         catch (COMException)
                         {
-                            // Fall back to the unfiltered folder + client-side UnRead check below
-                            // if Restrict is unavailable for this folder/store type.
+                            // Fall back to the unfiltered folder if Restrict is unavailable for
+                            // this folder/store type. The client-side checks below are applied
+                            // unconditionally, so the result set is identical either way - only
+                            // slower, and bounded by ScanSafetyLimit.
                             itemsToScan = items;
                             scanCount = totalItemCount;
                         }
@@ -1280,9 +1331,12 @@ public class MailCommands : IMailCommands
                                 continue;
                             }
 
-                            // Restrict already filtered on Unread above; this client-side check
-                            // only matters for the fallback path where Restrict was unavailable.
-                            if (unreadOnly && restrictedItems == null && !SafeGetBool(() => mail.UnRead))
+                            // Applied even when Restrict succeeded. The DASL filter is deliberately
+                            // over-inclusive -- it drops any predicate it cannot express exactly
+                            // (see MailRestrictFilter) -- so this is what makes the result exact.
+                            if (!MatchesStructuredFilters(
+                                    mail, unreadOnly, fromAddress, subjectContains,
+                                    parsedAfter, parsedBefore, hasAttachment))
                             {
                                 continue;
                             }
@@ -1502,7 +1556,101 @@ public class MailCommands : IMailCommands
         }
     }
 
+    /// <summary>
+    /// Applies the structured predicates client-side. This runs even when <c>Restrict</c> succeeded:
+    /// the DASL filter is deliberately over-inclusive (it omits any predicate it cannot express
+    /// exactly, such as a value containing a <c>LIKE</c> wildcard), so this is the step that makes
+    /// the result exact. Running it unconditionally also means the Restrict path and the fallback
+    /// path return identical results, differing only in speed.
+    /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool MatchesStructuredFilters(
+        Outlook.MailItem mail,
+        bool unreadOnly,
+        string? fromAddress,
+        string? subjectContains,
+        DateTimeOffset? receivedAfter,
+        DateTimeOffset? receivedBefore,
+        bool? hasAttachment)
+    {
+        if (unreadOnly && !SafeGetBool(() => mail.UnRead))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(subjectContains)
+            && !ContainsIgnoreCase(SafeGet(() => mail.Subject), subjectContains.Trim()))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fromAddress))
+        {
+            string needle = fromAddress.Trim();
+            if (!ContainsIgnoreCase(SafeGet(() => mail.SenderEmailAddress), needle)
+                && !ContainsIgnoreCase(SafeGet(() => mail.SenderName), needle))
+            {
+                return false;
+            }
+        }
+
+        if (hasAttachment.HasValue && SafeGetInt(() => mail.Attachments.Count) > 0 != hasAttachment.Value)
+        {
+            return false;
+        }
+
+        if (receivedAfter.HasValue || receivedBefore.HasValue)
+        {
+            DateTimeOffset? received = SafeGetDateTimeOffset(() => mail.ReceivedTime);
+            if (received == null)
+            {
+                // A message whose ReceivedTime cannot be read (an unsent draft, for instance)
+                // cannot be shown to satisfy a date window, so it is excluded rather than guessed at.
+                return false;
+            }
+
+            if (receivedAfter.HasValue && received.Value < receivedAfter.Value)
+            {
+                return false;
+            }
+
+            if (receivedBefore.HasValue && received.Value > receivedBefore.Value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses a caller-supplied filter date, mirroring the ISO-8601 handling the calendar actions
+    /// already use so that a date means the same thing across the whole tool surface.
+    /// </summary>
+    private static bool TryParseFilterDate(
+        string? value,
+        string parameterName,
+        out DateTimeOffset? parsed,
+        out string? errorMessage)
+    {
+        parsed = null;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out DateTimeOffset result))
+        {
+            errorMessage = $"{parameterName} must be a valid ISO date/time value (for example 2024-03-07 or 2024-03-07T14:30).";
+            return false;
+        }
+
+        parsed = result;
+        return true;
+    }
+
     private static bool MatchesQuery(Outlook.MailItem mail, string? query)
     {
         if (string.IsNullOrWhiteSpace(query))

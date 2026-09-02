@@ -167,6 +167,20 @@ Use the relevant command instead of `mail` for other categories.
 
 Update user-facing docs, skills, and examples if the public command surface changes.
 
+**`skills/outlook-cli/SKILL.md` and `skills/outlook-mcp/SKILL.md` are generated.** A Release build
+regenerates both from `skills/templates/*.sbn` and `skills/shared/*.md`, so editing them directly
+is silently undone the next time anyone runs `dotnet build -c Release`. Edit the template or the
+shared guidance instead:
+
+| To change | Edit |
+| --------- | ---- |
+| Skill structure, headings, transitional notes | `skills\templates\SKILL.cli.sbn`, `skills\templates\SKILL.mcp.sbn` |
+| Behavioural guidance and workflows | `skills\shared\*.md` (also becomes the MCP prompts) |
+| Generated `SKILL.md` files | nothing - they are build output |
+
+After editing, run `dotnet build -c Release` and confirm `git status` is clean apart from the
+regenerated `SKILL.md` files you intended to change.
+
 ## Pull Request Process
 
 ### Before Submitting

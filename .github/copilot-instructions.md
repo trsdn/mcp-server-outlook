@@ -205,6 +205,9 @@ dotnet build -c Release  # Generates SKILL.md, copies references, generates MCP 
 - `skills/shared/*.md` is auto-copied to skill references AND auto-generated as MCP prompts
 - Skill-based clients (VS Code, Cursor) read `skills/outlook-*/references/`
 - MCP-only clients (Claude Desktop) read the auto-generated `[McpServerPrompt]` methods
+- **`skills/outlook-*/SKILL.md` are build output. Never edit them.** They are generated from
+  `skills/templates/SKILL.cli.sbn` and `skills/templates/SKILL.mcp.sbn`; a Release build silently
+  reverts any direct edit. Change the template or `skills/shared/*.md` instead.
 - Never create separate prompt files for content that belongs in `skills/shared/`
 
 **Install via npx:**

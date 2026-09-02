@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI returned exit code 0 when an operation failed** (#63): `outlookcli` printed
+  `{"success": false, "errorMessage": "..."}` on stdout and then exited 0, so every script, CI step,
+  and agent that branched on `$LASTEXITCODE` treated a failed Outlook operation as a success.
+  - ROOT CAUSE: `ServiceCommandBase.ExecuteAsync` checked `response.Success`, which is a
+    *transport*-level flag meaning "the daemon replied and routed the request". The operation's own
+    outcome is carried in the `success` property of the JSON payload inside `response.Result` and was
+    never inspected. Argument-parse and validation errors already returned 1, which is exactly why
+    the gap went unnoticed.
+  - FIX: added `ServiceCommandBase.ResolveExitCode`, which inspects the result payload and returns 1
+    only on an explicit `success: false`. Payloads with no `success` property (bare arrays, ordinary
+    read results), empty payloads, and non-JSON output are still treated as success, because the
+    daemon has already confirmed the call ran and guessing there would turn valid results into
+    spurious errors.
+  - Also fixes a Rule 0 violation on the `--output` path: `WriteOutputToFile` wrote the failure
+    payload into the target file and then announced `{"success": true, "outputPath": ...}` on stdout.
+    A failed operation now surfaces the error and writes no file.
+
 ### Changed
 
 - **Rule 30 / ADR-001 narrowed: the ban is on mocked-COM unit tests, not on all unit tests** (#37):

@@ -6,7 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Legacy PowerPoint command surface deleted** (#26): removed all 33 inherited PowerPoint command
+  domains from `src/OutlookMcp.Core/Commands/` (69 files: `Accessibility`, `Animation`, `Background`,
+  `Chart`, `Comment`, `CustomShow`, `Design`, `DocumentProperty`, `Export`, `File`, `HeaderFooter`,
+  `Hyperlink`, `Image`, `Master`, `Media`, `Notes`, `PageSetup`, `Placeholder`, `PrintOptions`,
+  `Proofing`, `Section`, `Shape`, `ShapeAlign`, `Slide`, `SlideImport`, `Slideshow`, `SlideTable`,
+  `SmartArt`, `Tag`, `Text`, `Transition`, `Vba`, `Window`), leaving only the five Outlook domains
+  (`Application`, `Attachment`, `Calendar`, `Folder`, `Mail`) plus the `OutlookInterop` helper.
+  - **This also fixes the CLI/MCP asymmetry left by #23.** #23 removed the legacy tools from the MCP
+    server only, via an explicit allow-list in `Program.cs`; the CLI still registered all 33 legacy
+    domains because `CliCommandRegistration` is source-generated from *every* `[ServiceCategory]`
+    interface in Core. Deleting the interfaces removes the generated CLI commands automatically, so
+    the CLI project needed no edits. The generated CLI surface is now exactly the five Outlook
+    categories.
+  - Also removed the now-dead `src/OutlookMcp.Core/Data/` design-catalog provider and its three
+    embedded JSON/Markdown resources (unreferenced once the `Design` domain went), and the legacy
+    MCP tool files `PptFileTool.cs`, `PptTools.cs`, and `PptResourceProvider.cs`.
+  - `PptToolsBase.cs` is **kept**: the generated Outlook tools call into it. Its `Ppt*` name is
+    part of the #12 naming debt and is out of scope here.
+  - Per the amended ADR-002 (below), `ComInterop/Session/*` is **retained** as dormant infrastructure.
+- **Legacy tests removed**: `DesignReferenceCatalogTests`, `ReferenceCatalogFixture`,
+  `ShapeHelpersTests`, `PptDesignToolTests`, `PptFileToolTests`, `DesignCommandTests`, and
+  `ParameterValidationTests` (which covered only deleted PowerPoint domains).
+
 ### Changed
+
+- **`CoreCommandsCoverageTests` and `ActionValidatorTests` are now reflection-driven**: both
+  previously hard-coded the list of command domains, and `CoreCommandsCoverageTests` had silently
+  drifted -- it omitted `ICalendarCommands` entirely, along with the `AttachmentAction` and
+  `CalendarAction` mapping tests. They now discover categories from the `[ServiceCategory]`
+  attribute and the generated `_CliCategoryMetadata`, so adding or removing a domain cannot silently
+  drop coverage. Both include a guard assertion so the theories cannot pass vacuously.
+- **CLI and MCP help text no longer advertises deleted commands**: `outlookcli actions` described a
+  session workflow ending in `slide list --session abc`, a command that no longer exists. It now
+  describes the Outlook commands and notes that the session commands drive the retained
+  presentation-session layer and are not required by any Outlook command. The MCP `Program` summary
+  no longer claims to host "inherited legacy presentation tools".
 
 - **ADR-002 amended: `ComInterop/Session/*` is retained, not deleted** (#40, #26): the ADR previously
   stated that `ComInterop/Session/*` (`PptSession`, `PptBatch`, `PptContext`, `SessionManager`,

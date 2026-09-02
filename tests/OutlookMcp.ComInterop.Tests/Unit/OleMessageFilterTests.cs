@@ -69,16 +69,24 @@ public class OleMessageFilterTests
     }
 
     /// <summary>
-    /// REGRESSION TEST for the STA deadlock bug (Feb 2026):
-    /// MessagePending MUST return PENDINGMSG_WAITDEFPROCESS (1), NOT PENDINGMSG_WAITNOPROCESS (2).
+    /// REGRESSION TEST: MessagePending MUST return PENDINGMSG_WAITDEFPROCESS, NOT
+    /// PENDINGMSG_WAITNOPROCESS.
     ///
-    /// Returning 2 (WAITNOPROCESS) blocks ALL inbound COM message processing while an outgoing
-    /// call is in progress. When PowerPoint fires a re-entrant callback (e.g., Calculate, SheetChange)
-    /// during FormatConditions.Add(), the callback is queued but WAITNOPROCESS prevents it from
-    /// being dispatched. PowerPoint waits for the callback → STA thread waits for PowerPoint → deadlock.
+    /// Per the Win32 PENDINGMSG enumeration (objidl.h):
+    ///   PENDINGMSG_CANCELCALL    = 0  cancel the outgoing call
+    ///   PENDINGMSG_WAITNOPROCESS = 1  wait for the return and do NOT dispatch the message
+    ///   PENDINGMSG_WAITDEFPROCESS = 2 wait and dispatch the message
+    /// https://learn.microsoft.com/windows/win32/api/objidl/ne-objidl-pendingmsg
     ///
-    /// Returning 1 (WAITDEFPROCESS) allows COM to process the pending inbound call, letting
-    /// PowerPoint's callback complete so FormatConditions.Add() can return normally.
+    /// Returning WAITNOPROCESS (1) blocks all inbound COM message processing while an outgoing
+    /// call is in progress. If the callee fires a re-entrant callback during that call, the
+    /// callback is queued but never dispatched: the callee waits for the callback, the STA thread
+    /// waits for the callee, and the two deadlock.
+    ///
+    /// Returning WAITDEFPROCESS (2) lets COM dispatch the pending inbound call to
+    /// HandleInComingCall, which decides whether to accept it (SERVERCALL_ISHANDLED during normal
+    /// operations) or reject it with SERVERCALL_RETRYLATER during a long operation so the caller's
+    /// RetryRejectedCall backoff runs.
     /// </summary>
     [Fact]
     public void MessagePending_ReturnValue_MustBe_WaitDefProcess()
@@ -89,8 +97,8 @@ public class OleMessageFilterTests
         //
         // We instantiate the filter and call MessagePending via the interface.
         // Use reflection to access the internal interface implementation.
-        const int PENDINGMSG_WAITDEFPROCESS = 1;
-        const int PENDINGMSG_WAITNOPROCESS = 2;
+        const int PENDINGMSG_WAITNOPROCESS = 1;
+        const int PENDINGMSG_WAITDEFPROCESS = 2;
 
         var returnValue = -1;
         Exception? threadException = null;
@@ -136,9 +144,9 @@ public class OleMessageFilterTests
 
         if (threadException != null) throw new InvalidOperationException($"Thread exception: {threadException.Message}", threadException);
 
-        // REGRESSION: If this returns 2 (WAITNOPROCESS), conditional formatting on cells
-        // with formulas will deadlock because PowerPoint's Calculate/SheetChange callbacks
-        // can't be delivered while the STA thread waits for FormatConditions.Add().
+        // REGRESSION: if this returns WAITNOPROCESS (1), an outgoing call that provokes a
+        // re-entrant inbound callback deadlocks - the callback is queued but never dispatched,
+        // so the callee waits on us while we wait on the callee.
         Assert.NotEqual(PENDINGMSG_WAITNOPROCESS, returnValue);
         Assert.Equal(PENDINGMSG_WAITDEFPROCESS, returnValue);
     }

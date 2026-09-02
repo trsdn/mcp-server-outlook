@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`OleMessageFilterTests.MessagePending_ReturnValue_MustBe_WaitDefProcess` failed on `master`** (#59):
+  - ROOT CAUSE: the **test**, not the implementation. It declared
+    `PENDINGMSG_WAITDEFPROCESS = 1` and `PENDINGMSG_WAITNOPROCESS = 2`. The Win32 `PENDINGMSG`
+    enumeration in `objidl.h` defines the opposite: `CANCELCALL = 0`, `WAITNOPROCESS = 1`,
+    `WAITDEFPROCESS = 2`. `OleMessageFilter.MessagePending` correctly returns 2, which is
+    `WAITDEFPROCESS` - exactly the value the test's own comment said it wanted - and the test then
+    asserted that 2 was the forbidden value.
+  - FIX: corrected the two constants and the surrounding rationale, and cited the Win32 enumeration
+    in the test so the values cannot silently drift again. The filter implementation is unchanged.
 - **Pre-commit branch guard never fired**: `scripts/pre-commit.ps1` blocked commits to a branch
   named `main`, but this repository's default branch is `master`, so the Rule 6 guard silently
   passed on every direct commit to the default branch.

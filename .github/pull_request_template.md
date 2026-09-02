@@ -67,7 +67,7 @@ and are generated from the same interfaces, so a half-finished action ships as b
 - [ ] Every `dynamic` COM object is released in a `finally` block via `ComUtilities.Release(ref obj!)`
 - [ ] No TODO / FIXME / HACK markers, and no commented-out code
 - [ ] Escapes user input with `.EscapeMarkup()` in CLI output
-- [ ] Returns consistent exit codes (note: operation failures currently exit 0, see #63)
+- [ ] Returns consistent exit codes (`0` on success, non-zero when the operation reports `success: false`)
 - [ ] CHANGELOG.md updated under `## [Unreleased]` for any user-visible change
 - [ ] No confidential or personal information in the commits, description, or tests
 

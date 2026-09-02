@@ -6,6 +6,56 @@ using Spectre.Console.Cli;
 namespace OutlookMcp.CLI.Infrastructure;
 
 /// <summary>
+/// Non-generic companion to <see cref="ServiceCommandBase{TSettings}"/> holding logic that does not
+/// depend on the settings type.
+/// </summary>
+internal static class ServiceCommandBase
+{
+    /// <summary>
+    /// Determines the process exit code from a service result payload.
+    /// </summary>
+    /// <remarks>
+    /// The daemon's <c>ServiceResponse.Success</c> only reports that the request was transported and
+    /// routed. The operation's own outcome is carried inside the result JSON, so it has to be
+    /// inspected separately or a failed operation exits 0 (#63).
+    ///
+    /// Only an explicit <c>success: false</c> is treated as a failure. Payloads with no
+    /// <c>success</c> property (bare arrays, plain read results), empty payloads, and non-JSON
+    /// output are all reported as success, because the daemon has already confirmed the call ran and
+    /// guessing here would turn ordinary results into spurious errors.
+    /// </remarks>
+    internal static int ResolveExitCode(string? resultJson)
+    {
+        if (string.IsNullOrWhiteSpace(resultJson))
+        {
+            return 0;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(resultJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return 0;
+            }
+
+            if (!doc.RootElement.TryGetProperty("success", out var success)
+                && !doc.RootElement.TryGetProperty("Success", out success))
+            {
+                return 0;
+            }
+
+            return success.ValueKind == JsonValueKind.False ? 1 : 0;
+        }
+        catch (JsonException)
+        {
+            // Not JSON, so there is no operation-level status to honour.
+            return 0;
+        }
+    }
+}
+
+/// <summary>
 /// Base class for CLI commands that send requests to the service.
 /// Handles common validation and execution patterns.
 /// </summary>
@@ -104,13 +154,26 @@ internal abstract class ServiceCommandBase<TSettings> : AsyncCommand<TSettings>
                 ? response.Result
                 : JsonSerializer.Serialize(new { success = true }, ServiceProtocol.JsonOptions);
 
+            var operationExitCode = ServiceCommandBase.ResolveExitCode(result);
+
             if (!string.IsNullOrEmpty(outputPath))
             {
+                if (operationExitCode != 0)
+                {
+                    // Do not write a file and then announce {"success": true, "outputPath": ...} for
+                    // an operation that failed (Rule 0). Surface the failure instead.
+                    Console.WriteLine(result);
+                    return operationExitCode;
+                }
+
                 return WriteOutputToFile(result, outputPath);
             }
 
             Console.WriteLine(result);
-            return 0;
+
+            // response.Success only means the daemon replied. The operation's own outcome lives in
+            // the payload and must be honoured, or a failed operation exits 0 (#63).
+            return operationExitCode;
         }
         else
         {

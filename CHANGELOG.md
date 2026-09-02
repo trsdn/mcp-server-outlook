@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **`Microsoft.Office.Interop.PowerPoint` dropped from `OutlookMcp.Core`**: after #26 deleted the
+  33 inherited PowerPoint command domains, nothing in Core referenced a PowerPoint type. The
+  reference is gone; `Microsoft.Office.Interop.Outlook` remains. The `OutlookMcp.ComInterop`
+  reference is deliberately **kept**, because the session layer ADR-002 retains
+  (`PptSession`/`PptBatch`/`PptContext`) genuinely uses it, so the package stays in
+  `dependency-review.yml`'s allow-list.
 ### Fixed
 
 - **`OleMessageFilterTests.MessagePending_ReturnValue_MustBe_WaitDefProcess` failed on `master`** (#59):

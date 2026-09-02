@@ -1,7 +1,8 @@
 # ADR-002: Outlook COM Execution Model — Purpose-Built Dispatcher, Not `PptBatch` Reuse
 
-**Status**: Accepted
+**Status**: Accepted (partially implemented — see [Implementation Status](#implementation-status))
 **Date**: 2026-09-01
+**Last Updated**: 2026-09-02
 **Decision Makers**: Architecture Team
 **Stakeholders**: Development Team, Code Reviewers, Contributors
 **Related**: #40 (this decision), #12 (epic), #20 (implementation), #19, #29
@@ -81,10 +82,11 @@ Specifically:
 3. **Work items are entryId/storeId-addressed, not path-addressed.** Every dispatched operation
    takes whatever identifiers it needs (`entryId`, `storeId`, folder name, etc.) as parameters;
    there is no notion of a session "opening" an item the way `PptBatch` opens a presentation.
-4. **Timeouts cancel or quarantine the in-flight operation rather than abandoning the STA
-   thread**, addressing the failure mode in #19 where an abandoned thread could still reach its
+4. **Timeouts should cancel or quarantine the in-flight operation rather than abandoning the STA
+   thread**, addressing the failure mode in #19 where an abandoned operation could still reach its
    `finally` block and mutate shared COM state after the caller had already moved on. This
    feeds directly into #29's at-most-once requirement for `mail.send`.
+   **⚠️ Decided but not yet implemented — see [Implementation Status](#implementation-status).**
 5. **Resilience (retry/backoff) is adopted selectively, not wholesale.** `ResiliencePipelines`'
    Polly-based retry policies are reusable as a *library* dependency (they don't assume
    PowerPoint), but the dispatcher does not adopt `PptSession`/`SessionManager`'s multi-session
@@ -124,17 +126,67 @@ Specifically:
 - ✅ One STA context owns the shared `Outlook.Application`; message filter registered once (#20)
 - ✅ Never final-releases the user's `Application` (#19, already fixed in `OutlookInteropRunner`
   ahead of the dispatcher landing, and to be carried into the dispatcher unchanged)
-- ✅ Timeouts cancel/quarantine rather than abandon (feeds #29)
+- ⬜ Timeouts cancel/quarantine rather than abandon (feeds #29) — **not yet implemented**; the
+  dispatcher currently abandons the *wait*, not the *work*. See below.
 - ✅ Multi-step workflows are expressible via `entryId`/`storeId` parameters without requiring a
   file-like session handle to round-trip through the LLM
 - ✅ We do not own Outlook's lifetime: no create-on-demand (the untrusted
   `Activator.CreateInstance` fallback was removed in #30 in favor of failing with guidance), no
   shutdown-on-idle
 
+## Implementation Status
+
+| Decision | Status | Where |
+|---|---|---|
+| 1. Single long-lived STA dispatcher, filter registered once | ✅ Done | `ComInterop/Session/OutlookDispatcher.cs` |
+| 2. Never create/destroy the shared `Application` | ✅ Done | `OutlookInteropRunner.ReleaseSharedComObject` |
+| 3. `entryId`/`storeId`-addressed work items | ✅ Done | `Commands/Mail/*`, `Commands/Folder/*` |
+| 4. Timeout cancels/quarantines in-flight work | ⬜ **Not done** | `OutlookDispatcher.Execute` (#19) |
+| 5. Selective resilience adoption | ⬜ Not started | — |
+
+### Why decision 4 is still open
+
+`OutlookDispatcher.Execute` builds a `CancellationTokenSource(timeout)` and applies it to two
+things: enqueueing the work item, and `tcs.Task.WaitAsync(...)`. When the timeout fires during
+execution, `WaitAsync` throws and the caller receives a `TimeoutException` — but **the queued
+delegate keeps running on the STA thread to completion**, including any `finally` blocks that
+release COM objects or mutate Outlook state. The `TaskCompletionSource` result is simply
+discarded. Cancellation is therefore *observational*, not *effective*.
+
+This is not straightforwardly fixable:
+
+- A blocking cross-apartment COM call cannot be interrupted from another thread. The token is
+  never observed because control is inside `Outlook.MailItem.Send()` (or similar), not in
+  managed code that could poll it.
+- `Thread.Abort` is unsupported on .NET 5+ (`PlatformNotSupportedException`), so the escape
+  hatch that made this tractable on .NET Framework is gone.
+- `OleMessageFilter` can reject/retry *incoming* calls and is the correct lever for the
+  "Outlook is showing a modal dialog" case, but it does not cancel a call we have already made.
+
+Two properties partially mitigate the risk today, and are worth stating explicitly so this is
+not mistaken for the pre-#20 bug:
+
+- **No concurrent mutation.** Because all work is serialized onto one STA thread, an abandoned
+  operation cannot race a subsequent one — the next work item is head-of-line blocked behind it.
+  This is strictly safer than the pre-#20 model, where each call got its own STA thread and
+  abandoned threads genuinely could run concurrently against shared COM state.
+- **Send is already guarded.** `mail.send` reports `Indeterminate = true` on dispatcher timeout
+  rather than `Success = false`, so the one operation with irreversible side effects does not
+  silently claim "not sent" while the abandoned delegate completes the send.
+
+The residual problems are that a timeout **stalls the dispatcher** for as long as the abandoned
+operation runs (every later caller then times out in the queue-wait path), and that side effects
+still land after the caller has given up. A real fix needs a quarantine strategy — e.g. marking
+the dispatcher unhealthy after a timeout, and either retiring the STA thread and rebuilding a
+fresh one for subsequent work, or refusing further work until the stuck operation returns.
+Tracked as the open criterion on #19.
+
 ## Consequences
 
 - `OutlookInteropRunner.Execute`'s per-call STA thread spin-up is replaced by dispatching onto
   the single long-lived dispatcher thread — this is the concrete implementation work for #20.
+  **Implemented**: `OutlookDispatcher.Shared` owns the thread and the message filter;
+  `OutlookInteropRunner.Execute` is now a thin caller.
 - `mail.send` confirmation/idempotency (#29) is implemented as dispatcher-level operation
   tracking (an operation token / at-most-once guard keyed off the dispatched work item), not as
   a `PptBatch`-style batch-scoped concept.
@@ -166,9 +218,11 @@ Specifically:
   candidate for a follow-up issue if per-outcome-typed results (rather than
   message-string-based) become necessary.
 - Follow-up implementation issues for #12 should be opened against this decision, scoped as:
-  (a) introduce `OutlookDispatcher` and migrate `OutlookInteropRunner.Execute` callers onto it,
-  (b) add operation cancellation/quarantine on timeout, (c) wire Guard-outcome modelling (#30)
-  through the dispatcher's return path.
+  (a) introduce `OutlookDispatcher` and migrate `OutlookInteropRunner.Execute` callers onto it
+  (**done**, #20),
+  (b) add operation cancellation/quarantine on timeout (**open**, remaining criterion on #19),
+  (c) wire Guard-outcome modelling (#30) through the dispatcher's return path (**partially done**,
+  see above).
 
 ## Alternatives Considered
 

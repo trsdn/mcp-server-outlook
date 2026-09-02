@@ -1,7 +1,7 @@
 {
   "name": "outlook-mcp-migration",
   "displayName": "Outlook MCP Server (Migration)",
-  "description": "Outlook-first migration target for AI assistants. This extension area is still transitioning from the inherited PowerPoint implementation and will be rebuilt around email, calendar, folder, and attachment workflows.",
+  "description": "Outlook automation for AI assistants. Drives the classic Outlook for Windows desktop app over COM: mail, calendar, folder, and attachment workflows.",
   "version": "1.6.9",
   "publisher": "trsdn",
   "icon": "icon.png",

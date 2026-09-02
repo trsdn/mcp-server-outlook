@@ -216,13 +216,10 @@ System.IO.File.WriteAllText(OutputFile, sb.ToString());
       <SkillsSharedDir>$(MSBuildProjectDirectory)\..\..\skills\shared</SkillsSharedDir>
       <SkillPromptsGenFile>$(IntermediateOutputPath)PptSkillPrompts.g.cs</SkillPromptsGenFile>
     </PropertyGroup>
-    <!-- #23: only generate MCP prompts for Outlook-relevant skill docs. skills/shared/ also holds
-         PowerPoint-only docs (slide-design-*.md, generation-pipeline.md) kept for the legacy
-         eval/ harness and skill-based clients' references/ copies; those must NOT become MCP
-         prompts, since prompts/list should only offer Outlook guidance. -->
+    <!-- skills/shared/ holds only Outlook guidance, so every file here becomes an MCP prompt.
+         The slide-design docs that used to require an allow-list moved to eval/skills/ under #34. -->
     <ItemGroup>
-      <SkillSharedFiles Include="$(SkillsSharedDir)\behavioral-rules.md" />
-      <SkillSharedFiles Include="$(SkillsSharedDir)\outlook_agent_mode.md" />
+      <SkillSharedFiles Include="$(SkillsSharedDir)\*.md" />
     </ItemGroup>
     <!-- Generate the C# class with [McpServerPrompt] methods -->
     <GenerateSkillPromptsClass SkillFiles="@(SkillSharedFiles)" OutputFile="$(SkillPromptsGenFile)" />
@@ -305,11 +302,9 @@ System.IO.File.WriteAllText(OutputFile, sb.ToString());
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Embed only Outlook-relevant skills/shared/*.md as MCP prompts (single source of truth).
-         PowerPoint-only docs (slide-design-*.md, generation-pipeline.md) are intentionally not
-         embedded here; see GenerateSkillPrompts target (#23). -->
-    <EmbeddedResource Include="..\..\skills\shared\behavioral-rules.md" Link="Prompts\Content\Skills\%(Filename)%(Extension)" />
-    <EmbeddedResource Include="..\..\skills\shared\outlook_agent_mode.md" Link="Prompts\Content\Skills\%(Filename)%(Extension)" />
+    <!-- Embed skills/shared/*.md as MCP prompts (single source of truth). The directory now holds
+         only Outlook guidance, so no allow-list is needed; see GenerateSkillPrompts (#34). -->
+    <EmbeddedResource Include="..\..\skills\shared\*.md" Link="Prompts\Content\Skills\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Import the Build.Tasks project to use GenerateSkillFile task -->

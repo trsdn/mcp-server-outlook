@@ -1,62 +1,51 @@
-# OutlookMcp CLI Examples
+# Examples
 
-This directory contains example scripts demonstrating OutlookMcp CLI features.
+## MCP client configuration
 
-## Session Mode Demo
+[`mcp-configs/`](mcp-configs/) holds ready-to-use MCP server configuration snippets for:
 
-The session mode demo shows how to use sessions for high-performance multi-operation workflows.
+- Claude Desktop
+- VS Code
+- Cursor
+- Cline
+- Windsurf
 
-### Requirements
+Copy the relevant file's contents into your client's MCP configuration.
 
-- Windows with PowerPoint installed
-- OutlookMcp installed (`dotnet tool install --global OutlookMcp.McpServer`)
+## Requirements
 
-### Running the Demo
+- Windows
+- The **classic Outlook for Windows desktop app**, installed and running. The new Outlook for
+  Windows has no COM object model and cannot be automated.
 
-**Linux/macOS/WSL:**
-```powershell
-./session-demo.sh
-```
+Run `application.get-status` (or `outlookcli application get-status`) first to confirm your
+environment before anything else.
 
-**Windows PowerShell:**
-```powershell
-.\session-demo.ps1
-```
+## CLI usage
 
-### What the Demo Does
-
-1. Creates a test presentation (`test-session.pptx`)
-2. Opens a session and captures the session ID
-3. Performs multiple operations using the same PowerPoint instance:
-   - Creates 3 slides (Sales, Customers, Products)
-   - Lists slides
-   - Lists Power Queries
-4. Lists active sessions
-5. Closes the session with `--save` (saves all changes)
-6. Verifies changes were saved
-
-### Expected Performance
-
-Session mode is **75-90% faster** than running individual commands because:
-- Only one PowerPoint instance is opened
-- No file open/close overhead between operations
-- All changes committed atomically
-
-### Cleanup
+The CLI exposes the same 5 tools and 30 actions as the MCP server, with the same parameters:
 
 ```powershell
-rm test-session.pptx
+outlookcli application get-status
+outlookcli folder list-default
+outlookcli mail list --folder Inbox
+outlookcli attachment list --entry-id <id>
 ```
 
-Or in PowerShell:
+Use `--help` on any tool or action to see its parameters:
+
 ```powershell
-Remove-Item test-session.pptx
+outlookcli mail --help
+outlookcli mail search --help
 ```
 
-## Use Cases
+See [FEATURES.md](../FEATURES.md) for the full action list.
 
-Session mode is ideal for:
-- **RPA workflows** - Automated report generation
-- **Data pipelines** - ETL operations with multiple steps
-- **Testing** - Setting up test data across multiple sheets
-- **Bulk operations** - Making many changes to a presentation
+## A note on sessions
+
+There is no session or batch concept in the Outlook surface. Outlook is a shared desktop
+application the server attaches to, not a document it opens and closes, so there is nothing to open,
+save, or dispose. Each call acts on the live mailbox immediately.
+
+The dormant `session` plumbing that remains in `ComInterop/Session/*` is legacy infrastructure that
+nothing calls; see [the ComInterop README](../src/OutlookMcp.ComInterop/README.md).

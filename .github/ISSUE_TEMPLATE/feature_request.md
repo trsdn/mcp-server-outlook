@@ -8,14 +8,15 @@ assignees: ''
 ---
 
 ## Is your feature request related to a problem?
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+A clear and concise description of the problem. Ex. I'm always frustrated when [...]
 
 ## Component
 Which component should this feature be added to?
 - [ ] **MCP Server** (AI assistant integration)
-- [ ] **CLI** (Command-line interface)
-- [ ] **Both** (MCP Server and CLI)
-- [ ] **Core Library** (Shared functionality)
+- [ ] **CLI** (`outlookcli`)
+- [ ] **Both** (features must reach both surfaces; they are generated from the same interfaces)
+- [ ] **Core Library** (shared functionality)
+- [ ] **VS Code extension**
 - [ ] **Not sure**
 
 ## Describe the solution you'd like
@@ -24,48 +25,55 @@ A clear and concise description of what you want to happen.
 ## Proposed Syntax
 
 **For CLI:**
-```bash
-OutlookMcp new-command <file.pptx> <parameters>
+```powershell
+outlookcli <tool> <new-action> [options]
 ```
 
 **For MCP Server:**
-- Tool: [e.g., slide, shape, text, vba]
-- Action: [e.g., new-action]
+- Tool: [one of the existing tools: mail, calendar, folder, attachment, application - or propose a new one]
+- Action: [e.g. new-action]
 - Parameters: [describe expected parameters]
 
-## Describe alternatives you've considered
-A clear and concise description of any alternative solutions or features you've considered.
+Note that the MCP and CLI surfaces are source-generated from the same `[ServiceCategory]` interfaces
+in Core, so a new action lands on both automatically. Please do not propose a feature for only one.
 
-## Use Case
-Describe the specific use case this feature would address:
-- [ ] VBA script automation
-- [ ] Slide operations  
-- [ ] Data analysis
-- [ ] Coding agent automation
-- [ ] Macro-enabled presentation (.pptm) operations
+## Describe alternatives you've considered
+Any alternative solutions or features you have considered.
+
+## Outlook Domain
+Which part of Outlook does this touch?
+- [ ] Mail (read, list, search, draft, reply, send, move, flag, categorise)
+- [ ] Calendar (appointments, meetings, attendees)
+- [ ] Folders (navigation, resolution, item listing)
+- [ ] Attachments (list, save, add, remove)
+- [ ] Contacts (**not currently exposed at all**)
+- [ ] Tasks / follow-up (**not currently exposed at all**)
+- [ ] Rules, categories, or account configuration (**not currently exposed at all**)
 - [ ] Other: [please specify]
 
 ## Target Users
-Who would benefit from this feature?
-- [ ] **AI Assistants** (GitHub Copilot, Claude, ChatGPT via MCP Server)
-- [ ] **Direct CLI Users** (Command-line automation)
-- [ ] **CI/CD Pipelines** (Automated PowerPoint development workflows)
-- [ ] **PowerPoint Developers** (VBA development)
-- [ ] **Data Engineers** (ETL workflows)
+Who would benefit?
+- [ ] **AI assistants** (GitHub Copilot, Claude Desktop, via the MCP Server)
+- [ ] **Direct CLI users** (scripted automation)
+- [ ] **Coding agents** (token-efficient CLI surface)
 - [ ] Other: [please specify]
 
-## PowerPoint Operations Involved
-What PowerPoint APIs or operations would this feature likely use?
-- [ ] Slides (Slide operations)
-- [ ] Shapes (Shape operations)
-- [ ] Charts
-- [ ] VBA/Macros (VBProject.VBComponents)
-- [ ] Animations/Transitions
-- [ ] Macro-enabled presentations (.pptm)
-- [ ] Other: [please specify]
+## Safety Considerations
+
+Outlook automation acts on a real mailbox and is often irreversible.
+
+- [ ] This feature can **send** mail
+- [ ] This feature can **delete** items
+- [ ] This feature modifies items the user did not explicitly name
+- [ ] This feature is read-only
+
+If any of the first three are checked, say what confirmation or idempotency the action should have.
+For reference, `mail.send` requires explicit confirmation and is idempotent per operation ID.
 
 ## Additional context
-Add any other context, screenshots, or examples about the feature request here.
+Any other context or examples.
 
 ## Implementation Notes
-If you have ideas about how this could be implemented, please share them here.
+If you have ideas about how this could be implemented, share them here. Note that Outlook COM runs
+through `OutlookDispatcher` on a dedicated STA thread; see
+[ADR-002](../../docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md).

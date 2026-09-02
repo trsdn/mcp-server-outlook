@@ -129,13 +129,13 @@ These same checks run in CI/CD pipelines:
 - `CoreCommandsCoverageTests` (dotnet test) runs **after every build** in:
   - `build-mcp-server.yml` - MCP Server builds
   - `build-cli.yml` - CLI builds  
-  - `integration-tests.yml` - PowerPoint integration runs when `ENABLE_POWERPOINT_INTEGRATION_CI=true`
+  - `integration-tests.yml` - Outlook integration runs when `ENABLE_OUTLOOK_INTEGRATION_CI=true`. It is currently **off**; no Outlook behaviour is verified by CI (#31).
 
 **Pipeline enforcement ensures:**
 - Pre-commit hook provides **instant local feedback**
 - CI/CD provides **safety net** if hook bypassed with `--no-verify`
 - **Double protection** against coverage regression
 
-`integration-tests.yml` is intentionally gated behind a self-hosted PowerPoint runner. See `docs/AZURE_SELFHOSTED_RUNNER_SETUP.md` for activation steps.
+`integration-tests.yml` is gated behind a self-hosted Windows runner with classic Outlook installed. That runner does not exist yet (#31). See `docs/AZURE_SELFHOSTED_RUNNER_SETUP.md` for activation steps.
 
 The pre-commit hook gives you **instant feedback** before pushing to remote.

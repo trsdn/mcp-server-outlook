@@ -1,204 +1,152 @@
 # OutlookMcp Tests
 
-> **⚠️ No Traditional Unit Tests**: OutlookMcp has no unit tests. Integration tests ARE our unit tests because PowerPoint COM cannot be meaningfully mocked. See [`docs/ADR-001-NO-UNIT-TESTS.md`](../docs/ADR-001-NO-UNIT-TESTS.md) for full architectural rationale.
+OutlookMcp is now an Outlook COM automation server. The current product surface is 5 Outlook tools with 30 operations: mail, calendar, folder, attachment, and application.
+
+No Outlook behavior is verified by hosted CI today. Real Outlook integration tests require a self-hosted Windows runner with classic Outlook installed, running, and signed in. That runner does not exist yet.
 
 ## Quick Start
 
 ```powershell
-# Development (fast feedback - excludes VBA tests)
-dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust"
+# Build and run CI-safe tests
+dotnet build --nologo -v q
+dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
 
-# Pre-commit (comprehensive - excludes VBA tests)
-dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust"
+# Run all tests locally only when the machine has the required desktop Office setup
+dotnet test
 
-# Session/batch changes (MANDATORY when modifying session/batch code)
-dotnet test --filter "RunType=OnDemand"
+# Run Outlook smoke tests manually on a Windows desktop with classic Outlook running
+dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
 
-# VBA tests (manual only - requires VBA trust enabled)
-dotnet test --filter "(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand"
+# Run retained dormant session-layer tests only when modifying that legacy infrastructure
+dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch|Feature=PptSession|Feature=SessionManager"
 ```
 
 ## Documentation
 
-**For complete testing guidance, see:**
+For broader test philosophy and repository rules, see:
 
-- **[Testing Strategy](../.github/instructions/testing-strategy.instructions.md)** - Quick reference, templates, common mistakes
-- **[Critical Rules](../.github/instructions/critical-rules.instructions.md)** - Mandatory development rules (Rule 14: SaveAsync)
+- [No Unit Tests ADR](../docs/ADR-001-NO-UNIT-TESTS.md)
+- [Outlook COM Execution Model ADR](../docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md)
+- [Testing Strategy](../.github/instructions/testing-strategy.instructions.md)
+- [Critical Rules](../.github/instructions/critical-rules.instructions.md)
+
+Some instruction files still contain historical PowerPoint guidance while the Outlook migration continues. Follow the current code and this README for the active Outlook surface.
 
 ## Test Architecture
 
-```
-tests/
-├── OutlookMcp.Core.Tests/           # Core business logic (Integration)
-├── OutlookMcp.Diagnostics.Tests/    # PowerPoint COM behavior research (OnDemand, Manual)
-├── OutlookMcp.McpServer.Tests/      # MCP protocol layer (Integration)
-├── OutlookMcp.CLI.Tests/            # CLI wrapper (Integration)
-└── OutlookMcp.ComInterop.Tests/     # COM utilities (OnDemand)
+```text
+tests\
+|-- OutlookMcp.Core.Tests\          # Core result contracts and Outlook smoke tests
+|-- OutlookMcp.McpServer.Tests\     # MCP protocol, tool metadata, and coverage checks
+|-- OutlookMcp.CLI.Tests\           # CLI daemon, batch, diagnostics, and validation tests
+|-- OutlookMcp.ComInterop.Tests\    # Shared COM infrastructure and dormant legacy session layer
+|-- OutlookMcp.Diagnostics.Tests\   # Manual diagnostics, currently empty or historical
+`-- OutlookMcp.SkillGeneration.Tests\ # Skill markdown quality checks
 
-llm-tests/                          # LLM tool behavior validation (Manual)
+llm-tests\                          # Manual LLM behavior tests
 ```
 
 ## Test Categories
 
-| Category | Speed | Requirements | Run By Default |
-|----------|-------|--------------|----------------|
-| **Integration** | Medium (10-20 min) | PowerPoint + Windows | ✅ Yes (local) |
-| **OnDemand** | Slow (3-5 min) | PowerPoint + Windows | ❌ No (explicit only) |
-| **Diagnostics** | Slow (varies) | PowerPoint + Windows | ❌ No (manual, excluded from CI) |
-| **LLM Tests** | Slow (varies) | PowerPoint + Azure OpenAI | ❌ No (manual only) |
+| Category | Purpose | Requirements | CI status |
+| -------- | ------- | ------------ | --------- |
+| Unit | Pure .NET behavior, serialization, generated metadata, validation | .NET SDK | CI-safe |
+| Integration | Protocol or process integration, plus Outlook smoke tests | Depends on test | Only CI-safe subsets should be assumed |
+| OutlookSeed | Manual Outlook behavior smoke coverage | Classic Outlook running on Windows | Not verified by hosted CI |
+| PptBatch, PptSession, SessionManager | Dormant retained presentation-session infrastructure | Desktop Office setup | Only relevant when modifying that layer |
+| LLM tests | Manual AI behavior validation | Azure OpenAI config and local tools | Manual only |
 
-## Diagnostics Tests
+## Outlook Smoke Tests
 
-Diagnostics tests are research/exploratory tests in `OutlookMcp.Diagnostics.Tests` that document the actual behavior of PowerPoint's COM APIs without our abstraction layer. These tests are **excluded from CI** to keep automation focused on core functionality.
+`OutlookMcp.Core.Tests\Integration\Outlook\OutlookSeedSmokeTests.cs` exercises real Outlook commands when classic Outlook is available.
 
-**Purpose:**
-- Understand PowerPoint COM API behavior for Power Query, Data Model, PivotTables, etc.
-- Document findings and edge cases for future implementation decisions
-- Test alternative approaches to complex PowerPoint operations
+These tests:
 
-**Trait markers:**
-- `Layer=Diagnostics`  
-- `RunType=OnDemand`
+- Require Windows and classic Outlook.
+- Require Outlook to be running and signed in.
+- Use real mailbox state.
+- Can create, mutate, or delete real Outlook items as part of smoke coverage.
+- Are not a substitute for a dedicated self-hosted CI runner.
 
-**Run diagnostics tests locally:**
+Run them manually:
+
 ```powershell
-# All diagnostics tests
-dotnet test tests/OutlookMcp.Diagnostics.Tests/ --filter "RunType=OnDemand&Layer=Diagnostics"
-
-# Specific diagnostic tests
-dotnet test tests/OutlookMcp.Diagnostics.Tests/ --filter "Feature=PowerQuery&RunType=OnDemand"
+dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
 ```
 
-**CI Behavior:**
-- Diagnostics tests are **NOT** run in CI workflows (GitHub Actions)
-- Path filter includes folder to trigger builds when tests change
-- Test execution uses `RunType!=OnDemand` filter to exclude them
+## Coverage and Metadata Tests
+
+`CoreCommandsCoverageTests` is the key CI-safe guard that checks every `[ServiceCategory]` interface has generated actions and action-string mappings.
+
+```powershell
+dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
+```
+
+This verifies generated surface parity, not Outlook runtime behavior.
 
 ## Feature-Specific Tests
 
+Useful filters in the current tree:
+
 ```powershell
-# Test specific feature only
-dotnet test --filter "Feature=PowerQuery&RunType!=OnDemand"
-dotnet test --filter "Feature=DataModel&RunType!=OnDemand"
-dotnet test --filter "Feature=Tables&RunType!=OnDemand"
-dotnet test --filter "Feature=PivotTables&RunType!=OnDemand"
-dotnet test --filter "Feature=Ranges&RunType!=OnDemand"
-dotnet test --filter "Feature=Connections&RunType!=OnDemand"
+dotnet test --filter "Feature=ActionEnums"
+dotnet test --filter "Feature=ActionValidation"
+dotnet test --filter "Feature=Configuration"
+dotnet test --filter "Feature=McpProtocol"
+dotnet test --filter "Feature=OutlookDispatcher"
+dotnet test --filter "Feature=OutlookMcpService"
+dotnet test --filter "Feature=OutlookSeed"
+dotnet test --filter "Feature=ServiceDaemon"
+dotnet test --filter "Feature=SkillGeneration"
+```
+
+When changing the dormant retained session layer, use its specific filters:
+
+```powershell
+dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch"
+dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptSession"
+dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=SessionManager"
 ```
 
 ## When to Run Which Tests
 
 | Scenario | Command |
-|----------|---------|
-| **Daily development** | `dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA"` |
-| **Before commit** | `dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA"` |
-| **Modified session/batch code** | `dotnet test --filter "RunType=OnDemand"` (see [Rule 3](../.github/instructions/critical-rules.instructions.md#rule-3-session-cleanup-tests)) |
-| **VBA development** | `dotnet test --filter "(Feature=VBA\|Feature=VBATrust)&RunType!=OnDemand"` |
-| **LLM behavior validation** | `.\scripts\Test-LlmRegressionGate.ps1` |
+| -------- | ------- |
+| Documentation-only change | `dotnet build --nologo -v q` |
+| Generated action or Core interface change | `dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"` |
+| CLI routing or daemon change | `dotnet test tests\OutlookMcp.CLI.Tests` |
+| Outlook command behavior change | Manual `Feature=OutlookSeed` on Windows with classic Outlook running, plus targeted tests you add |
+| Dormant session-layer change | Target `PptBatch`, `PptSession`, or `SessionManager` tests |
+| Skill guidance change | `dotnet test tests\OutlookMcp.SkillGeneration.Tests` |
+| LLM behavior validation | `.\scripts\Test-LlmRegressionGate.ps1` if that script is current for the Outlook surface |
 
 ## LLM Tests
 
-The `llm-tests/` project validates that LLMs correctly use PowerPoint MCP Server and CLI tools using [pytest-aitest](https://github.com/trsdn/pytest-aitest).
-
-### When to Run LLM Tests
-
-- **Manual/on-demand only** - Not part of CI/CD
-- After changing tool descriptions or adding new tools
-- To validate LLM behavior patterns (e.g., incremental updates vs rebuild)
-
-### Running LLM Tests
+The `llm-tests\` project is manual. Before relying on it, inspect the prompts and expected behavior to make sure they reference the current Outlook command surface.
 
 ```powershell
-# From llm-tests/
+Set-Location llm-tests
 uv sync
 uv run pytest -m aitest -v
 ```
 
-### Canonical regression gate
+Prerequisites:
 
-Use the repository-level helper when you want the standard manual gate instead of the full suite:
-
-```powershell
-.\scripts\Test-LlmRegressionGate.ps1
-```
-
-The canonical gate runs three CLI scenarios plus the matching three MCP scenarios and is the recommended check after changing tool descriptions, skill guidance, or CLI help output.
-
-### Prerequisites
-
-- `AZURE_OPENAI_ENDPOINT` environment variable
-- Windows desktop with PowerPoint installed
-- pytest-aitest dependency (local path via uv)
-
-**See [LLM Tests README](../llm-tests/README.md) for complete documentation.**
-
-## VBA Testing
-
-### Why VBA Tests Are Excluded by Default
-
-VBA tests are excluded from normal test runs because:
-1. **Stable codebase** - VBA features are mature with minimal changes
-2. **Performance** - Excluding VBA tests makes integration tests ~25% faster (10-15 min vs 15-20 min)
-3. **Special requirements** - VBA tests require VBA trust enabled in PowerPoint settings
-4. **Opt-in model** - Explicit testing when VBA code changes, rather than every commit
-
-### When to Run VBA Tests
-
-Run VBA tests manually when:
-- Modifying VBA-related code (ScriptCommands, VbaTrustDetection)
-- Adding new VBA features
-- Before releasing VBA-related changes
-- Troubleshooting VBA-specific issues
-
-### How to Run VBA Tests
-
-```powershell
-# Run ONLY VBA tests
-dotnet test --filter "(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand"
-
-# Run ALL tests including VBA (takes longer)
-dotnet test --filter "Category=Integration&RunType!=OnDemand"
-```
-
-### VBA Test Files
-
-All VBA tests are tagged with `[Trait("Feature", "VBA")]` or `[Trait("Feature", "VBATrust")]`:
-
-```
-tests/OutlookMcp.Core.Tests/Integration/Commands/Script/
-  - ScriptCommandsTests.cs
-  - ScriptCommandsTests.Lifecycle.cs
-  - VbaTrustDetectionTests.ScriptCommands.cs
-  - VbaTrustDetectionTests.cs
-
-tests/OutlookMcp.CLI.Tests/Integration/Commands/
-  - ScriptAndSetupCommandsTests.cs
-```
-
-### VBA Trust Setup
-
-VBA tests require VBA trust enabled in PowerPoint:
-
-```powershell
-# Enable VBA trust (required for VBA tests)
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Office\16.0\PowerPoint\Security" -Name "AccessVBOM" -Value 1
-
-# Verify setting
-Get-ItemProperty -Path "HKCU:\Software\Microsoft\Office\16.0\PowerPoint\Security" -Name "AccessVBOM"
-```
-
-**Security Note:** Only enable VBA trust in development environments. Production systems should keep this disabled.
+- `AZURE_OPENAI_ENDPOINT` environment variable.
+- Windows desktop when tests call local MCP or CLI tools.
+- Any required local model or service credentials.
 
 ## Key Principles
 
-- ✅ **File Isolation** - Each test creates unique file (no sharing)
-- ✅ **Binary Assertions** - Pass OR fail, never "accept both"
-- ✅ **Verify PowerPoint State** - Always verify actual PowerPoint state after operations
-- ❌ **No SaveAsync** - Unless testing persistence (see [Rule 14](../.github/instructions/critical-rules.instructions.md#rule-14-no-saveasync-unless-testing-persistence))
+- Test the active Outlook command surface, not deleted presentation features.
+- Do not claim hosted CI verifies Outlook behavior until a self-hosted Windows Outlook runner exists.
+- Treat tests that touch Outlook as real mailbox automation.
+- Prefer targeted tests for the changed layer.
+- Keep coverage checks derived from `[ServiceCategory]` interfaces so new tools cannot be forgotten.
 
 ## Getting Help
 
-- **Test failures**: Check test output for detailed error messages
-- **PowerPoint issues**: Ensure PowerPoint 2016+ installed and activated
-- **Session/batch issues**: Run OnDemand tests to verify cleanup
-- **Writing tests**: See [Testing Strategy](../.github/instructions/testing-strategy.instructions.md)
+- Test failures: read the failing test output first.
+- Outlook issues: confirm classic Outlook is installed, running, signed in, and at the same elevation level as the test process.
+- Generated action issues: inspect Core service interfaces and generated metadata.
+- Session-layer issues: remember that `Ppt*` infrastructure is retained but dormant for Outlook commands.

@@ -1,94 +1,80 @@
 # Timeout Implementation Guide
 
-> **Complete guide for using and enhancing the timeout protection system**
+> This document covers two different timeout paths: the active Outlook dispatcher timeout and the dormant retained legacy session-layer timeout.
 
 ## Overview
 
-PowerPoint batch operations now have timeout protection to prevent indefinite hangs when PowerPoint becomes unresponsive (modal dialogs, data source issues, COM deadlocks).
+OutlookMcp currently uses `OutlookDispatcher` for active Outlook commands. It serializes all Outlook COM work onto one dedicated STA thread and applies a timeout to both queueing and execution.
+
+The older `PptBatch` timeout code still exists in `src\OutlookMcp.ComInterop\Session\`. That layer is deliberately retained but dormant for the Outlook product. Nothing in the active mail, calendar, folder, attachment, or application command surface uses it.
 
 **Key Features:**
-- Default 2-minute timeout for all operations
-- Maximum 5-minute timeout (prevents infinite waits)
-- Operation-specific timeout overrides
-- Rich error messages with LLM guidance
-- Automatic progress logging to stderr (MCP protocol)
+
+- Active Outlook operations use `OutlookDispatcher.Shared.Execute`.
+- The dispatcher has a bounded queue to provide back-pressure for overlapping callers.
+- The timeout covers waiting for a queue slot and running on the STA thread.
+- The default active Outlook timeout comes from `ComInteropConstants.DefaultOperationTimeout`.
+- Timeout failures are reported as operation failures by the command result path.
 
 ---
 
 ## Core Implementation
 
-### Constants (PptBatch.cs)
+### Constants
+
+`ComInteropConstants.DefaultOperationTimeout` is currently the shared default timeout used by active Outlook commands and retained COM infrastructure.
 
 ```csharp
-/// <summary>
-/// Default timeout for PowerPoint operations (2 minutes)
-/// </summary>
-private static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromMinutes(2);
-
-/// <summary>
-/// Maximum allowed timeout (5 minutes) - prevents infinite waits
-/// </summary>
-private static readonly TimeSpan MaxOperationTimeout = TimeSpan.FromMinutes(5);
+public static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromMinutes(5);
 ```
 
-### IPptBatch Interface
+### Active Outlook Dispatcher
+
+`OutlookDispatcher` is the active execution path.
+
+```csharp
+public T Execute<T>(string operationName, Func<T> operation, TimeSpan timeout)
+```
+
+Behavior:
+
+1. Write the operation to a bounded channel.
+2. If the queue is full until timeout, throw a `TimeoutException` that names dispatcher queue pressure.
+3. Run the operation on the single STA thread.
+4. If execution does not complete by timeout, throw a `TimeoutException` that names the running operation.
+
+### OutlookInteropRunner
+
+Active Outlook Core commands call through `OutlookInteropRunner.Execute`, which dispatches to `OutlookDispatcher`:
+
+```csharp
+return OutlookDispatcher.Shared.Execute(operationName, () =>
+{
+    // Resolve Outlook.Application and Outlook.NameSpace.
+    // Run the command operation.
+}, ComInteropConstants.DefaultOperationTimeout);
+```
+
+This means active Outlook commands do not take a per-command timeout parameter today.
+
+### Dormant Legacy Session Layer
+
+The retained `PptBatch` and `IPptBatch` types also have timeout support. This exists for the dormant presentation-session infrastructure only.
 
 ```csharp
 Task<T> Execute<T>(
     Func<PptContext, CancellationToken, T> operation,
     CancellationToken cancellationToken = default,
-    TimeSpan? timeout = null);  // ← NEW: Optional timeout parameter
-
-Task<T> ExecuteAsync<T>(
-    Func<PptContext, CancellationToken, Task<T>> operation,
-    CancellationToken cancellationToken = default,
-    TimeSpan? timeout = null);  // ← NEW: Optional timeout parameter
+    TimeSpan? timeout = null);
 ```
 
-### Timeout Enforcement Pattern
-
-```csharp
-// Clamp timeout between default and max
-var effectiveTimeout = timeout.HasValue
-    ? TimeSpan.FromMilliseconds(Math.Min(timeout.Value.TotalMilliseconds, MaxOperationTimeout.TotalMilliseconds))
-    : DefaultOperationTimeout;
-
-// Create linked cancellation token (operation + timeout)
-using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
-using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-// Use Task.WaitAsync for timeout enforcement
-return await tcs.Task.WaitAsync(linkedCts.Token);
-```
-
-### Error Handling Pattern
-
-```csharp
-catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-{
-    var duration = DateTime.UtcNow - startTime;
-    var usedMaxTimeout = effectiveTimeout >= MaxOperationTimeout;
-
-    Console.Error.WriteLine($"[PPT-BATCH] TIMEOUT after {duration.TotalSeconds:F1}s (limit: {effectiveTimeout.TotalMinutes:F1}min, max: {usedMaxTimeout})");
-
-    var message = usedMaxTimeout
-        ? $"PowerPoint operation exceeded maximum timeout of {MaxOperationTimeout.TotalMinutes} minutes (actual: {duration.TotalMinutes:F1} min). " +
-          "This indicates PowerPoint is hung, unresponsive, or the operation is too complex. " +
-          "Check if PowerPoint is showing a dialog or consider breaking the operation into smaller steps."
-        : $"PowerPoint operation timed out after {effectiveTimeout.TotalMinutes} minutes (actual: {duration.TotalMinutes:F1} min). " +
-          $"For large datasets or complex operations, more time may be needed (maximum: {MaxOperationTimeout.TotalMinutes} min).";
-
-    throw new TimeoutException(message);
-}
-```
+Keep this code accurate if you modify the retained session layer, but do not describe it as the active Outlook execution path.
 
 ---
 
 ## Enhanced Result Types
 
-### ResultBase Additions
-
-All result types now inherit LLM guidance fields:
+Result types inherit common success and guidance fields where applicable.
 
 ```csharp
 public abstract class ResultBase
@@ -96,8 +82,6 @@ public abstract class ResultBase
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
     public string? FilePath { get; set; }
-
-    // ✨ NEW: LLM Guidance Fields
     public List<string>? SuggestedNextActions { get; set; }
     public Dictionary<string, object>? OperationContext { get; set; }
     public bool IsRetryable { get; set; } = true;
@@ -105,338 +89,180 @@ public abstract class ResultBase
 }
 ```
 
+For Outlook commands, prefer actionable guidance that mentions the real likely cause: classic Outlook not running, elevation mismatch, Object Model Guard prompt, dispatcher queue pressure, or item identity changes.
+
 ---
 
 ## Usage Patterns
 
-### Pattern 1: Core Commands (Heavy Operations)
+### Pattern 1: Active Outlook Commands
 
-For operations that typically take longer (refresh, data loading), Core commands can pass custom timeout:
+Use `OutlookInteropRunner.Execute` for Outlook COM work. Do not create ad hoc STA threads per command.
 
 ```csharp
-// In PowerQueryCommands.cs
-public async Task<PowerQueryRefreshResult> RefreshAsync(IPptBatch batch, string queryName)
-{
-    // Heavy operation: request extended timeout (5 minutes)
-    return await batch.Execute<PowerQueryRefreshResult>(
-        (ctx, ct) => {
-            // Refresh logic...
-            return result;
-        },
-        timeout: TimeSpan.FromMinutes(5)  // ← Request 5 min (will be clamped to max)
-    );
-}
+return OutlookInteropRunner.Execute(
+    "application.get-status",
+    (application, session) =>
+    {
+        return new OutlookApplicationStatusResult { Success = true };
+    },
+    ex => new OutlookApplicationStatusResult
+    {
+        Success = false,
+        ErrorMessage = ex.Message
+    });
 ```
 
-### Pattern 2: MCP Tool Timeout Exception Handling
+### Pattern 2: Timeout Error Guidance
 
-MCP tools should catch `TimeoutException` and enrich with operation-specific guidance:
+When surfacing dispatcher timeouts, include guidance that fits Outlook:
 
-```csharp
-// In PptPowerQueryTool.cs
-private static async Task<string> RefreshPowerQueryAsync(...)
-{
-    try
-    {
-        var result = await PptToolsBase.WithBatchAsync(
-            batchId,
-            presentationPath,
-            save: true,
-            async (batch) => await commands.RefreshAsync(batch, queryName));
+- Check whether classic Outlook is responsive.
+- Check whether an Outlook security or modal dialog is waiting for user input.
+- Avoid launching many overlapping Outlook operations.
+- Retry only when the operation is safe to repeat.
+- For `mail send`, use `operationId` to avoid duplicate sends on retry.
 
-        return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
-    }
-    catch (TimeoutException ex)
-    {
-        // Enrich with operation-specific guidance
-        var result = new PowerQueryRefreshResult
-        {
-            Success = false,
-            ErrorMessage = ex.Message,
-            QueryName = queryName,
-            FilePath = presentationPath,
-            
-            // ✨ Add LLM guidance
-            SuggestedNextActions = new List<string>
-            {
-                "Check if PowerPoint is showing a 'Privacy Level' dialog or other modal dialogs",
-                "Verify the data source is accessible (network connection, database availability)",
-                "Consider breaking query into smaller steps if processing large datasets",
-                "Use batch mode (begin_ppt_batch) if not already using it"
-            },
-            
-            OperationContext = new Dictionary<string, object>
-            {
-                { "OperationType", "PowerQuery.Refresh" },
-                { "QueryName", queryName },
-                { "TimeoutReached", true },
-                { "UsedMaxTimeout", ex.Message.Contains("maximum timeout") }
-            },
-            
-            IsRetryable = !ex.Message.Contains("maximum timeout"),  // Don't retry max timeout
-            
-            RetryGuidance = ex.Message.Contains("maximum timeout")
-                ? "Operation reached maximum timeout - do not retry. Check for PowerPoint dialogs or break into smaller operations."
-                : "Operation can be retried with longer timeout (up to 5 minutes) if data source is slow."
-        };
+### Pattern 3: Dormant Session-Layer Changes
 
-        return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
-    }
-}
-```
-
-### Pattern 3: Light Operations (Use Default)
-
-For quick operations (list, get, create), use default 2-minute timeout:
+Only use `IPptBatch.Execute` timeout overloads when working on retained legacy session infrastructure.
 
 ```csharp
-// In PowerQueryCommands.cs
-public async Task<PowerQueryListResult> ListAsync(IPptBatch batch)
-{
-    // Light operation: use default timeout (no parameter needed)
-    return await batch.Execute<PowerQueryListResult>((ctx, ct) =>
-    {
-        // List logic...
-        return result;
-    });  // ← Default 2 min timeout
-}
+return await batch.Execute(
+    (ctx, ct) => RunLegacySessionOperation(ctx),
+    timeout: TimeSpan.FromMinutes(5));
 ```
 
 ---
 
 ## Operation-Specific Timeout Recommendations
 
-| Operation Type | Recommended Timeout | Rationale |
-|----------------|-------------------|-----------|
-| **List operations** | Default (2 min) | Reading metadata is fast |
-| **Get/View operations** | Default (2 min) | Reading single item is fast |
-| **Create operations** | Default (2 min) | Creating objects is typically fast |
-| **Delete operations** | Default (2 min) | Deleting is fast |
-| **Refresh operations** | 5 minutes (max) | Data source queries can be slow |
-| **Import operations** | 5 minutes (max) | Loading large datasets |
-| **Data Model refresh** | 5 minutes (max) | Processing millions of rows |
-| **VBA execution** | Context-dependent | User code complexity varies |
+| Operation Type | Path | Recommendation |
+| -------------- | ---- | -------------- |
+| Mail, calendar, folder, attachment, application | Active Outlook dispatcher | Use the shared default unless adding a designed timeout option. |
+| Many overlapping CLI or MCP requests | Active Outlook dispatcher | Expect queue back-pressure. Avoid parallel Outlook mutation. |
+| Send mail | Active Outlook dispatcher | Use `confirm=true`; use `operationId` for retry safety. |
+| Legacy session operations | Dormant session layer | Keep existing timeout support, but do not apply it to Outlook docs. |
 
 ---
 
-## Stderr Logging (MCP Protocol)
+## Stderr Logging
 
-Operations automatically log progress to stderr (visible in MCP clients):
+The old presentation-session logging examples using `[PPT-BATCH]` apply only to the retained legacy session layer if that path is used. They are not active Outlook product logging.
 
-```
-[PPT-BATCH] Starting operation (timeout: 2.0min)
-[PPT-BATCH] Completed in 3.5s
-```
-
-Or on timeout:
-
-```
-[PPT-BATCH] Starting operation (timeout: 5.0min)
-[PPT-BATCH] TIMEOUT after 300.2s (limit: 5.0min, max: true)
-```
+For active Outlook timeout work, prefer messages and result context that name the Outlook operation, for example `mail.send` or `folder.list-default`.
 
 ---
 
 ## Integration Checklist
 
-### For New Core Commands
+### For New Outlook Core Commands
 
-- [ ] Determine if operation is heavy or light
-- [ ] Pass `timeout: TimeSpan.FromMinutes(5)` for heavy operations
-- [ ] Use default timeout for light operations
-- [ ] Add timeout context to result on failure
+- [ ] Route COM work through `OutlookInteropRunner.Execute`.
+- [ ] Keep work short and deterministic where possible.
+- [ ] Return result objects with accurate `Success` and `ErrorMessage` values.
+- [ ] Add `SuggestedNextActions` for likely Outlook failures.
+- [ ] Consider retry safety, especially for destructive operations.
 
 ### For MCP Tools
 
-- [ ] Wrap Core command calls in try-catch for `TimeoutException`
-- [ ] Create enriched result with:
-  - [ ] `SuggestedNextActions` (operation-specific steps)
-  - [ ] `OperationContext` (timeout details, operation type)
-  - [ ] `IsRetryable = false` for max timeout cases
-  - [ ] `RetryGuidance` with actionable advice
-- [ ] Return JSON serialized result (don't re-throw)
+- [ ] Return JSON results for business errors.
+- [ ] Preserve generated action metadata.
+- [ ] Do not expose deleted presentation tools.
 
 ### For CLI Commands
 
-- [ ] Display timeout errors with guidance
-- [ ] Show suggested next actions in readable format
-- [ ] Indicate if operation is retryable
+- [ ] Keep CLI and MCP action names and parameters in sync.
+- [ ] Surface timeout errors as JSON in quiet/scripted paths.
+- [ ] Include actionable guidance without claiming the operation is isolated from Outlook.
 
----
+### For Dormant Legacy Session Code
 
-## Example: Complete Timeout-Aware Implementation
-
-```csharp
-// Core Command (PowerQueryCommands.Refresh.cs)
-public async Task<PowerQueryRefreshResult> RefreshAsync(IPptBatch batch, string queryName)
-{
-    var result = new PowerQueryRefreshResult
-    {
-        FilePath = batch.PresentationPath,
-        QueryName = queryName,
-        RefreshTime = DateTime.Now
-    };
-
-    return await batch.Execute<PowerQueryRefreshResult>(
-        (ctx, ct) =>
-        {
-            // Refresh logic (omitted for brevity)
-            result.Success = true;
-            return result;
-        },
-        timeout: TimeSpan.FromMinutes(5)  // ← Request extended timeout
-    );
-}
-
-// MCP Tool (PptPowerQueryTool.cs)
-private static async Task<string> RefreshPowerQueryAsync(
-    PowerQueryCommands commands, 
-    string presentationPath, 
-    string? queryName, 
-    string? batchId)
-{
-    if (string.IsNullOrEmpty(queryName))
-        throw new ModelContextProtocol.McpException("queryName is required for refresh action");
-
-    try
-    {
-        var result = await PptToolsBase.WithBatchAsync(
-            batchId,
-            presentationPath,
-            save: true,
-            async (batch) => await commands.RefreshAsync(batch, queryName));
-
-        return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
-    }
-    catch (TimeoutException ex)
-    {
-        var result = new PowerQueryRefreshResult
-        {
-            Success = false,
-            ErrorMessage = ex.Message,
-            QueryName = queryName,
-            FilePath = presentationPath,
-            RefreshTime = DateTime.Now,
-            
-            SuggestedNextActions = new List<string>
-            {
-                "Check if PowerPoint is showing a 'Privacy Level' dialog",
-                "Verify the data source is accessible",
-                "Consider using smaller data ranges if processing large datasets",
-                "Use batch mode (begin_ppt_batch) if not already"
-            },
-            
-            OperationContext = new Dictionary<string, object>
-            {
-                { "OperationType", "PowerQuery.Refresh" },
-                { "QueryName", queryName },
-                { "TimeoutReached", true },
-                { "UsedMaxTimeout", ex.Message.Contains("maximum timeout") }
-            },
-            
-            IsRetryable = !ex.Message.Contains("maximum timeout"),
-            
-            RetryGuidance = ex.Message.Contains("maximum timeout")
-                ? "Maximum timeout reached - do not retry automatically. Manual intervention needed."
-                : "Retry with same timeout acceptable if transient issue suspected."
-        };
-
-        return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
-    }
-}
-```
+- [ ] Keep `PptBatch` timeout tests targeted to the retained session layer.
+- [ ] Label documentation and comments as legacy or dormant when relevant.
+- [ ] Do not imply Outlook commands use `PptSession`, `PptBatch`, or `PptContext`.
 
 ---
 
 ## Testing Strategy
 
-### Unit Tests (Fast)
+### Active Outlook Runtime Behavior
 
-Test timeout clamping logic:
+Manual only today:
 
-```csharp
-[Fact]
-public void Execute_TimeoutClamping_LimitsToMax()
-{
-    var requestedTimeout = TimeSpan.FromMinutes(10);  // Request 10 min
-    var effectiveTimeout = Math.Min(requestedTimeout.TotalMilliseconds, MaxOperationTimeout.TotalMilliseconds);
-    Assert.Equal(TimeSpan.FromMinutes(5), TimeSpan.FromMilliseconds(effectiveTimeout));  // Clamped to 5 min
-}
+```powershell
+dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
 ```
 
-### Integration Tests (Requires PowerPoint)
+This requires classic Outlook running on Windows. Hosted CI does not verify Outlook behavior yet.
 
-Test actual timeout behavior:
+### Active Metadata and Surface Coverage
 
-```csharp
-[Fact]
-public async Task Execute_ExceedsTimeout_ThrowsTimeoutException()
-{
-    await using var batch = await PptSession.BeginBatchAsync(testFile);
-    
-    // Operation that takes 3 seconds with 1-second timeout
-    await Assert.ThrowsAsync<TimeoutException>(async () =>
-    {
-        await batch.Execute<int>((ctx, ct) =>
-        {
-            Thread.Sleep(3000);  // Simulate slow operation
-            return 0;
-        }, timeout: TimeSpan.FromSeconds(1));
-    });
-}
+CI-safe:
+
+```powershell
+dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
+```
+
+### Dormant Legacy Timeout Tests
+
+Run only when changing the retained session layer:
+
+```powershell
+dotnet test tests\OutlookMcp.ComInterop.Tests --filter "Feature=PptBatch"
 ```
 
 ---
 
 ## Troubleshooting
 
-### Symptom: All operations timing out
+### Symptom: All Outlook operations time out
 
-**Likely Cause:** PowerPoint showing modal dialog (Privacy Level, Credentials, etc.)
+Likely causes:
 
-**Solution:**
-1. Check if PowerPoint process is visible (should be hidden background process)
-2. Kill all PowerPoint processes: `taskkill /F /IM powerpnt.exe`
-3. Re-run operation
-4. If persistent, manually open PowerPoint, configure privacy levels, save presentation
+1. Classic Outlook is hung or waiting on a modal dialog.
+2. An Outlook Object Model Guard prompt is waiting for user input.
+3. Too many overlapping operations are queued.
+4. Outlook and the calling process are running at different elevation levels.
 
-### Symptom: Max timeout reached frequently
+Solutions:
 
-**Likely Cause:** Operation genuinely too complex or data source very slow
+1. Bring Outlook to the foreground and look for prompts.
+2. Restart classic Outlook.
+3. Retry with fewer concurrent operations.
+4. Run Outlook and the server or CLI at the same elevation level.
 
-**Solution:**
-1. Break operation into smaller chunks (filter data, process in batches)
-2. Optimize data source (add indexes, reduce query complexity)
-3. Consider Power Query query folding to push processing to source
+### Symptom: Queue timeout before operation starts
 
-### Symptom: Timeout too aggressive (legitimate operations failing)
+Likely cause: too many overlapping Outlook operations in flight.
 
-**Likely Cause:** Default timeout too short for specific scenario
+Solution: serialize callers or reduce parallel requests. Outlook is a single shared desktop app and should not be treated as an isolated multi-worker backend.
 
-**Solution:**
-1. Core Commands: Pass explicit timeout: `timeout: TimeSpan.FromMinutes(5)`
-2. Cannot exceed 5-minute max (architectural decision to prevent infinite hangs)
+### Symptom: Retry could duplicate an action
+
+Likely cause: the client timed out after Outlook may already have completed the operation.
+
+Solution: do not blindly retry destructive actions. For `mail send`, pass an `operationId` so the command can answer repeated attempts from cached send state when possible.
 
 ---
 
 ## Future Enhancements
 
-### Potential Improvements
+Potential improvements:
 
-1. **Configurable Max Timeout**: Allow per-presentation or per-session max timeout override (currently hardcoded 5 min)
-2. **Progress Callbacks**: Provide progress updates during long operations
-3. **Timeout Metrics**: Collect stats on timeout frequency to identify problematic operations
-4. **Adaptive Timeout**: Automatically increase timeout for operations that consistently hit limit
+1. Per-operation timeout configuration for active Outlook commands.
+2. Better timeout metrics for dispatcher queue pressure versus execution stalls.
+3. More specific result guidance for Object Model Guard prompts.
+4. Self-hosted Windows Outlook integration runner for CI.
 
 ---
 
 ## Related Documentation
 
-- [PowerPoint COM Interop Patterns](.github/instructions/powerpoint-com-interop.instructions.md)
-- [MCP Server Guide](.github/instructions/mcp-server-guide.instructions.md)
-- [Testing Strategy](.github/instructions/testing-strategy.instructions.md)
+- [Outlook COM Execution Model](ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md)
+- [Development Workflow](DEVELOPMENT.md)
+- [Testing README](../tests/README.md)
 
 ---
 
-**Last Updated:** 2025-01-XX  
-**Author:** AI Agent + User Collaboration
+**Last Updated:** 2026-09-02

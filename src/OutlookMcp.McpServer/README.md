@@ -1,78 +1,52 @@
-# Outlook MCP server migration surface
+# OutlookMcp.McpServer
 
-This MCP server area is the active MCP host surface for `mcp-server-outlook`.
+The Model Context Protocol server for Outlook automation.
 
-Current reality:
+The MCP server and the `outlookcli` CLI are **both first-class entry points**. They are
+source-generated from the same `[ServiceCategory]` interfaces in `OutlookMcp.Core`, so they expose
+identical actions, parameters, defaults, and validation.
 
-- the repository target is now `mcp-server-outlook`
-- the public MCP surface exposes a working Outlook seed for application, attachment, folder, and mail workflows
-- the internal service and generator pipeline are reusable, but the broader tool taxonomy still needs more Outlook-first families
-- the current tool list is an early Outlook contract, not the final one
+## Tool families
 
-## Implemented Outlook seed
+5 tools, 30 operations:
 
-The generated MCP surface now includes these Outlook-first categories:
+| Tool | Operations |
+|---|---|
+| `mail` | 16 |
+| `calendar` | 5 |
+| `folder` | 4 |
+| `attachment` | 4 |
+| `application` | 1 |
 
-- `application`
-- `attachment`
-- `calendar`
-- `folder`
-- `mail`
+See [FEATURES.md](../../FEATURES.md) for the full action list.
 
-Current seed actions:
+There are no `slide`, `shape`, `text`, `chart`, `animation`, `transition`, `slideshow`, `file`, or
+`window` tools. Those inherited PowerPoint families were deleted in #26.
 
-- `application.get-status`
-- `attachment.list`
-- `attachment.add`
-- `attachment.remove`
-- `attachment.save`
-- `calendar.list`
-- `calendar.read`
-- `calendar.create-appointment`
-- `calendar.update-appointment`
-- `calendar.delete-appointment`
-- `folder.list-default`
-- `folder.list-children`
-- `mail.read-active`
-- `mail.read`
-- `mail.list`
-- `mail.search`
-- `mail.create-draft`
-- `mail.reply`
-- `mail.reply-all`
-- `mail.forward`
-- `mail.send`
-- `mail.move`
-- `mail.delete`
-- `mail.set-read-state`
-- `mail.set-categories`
+## Prompts
 
-## What will remain useful
+The server ships MCP prompts generated from `skills/shared/*.md`, so MCP-only clients such as Claude
+Desktop receive the same behavioural guidance that skill-based clients read from the skill packages.
+`skills/shared/` is the single source of truth; every `.md` file there becomes a prompt, so it must
+contain Outlook guidance only.
 
-- host/service split
-- named-pipe communication
-- generator-based MCP registration
-- result models and error handling patterns
-- packaging and distribution pipeline
+## Requirements
 
-## What still has to change
+- Windows
+- .NET 9.0+
+- The **classic Outlook for Windows desktop app**, installed and running. The new Outlook for
+  Windows exposes no COM object model and cannot be automated; `application.get-status` reports
+  `NewOutlookOnly` in that case.
 
-- PowerPoint-only tool families such as `slide`, `shape`, `animation`, `transition`, and `slideshow`
-- file-centric workflow assumptions
-- schema descriptions, examples, and install guidance that still describe PowerPoint behavior
+Have the assistant call `application.get-status` first to confirm the environment.
 
-## Intended next Outlook-first MCP families
+## Client configuration
 
-The next Outlook-first MCP expansion should center on:
-
-- `application`
-- `session`
-- `folder`
-- `mail`
-- `attachment`
-- `calendar`
-- `contact`
+See [`examples/mcp-configs/`](../../examples/mcp-configs/) for Claude Desktop, VS Code, Cursor,
+Cline, and Windsurf snippets, and [`mcpb/`](../../mcpb/) for the Claude Desktop bundle.
 
 ## Naming note
 
-Until the cleanup pass lands, expect inherited names nearby such as `OutlookMcp.*`, `mcp-outlook`, and `outlook-mcp`. Those are transitional and not the intended long-term Outlook branding.
+Project and assembly names are still inherited (`OutlookMcp.*`), and `PptToolsBase` is still
+`Ppt*`-prefixed despite the generated Outlook tools depending on it. That naming debt is tracked as
+#12. It is transitional, not the intended long-term branding.

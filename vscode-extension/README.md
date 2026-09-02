@@ -1,71 +1,49 @@
-# mcp-server-outlook VS Code Extension - Migration Status
+# mcp-server-outlook VS Code Extension
 
-This extension area is the active VS Code packaging surface for the Outlook migration.
+The VS Code packaging surface for the Outlook MCP server.
 
-Current reality:
+## What it provides
 
-- the repository target is now `mcp-server-outlook`
-- the published extension now exposes Outlook-first provider ids and bundled Outlook skill folders
-- the bundled binaries still use inherited `OutlookMcp.*` executable names during migration
-- the extension now documents the real Outlook seed instead of the legacy PowerPoint product
+The extension bundles the Outlook MCP server and registers it with VS Code, so Copilot Chat and
+other MCP clients can drive the classic Outlook desktop app.
 
-## Implemented Outlook seed
+The server exposes **5 tools with 30 operations**:
 
-The underlying generated server surface now includes an initial Outlook seed:
+| Tool | Operations |
+|---|---|
+| `mail` | `read-active`, `read`, `list`, `search`, `create-draft`, `reply`, `reply-all`, `forward`, `send`, `move`, `delete`, `set-read-state`, `set-categories`, `set-subject`, `set-body`, `set-recipients` |
+| `calendar` | `list`, `read`, `create-appointment`, `update-appointment`, `delete-appointment` |
+| `folder` | `list-default`, `list-children`, `resolve-path`, `list-items` |
+| `attachment` | `list`, `save`, `add`, `remove` |
+| `application` | `get-status` |
 
-- `application.get-status`
-- `attachment.list`
-- `attachment.add`
-- `attachment.remove`
-- `attachment.save`
-- `calendar.list`
-- `calendar.read`
-- `calendar.create-appointment`
-- `calendar.update-appointment`
-- `calendar.delete-appointment`
-- `folder.list-default`
-- `folder.list-children`
-- `mail.read-active`
-- `mail.read`
-- `mail.list`
-- `mail.search`
-- `mail.create-draft`
-- `mail.reply`
-- `mail.reply-all`
-- `mail.forward`
-- `mail.send`
-- `mail.move`
-- `mail.delete`
-- `mail.set-read-state`
-- `mail.set-categories`
+The CLI (`outlookcli`) exposes exactly the same actions with the same parameters. See
+[FEATURES.md](../FEATURES.md).
 
-The extension now surfaces the Outlook seed as the primary story, while deeper Outlook families still need follow-up work.
+## Requirements
 
-## What this area needs to become
+- Windows
+- The **classic Outlook for Windows desktop app**, installed and running. The new Outlook for
+  Windows has no COM object model and cannot be automated; in that case `application.get-status`
+  reports `NewOutlookOnly` and every action fails with an actionable message.
 
-The VS Code extension should become an Outlook-first marketplace offering for workflows such as:
-
-- email triage and drafting
-- reply / reply-all / forward flows
-- attachment inspection and export
-- attachment handling
-- calendar scheduling and meeting updates
-- mailbox and folder navigation
+Run `application.get-status` first to confirm the environment before anything else.
 
 ## What is still in progress
 
-- package and identifier rename
-- skill follow-through across all remaining legacy docs and references
+- package and identifier rename: the bundled binaries still use inherited `OutlookMcp.*` executable
+  names, and the extension id is still transitional
 - marketplace rebrand
-- cleanup of inherited PowerPoint examples and help text
-- wiring the extension to real Outlook-first MCP tool families
+- richer server-side mail search (#42) and a paging cursor for large result sets (#43)
+- **no Outlook behaviour is verified by CI.** Integration tests need a self-hosted Windows runner
+  with classic Outlook installed, which does not exist yet (#31)
 
-## Important naming note
+## Naming note
 
-Until the cleanup pass lands, expect inherited names in adjacent files and packaging metadata, including:
+Expect inherited names in adjacent files and packaging metadata:
 
-- `OutlookMcp.*` project names
-- `outlook-mcp` extension/package identifiers
-- `mcp-outlook` and `outlookcli` command names in some docs and configs
+- `OutlookMcp.*` project and assembly names
+- `outlook-mcp` extension and package identifiers
+- `outlookcli` command name
 
-Those names are transitional, not the intended long-term Outlook branding.
+These are tracked under #12. They are transitional, not the intended long-term branding.

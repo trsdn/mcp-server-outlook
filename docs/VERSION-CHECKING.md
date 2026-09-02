@@ -39,7 +39,7 @@ When the OutlookMcp Service starts, it automatically checks for updates in the b
 4. **Windows notification**: If an update is available, a system tray notification appears
 
 **Notification Details:**
-- **Title**: "PowerPoint MCP Update Available"
+- **Title**: "Outlook MCP Update Available"
 - **Message**: Shows current version, new version, and update command
 - **Duration**: 3 seconds (Windows standard)
 - **Type**: Info balloon (NotifyIcon.ShowBalloonTip)
@@ -97,7 +97,7 @@ This command:
 
 **Example output when update is available:**
 ```
-PowerPoint MCP Server v1.0.0
+Outlook MCP Server v1.0.0
 
 Update available: 1.0.0 -> 1.1.0
 Run: dotnet tool update --global OutlookMcp.McpServer

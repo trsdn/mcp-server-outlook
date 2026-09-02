@@ -17,7 +17,7 @@ on:
       - 'vscode-extension/src/**'
       - 'eval/package.json'
       - 'eval/package-lock.json'
-      - '.github/workflows/vscode-extension-ci.yml'
+      - '.github/workflows/node-ci.yml'
   pull_request:
     branches: [ master ]
     paths:
@@ -27,7 +27,7 @@ on:
       - 'vscode-extension/src/**'
       - 'eval/package.json'
       - 'eval/package-lock.json'
-      - '.github/workflows/vscode-extension-ci.yml'
+      - '.github/workflows/node-ci.yml'
   workflow_dispatch:
 
 concurrency:

@@ -1,25 +1,26 @@
-# PowerPoint (Windows)
+# Outlook (Windows)
 
-**Automate Microsoft PowerPoint with Claude** - Control PowerPoint through natural language conversations. Requires Windows and local Office install.
+**Automate Microsoft Outlook with Claude** - work with your mail, calendar, folders and attachments through natural language. Requires Windows and a local classic Outlook install.
 
 ## What It Does
 
-PowerPoint MCP Server lets you automate PowerPoint through conversation with Claude:
+- **Mail** - read the message you have open, search and list messages, draft, reply, reply-all, forward, send, move, delete, and set read state, categories, subject, body or recipients
+- **Calendar** - list and read appointments, create, update and delete them
+- **Folders** - list default folders, walk child folders, resolve a folder path, list items
+- **Attachments** - list, save to disk, add and remove
+- **Application** - check Outlook availability before doing anything else
 
-- **Create & Edit** - Build presentations, slides, and shapes
-- **Analyze Data** - Charts, tables, and SmartArt
-- **Transform Data** - Slide animations and transitions
-- **Format & Style** - Themes, layouts, transitions, animations
-- **Automate** - VBA macros, batch operations
-- **Agent Mode** - Say "show me PowerPoint" and watch AI work in real-time, side-by-side with Claude
-
-**25 tools with 225 operations** for comprehensive PowerPoint automation.
+**5 tools with 30 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
 
 ## Requirements
 
-- **Windows** (required - uses PowerPoint COM automation)
-- **Microsoft PowerPoint 2016 or later**
+- **Windows** (required - uses Outlook COM automation)
+- **Classic Outlook**, installed and signed in to a profile
 - **Claude Desktop** (Windows version)
+
+> **The new Outlook will not work.** It does not expose a COM object model, so there is nothing to
+> automate against. Ask Claude to check Outlook status first and it will tell you which client you
+> have.
 
 ## Installation
 
@@ -27,68 +28,64 @@ PowerPoint MCP Server lets you automate PowerPoint through conversation with Cla
 2. Double-click to install in Claude Desktop
 3. Restart Claude Desktop if prompted
 
-That's it! Start a new conversation and ask Claude to work with PowerPoint.
+That's it! Start a new conversation and ask Claude to work with Outlook.
 
 ## Usage Examples
 
-These examples work with any PowerPoint file, including a new empty presentation.
+### Example 1: Triage the inbox
 
-### Example 1: Create a Sales Presentation
-
-**You say:** *"Create a new PowerPoint file called SalesPresentation.pptx with a title slide, a slide with bullet points summarizing Q1 results, and a slide with a bar chart comparing sales by region."*
+**You say:** *"List the unread mail in my inbox from this week and summarize what needs a reply."*
 
 **What happens:**
-- Creates a new presentation
-- Adds a title slide with the presentation name
-- Creates a content slide with Q1 summary bullet points
-- Adds a chart slide with a bar chart comparing regional sales
-- Applies consistent formatting and theme
-- Confirms completion with file location
+- Resolves your inbox folder
+- Lists the unread messages in the requested range
+- Reads the ones it needs to summarize
+- Reports back which messages look like they need a response
 
-### Example 2: Build a Dashboard Slide
+### Example 2: Draft a reply
 
-**You say:** *"Add a new slide with a table showing product sales data and a pie chart next to it visualizing the breakdown by category."*
+**You say:** *"Reply to the message I have open, saying I will get back to them on Friday with the numbers. Don't send it."*
 
 **What happens:**
-- Creates a new slide with a split layout
-- Adds a table with product sales data
-- Creates a pie chart showing category breakdown
-- Positions both elements side by side
-- Returns confirmation with slide number
+- Reads the currently open or selected message
+- Creates a reply draft with the body you asked for
+- Leaves the draft unsent for you to review
 
-### Example 3: Create Professional Presentation
+### Example 3: Save attachments
 
-**You say:** *"Create a 10-slide investor pitch deck with a title slide, agenda, market overview with a chart, product features with SmartArt, team bios, and a closing slide. Use a professional blue theme with slide transitions."*
+**You say:** *"Find the message from Accounts with the invoice and save its attachments to my Downloads folder."*
 
 **What happens:**
-- Creates a new presentation with a professional blue theme
-- Builds all 10 slides with appropriate layouts
-- Adds charts and SmartArt graphics where specified
-- Applies consistent formatting and slide transitions
-- Confirms the presentation is ready for review
+- Searches mail for the message
+- Lists the attachments on it
+- Saves each one to the path you gave
 
 ---
 
 **More things you can ask:**
 
-- *"Show me PowerPoint side-by-side while you build this presentation"* - Agent Mode: watch every step happen live
-- *"Add a slide with a table showing Name, Role, and Department for the team"*
-- *"Add slide transitions and entrance animations to all slides"*
-- *"Apply the company brand colors and format the title slides consistently"*
-- *"Create a SmartArt diagram showing our organizational structure"*
-- *"Run the UpdateSlides macro"*
-- *"Show me PowerPoint while you work"* - watch changes in real-time
+- *"What's on my calendar tomorrow?"*
+- *"Create a 30-minute appointment called Budget review on Thursday at 10."*
+- *"Move everything from that sender into the Archive folder."*
+- *"Mark the last five messages in my inbox as read."*
+- *"Add the category Follow-up to that message."*
+
+## Sending mail
+
+Sending is the only irreversible thing this server does, so it is gated: a send will not happen
+without explicit confirmation, and a repeated send carrying the same operation ID will not go out
+twice. If a send times out, you get an *indeterminate* result rather than a false success, because
+the server cannot know whether Outlook completed it.
 
 ## Tips for Best Results
 
-- **Be specific** - Include file paths, slide numbers, and shape references when you know them
-- **Start simple** - Build complex presentations step by step
-- **Ask to see PowerPoint** - Say *"Show me PowerPoint while you work"* to watch changes in real-time
-- **Close files first** - PowerPoint MCP needs exclusive access to presentations during automation
+- **Check status first** - ask Claude to check Outlook status if anything seems wrong; it will report whether you are on classic or new Outlook
+- **Be specific** - name the folder, the sender, or the date range
+- **Review before sending** - ask for a draft, read it, then ask to send it
 
 ## Privacy & Security
 
-PowerPoint MCP Server runs **entirely on your computer**. Your PowerPoint data:
+This server runs **entirely on your computer**. Your Outlook data:
 - Never leaves your machine
 - Is not sent to any external servers
 - Is not used for training AI models
@@ -99,11 +96,12 @@ PowerPoint MCP Server runs **entirely on your computer**. Your PowerPoint data:
 
 **Claude says the tool isn't available:**
 - Restart Claude Desktop after installation
-- Check Settings → Integrations to verify PowerPoint MCP Server is enabled
+- Check Settings -> Integrations to verify the Outlook MCP Server is enabled
 
-**PowerPoint operations fail:**
-- Close the presentation in PowerPoint before asking Claude to modify it
-- Ensure PowerPoint is installed and working normally
+**Outlook operations fail:**
+- Confirm you are running **classic** Outlook, not the new Outlook
+- Ensure Outlook is running and signed in to a profile
+- Some operations are blocked by the Outlook Object Model Guard; the server reports those denials distinctly rather than treating them as ordinary errors
 
 **Need help?**
 - [Report an issue](https://github.com/trsdn/mcp-server-outlook/issues)

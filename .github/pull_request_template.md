@@ -2,11 +2,11 @@
 Brief description of what this PR does.
 
 ## Type of Change
-- [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
-- [ ] ✨ New feature (non-breaking change which adds functionality)
-- [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] 📚 Documentation update
-- [ ] 🔧 Maintenance (dependency updates, code cleanup, etc.)
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+- [ ] Maintenance (dependency updates, code cleanup, etc.)
 
 ## Related Issues
 Closes #[issue number]
@@ -15,62 +15,61 @@ Relates to #[issue number]
 ## Changes Made
 - Change 1
 - Change 2
-- Change 3
 
 ## Testing Performed
-- [ ] Tested manually with various PowerPoint files
-- [ ] Verified PowerPoint process cleanup (no powerpnt.exe remains after 5 seconds)
-- [ ] Tested error conditions (missing files, invalid arguments, etc.)
-- [ ] All existing commands still work
-- [ ] If PowerPoint CI runner was inactive, ran the required PowerPoint integration tests locally
-- [ ] If LLM-facing help/docs changed, ran `scripts\Test-LlmRegressionGate.ps1` or explained why not
-- [ ] VBA script execution tested (if applicable)
-- [ ] PPTM file format validation tested (if applicable)
-- [ ] VBA trust setup tested (if applicable)
-- [ ] Build produces zero warnings
 
-## Test Commands
+> **Read this before ticking anything.** No Outlook behaviour is verified by CI (#31): there is no
+> self-hosted Windows runner with classic Outlook. Any Outlook claim below rests on a **local** run.
+> Say so explicitly rather than implying CI covered it.
+
+- [ ] Build produces zero warnings and zero errors
+- [ ] Ran the targeted test filter for the area I changed (not the full suite)
+- [ ] Tested error conditions (Outlook not running, new-Outlook-only, stale entry ID, invalid arguments)
+- [ ] Verified COM objects are released: `scripts\check-com-leaks.ps1` reports 0 leaks
+- [ ] Manually exercised the change against a real Outlook profile, and said which actions below
+- [ ] If LLM-facing help/docs changed, ran `scripts\Test-LlmRegressionGate.ps1` or explained why not
+
+**Manual verification performed (be specific):**
 ```powershell
-# Commands used for testing
-OutlookMcp command1 "test.pptx"
-OutlookMcp command2 "test.pptx" "param"
+# Actual commands run, and what you observed
+outlookcli application get-status
 ```
 
-## Screenshots (if applicable)
-[Add screenshots showing the new functionality]
+## New Action Checklist
 
-## Core Commands Coverage Checklist ⚠️
+**Does this PR add or modify a Core Commands method?** [ ] Yes [ ] No
 
-**Does this PR add or modify Core Commands methods?** [ ] Yes [ ] No
+If YES, every sync point must be updated. The MCP server and the CLI are both first-class surfaces
+and are generated from the same interfaces, so a half-finished action ships as broken parity.
 
-If YES, verify all steps completed:
+- [ ] Added the method to the Core Commands interface (e.g. `IMailCommands`)
+- [ ] Implemented it in the Core Commands class (e.g. `MailCommands`)
+- [ ] Added the enum value to `ToolActions.cs`
+- [ ] Added the `ToActionString` mapping in `ActionExtensions.cs` (a missing mapping throws at runtime)
+- [ ] Verified the action appears in **both** the generated MCP tool and the generated CLI command
+- [ ] Added integration tests
+- [ ] Updated `FEATURES.md`, including the operation count
+- [ ] Updated `skills/shared/*.md` if the guidance changed (these become MCP prompts)
+- [ ] Updated the README operation counts if they changed
 
-- [ ] Added method to Core Commands interface (e.g., `IPowerQueryCommands.NewMethodAsync()`)
-- [ ] Implemented method in Core Commands class (e.g., `PowerQueryCommands.NewMethodAsync()`)
-- [ ] Added enum value to `ToolActions.cs` (e.g., `PowerQueryAction.NewMethod`)
-- [ ] Added `ToActionString` mapping to `ActionExtensions.cs` (e.g., `PowerQueryAction.NewMethod => "new-method"`)
-- [ ] Added switch case to appropriate MCP Tool (e.g., `PptPowerQueryTool.cs`)
-- [ ] Implemented MCP method that calls Core method
-- [ ] Build succeeds with 0 warnings (CS8524 compiler enforcement verified)
-- [ ] Updated `CORE-COMMANDS-AUDIT.md` (if significant addition)
-- [ ] Added integration tests for new action
-- [ ] Updated MCP Server prompts documentation
-- [ ] Updated CLI commands documentation (if applicable)
+## Safety Review
 
-**Coverage Impact**: +___ methods, ___% → ___% coverage
+- [ ] This PR does not add a way to send or delete mail without explicit confirmation
+- [ ] Any new irreversible action is idempotent per operation ID, or explains why it need not be
+- [ ] No mailbox content, entry IDs, addresses, or file paths from a real mailbox appear in the diff,
+      tests, commit messages, or this description
 
 ## Checklist
 - [ ] Code follows project style guidelines
-- [ ] Self-review of code completed
-- [ ] Code builds with zero warnings
-- [ ] Appropriate error handling added
-- [ ] Updated help text (if adding new commands)
-- [ ] Updated README.md (if needed)
-- [ ] Follows PowerPoint COM best practices from copilot-instructions.md
-- [ ] Uses batch API with proper disposal (`using var batch` or `await using var batch`)
-- [ ] Properly handles 1-based PowerPoint indexing
-- [ ] Escapes user input with `.EscapeMarkup()`
-- [ ] Returns consistent exit codes (0 = success, 1+ = error)
+- [ ] Self-review completed
+- [ ] `Success` is never `true` alongside an `ErrorMessage`
+- [ ] Core commands do not catch exceptions to return an error result; exceptions propagate
+- [ ] Every `dynamic` COM object is released in a `finally` block via `ComUtilities.Release(ref obj!)`
+- [ ] No TODO / FIXME / HACK markers, and no commented-out code
+- [ ] Escapes user input with `.EscapeMarkup()` in CLI output
+- [ ] Returns consistent exit codes (note: operation failures currently exit 0, see #63)
+- [ ] CHANGELOG.md updated under `## [Unreleased]` for any user-visible change
+- [ ] No confidential or personal information in the commits, description, or tests
 
 ## Additional Notes
-Any additional information that reviewers should know.
+Anything reviewers should know, including trade-offs and areas you would like careful review on.

@@ -1,6 +1,6 @@
 # MCPB Build & Packaging Guide
 
-This document contains developer information for building and submitting the PowerPoint MCP Server to the Claude Desktop directory.
+This document contains developer information for building and submitting the Outlook MCP Server to the Claude Desktop directory.
 
 ## Directory Contents
 
@@ -76,7 +76,7 @@ The manifest follows MCPB version 0.3 specification:
   "manifestVersion": "0.3",
   "server": {
     "id": "outlook-mcp-server",
-    "name": "PowerPoint MCP Server",
+    "name": "Outlook MCP Server",
     "type": "binary",
     "platforms": ["win32"]
   },
@@ -91,10 +91,12 @@ The manifest follows MCPB version 0.3 specification:
 
 ## Tool Annotations
 
-All 22 MCP tools include the `Destructive = true` annotation since they can modify PowerPoint files:
+Tools that create, modify, or delete Outlook items carry the `Destructive = true` annotation.
+`application` and `folder` are read-only and are annotated `Destructive = false`:
 
 ```csharp
-[McpServerTool(Name = "range", Title = "PowerPoint Range Operations", Destructive = true)]
+[McpServerTool(Name = "mail", Title = "Outlook Mail Operations", Destructive = true)]
+[McpServerTool(Name = "folder", Title = "Outlook Folder Operations", Destructive = false)]
 ```
 
 ## Technical Notes
@@ -107,7 +109,7 @@ All 22 MCP tools include the `Destructive = true` annotation since they can modi
 
 ### Why No Trimming?
 
-PowerPoint COM interop uses `Type.GetTypeFromProgID()` which requires reflection. Trimming would break COM activation with IL2072 errors.
+Outlook COM interop uses `Type.GetTypeFromProgID()` which requires reflection. Trimming would break COM activation with IL2072 errors.
 
 ### Why Windows x64 Only?
 

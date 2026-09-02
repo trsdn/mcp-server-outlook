@@ -43,7 +43,7 @@ internal sealed class SessionCreateCommand : AsyncCommand<SessionCreateCommand.S
     internal sealed class Settings : CommandSettings
     {
         [CommandArgument(0, "<FILE>")]
-        [Description("Path to the new legacy PowerPoint file to create")]
+        [Description("Path to the new .pptx document to create")]
         public string FilePath { get; init; } = string.Empty;
 
         [CommandOption("--timeout <SECONDS>")]
@@ -84,7 +84,7 @@ internal sealed class SessionOpenCommand : AsyncCommand<SessionOpenCommand.Setti
     internal sealed class Settings : CommandSettings
     {
         [CommandArgument(0, "<FILE>")]
-        [Description("Path to the legacy PowerPoint file to open")]
+        [Description("Path to the .pptx document to open")]
         public string FilePath { get; init; } = string.Empty;
 
         [CommandOption("--timeout <SECONDS>")]

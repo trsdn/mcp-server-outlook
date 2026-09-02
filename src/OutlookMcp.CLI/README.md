@@ -48,16 +48,27 @@ where the MCP server pays for richer schemas up front.
 
 ## Exit codes
 
-- `0` - the command ran
-- non-zero - the arguments could not be parsed
+- `0` - the command ran and the operation succeeded
+- `1` - the arguments could not be parsed, or the operation reported `success: false`
 
-**Known defect (#63):** an Outlook operation that fails still exits `0`. Do not branch on the exit
-code. Parse the JSON and check the `success` field instead:
+The exit code reflects the operation, not just the transport, so it is safe to branch on
+(this was not true before #63):
+
+```powershell
+outlookcli folder list-default
+if ($LASTEXITCODE -ne 0) { throw "folder list-default failed" }
+```
+
+Commands whose payload has no `success` property (bare arrays and ordinary read results) exit `0`.
+The JSON is still authoritative if you need the error text:
 
 ```powershell
 $r = outlookcli folder list-default | ConvertFrom-Json
 if (-not $r.success) { throw $r.errorMessage }
 ```
+
+When `--output <path>` is given and the operation fails, no file is written and the error JSON goes
+to stdout.
 
 ## Naming note
 

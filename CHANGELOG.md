@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **VS Code extension lockfile pinned an unpublished `markdown-it` version**: Dependabot (#49) bumped `markdown-it` to `14.3.1`, but that version is not present in the npm registry (published versions go `14.3.0` → `15.0.0`), so `npm ci` in `vscode-extension/` failed with a 404 on the tarball. Re-pinned to `14.3.0`, which has identical declared dependencies and `bin` entries. Verified by `npm ci` (exit 0) and `tsc -p ./` (exit 0); the tarball's SHA-1 matches the registry's published shasum, confirming the recomputed SHA-512 integrity is authentic.
+  - Not caught by CI because no workflow installs `vscode-extension/` dependencies on pull requests -- only the manually dispatched `release.yml` does, so this would first have surfaced during a release.
+
 ### Changed
 
 - **BREAKING — Project and package rename `PptMcp.*` → `OutlookMcp.*`** (#5): every project under `src/` and `tests/`, the solution file, all assembly names, root namespaces, `using` directives, NuGet package IDs, build scripts, and CI workflows were renamed so this repository publishes only under its own identity.

@@ -15,8 +15,6 @@ on:
       - 'vscode-extension/package-lock.json'
       - 'vscode-extension/tsconfig.json'
       - 'vscode-extension/src/**'
-      - 'eval/package.json'
-      - 'eval/package-lock.json'
       - '.github/workflows/node-ci.yml'
   pull_request:
     branches: [ master ]
@@ -25,8 +23,6 @@ on:
       - 'vscode-extension/package-lock.json'
       - 'vscode-extension/tsconfig.json'
       - 'vscode-extension/src/**'
-      - 'eval/package.json'
-      - 'eval/package-lock.json'
       - '.github/workflows/node-ci.yml'
   workflow_dispatch:
 
@@ -70,26 +66,3 @@ jobs:
         continue-on-error: true
         run: npm audit --omit=dev
 
-  eval-tools:
-    name: Install eval tooling
-    # eval/ is a development-only quality-evaluation harness; it is never shipped
-    # in the MCP package. It declares no OS restriction, so Linux is fine here.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: eval/package-lock.json
-
-      # Runs the postinstall patch-deps.cjs step as well, so a dependency bump that
-      # breaks the vscode-jsonrpc ESM patch is caught here rather than at eval time.
-      - name: Install dependencies
-        working-directory: eval
-        run: npm ci

@@ -217,7 +217,8 @@ System.IO.File.WriteAllText(OutputFile, sb.ToString());
       <SkillPromptsGenFile>$(IntermediateOutputPath)PptSkillPrompts.g.cs</SkillPromptsGenFile>
     </PropertyGroup>
     <!-- skills/shared/ holds only Outlook guidance, so every file here becomes an MCP prompt.
-         The slide-design docs that used to require an allow-list moved to eval/skills/ under #34. -->
+         The slide-design docs that used to require an allow-list were removed with the eval
+         harness under #61. -->
     <ItemGroup>
       <SkillSharedFiles Include="$(SkillsSharedDir)\*.md" />
     </ItemGroup>

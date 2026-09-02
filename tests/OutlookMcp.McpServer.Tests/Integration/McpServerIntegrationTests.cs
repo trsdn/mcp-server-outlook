@@ -337,9 +337,9 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
     }
 
     /// <summary>
-    /// Regression guard for #23's prompts/list acceptance criterion: only Outlook-relevant
-    /// prompts should be discoverable, not the PowerPoint-only skill docs (slide-design-*,
-    /// generation-pipeline) that remain on disk for the legacy eval/ harness.
+    /// Regression guard for #23's prompts/list acceptance criterion: only Outlook-relevant prompts
+    /// should be discoverable. Every `.md` under `skills/shared/` becomes an `[McpServerPrompt]`, so
+    /// this also guards against a PowerPoint-era doc being reintroduced there.
     /// </summary>
     [Fact]
     public async Task ListPrompts_ReturnsOnlyOutlookPrompts()
@@ -349,7 +349,7 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
         var expectedPromptNames = new HashSet<string>
         {
             "behavioral_rules_guide",
-            "outlook_agent_mode_guide",
+            "outlook_workflows_guide",
         };
 
         var prompts = await _client!.ListPromptsAsync(cancellationToken: _cts.Token);

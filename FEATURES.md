@@ -96,11 +96,11 @@ onto a single apartment-threaded worker. See `docs/ADR-002-OUTLOOK-COM-EXECUTION
 
 ## What this document no longer covers
 
-Earlier revisions of this file catalogued 33 tools and 204 operations for PowerPoint automation:
+Earlier revisions of this file catalogued 33 tools and 204 operations for presentation automation:
 slides, shapes, text, charts, animations, transitions, SmartArt, VBA and more. That surface was
-inherited when this repository was renamed from a PowerPoint MCP server, and it was deleted in #26.
+inherited when this repository was renamed, and it was deleted in #26.
 None of those operations exist any more, in either the MCP server or the CLI.
 
-The repository still contains `ComInterop/Session/*`, the presentation-session COM plumbing, as
-dormant infrastructure. It is deliberately retained but is not reachable from any tool or command,
-and Outlook does not use it. See ADR-002 for the reasoning.
+The inherited presentation-session COM plumbing (`ComInterop/Session/*`) has also been deleted.
+Outlook has no document to open or save, so there is no session or batch concept anywhere in the
+product. See ADR-002 for the reasoning.

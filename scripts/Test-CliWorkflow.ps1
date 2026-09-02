@@ -1,21 +1,25 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests the PowerPoint CLI end-to-end workflow - exactly what a user would do.
+    End-to-end smoke test for the outlookcli surface.
 
 .DESCRIPTION
-    This script demonstrates and tests a basic CLI workflow:
-    1. Create session (auto-starts daemon, creates file)
-    2. Create slide with Blank layout
-    3. List slides
-    4. Add textbox content
-    5. List shapes on the slide
-    6. Close session (with save)
-    7. Reopen saved file (session open - exercises Presentations.Open path)
-    8. List slides in reopened session
-    9. List shapes in reopened session
-    10. Close reopened session
-    11. Verify file exists
+    Exercises the CLI exactly as a user would, without requiring Outlook to be
+    running. Every assertion holds in both states:
+
+    1. `diag ping`            - the daemon starts and answers.
+    2. `diag echo`            - a parameter round-trips through the pipe.
+    3. `diag outlook`         - flavour detection returns a well-formed payload.
+    4. `service status`       - the daemon reports itself running.
+    5. `application get-status` - a *generated* command reaches Core. This is the
+       important one: it proves the generated dispatch surface is wired. It
+       succeeds when classic Outlook is running and fails cleanly when it is
+       not, so the assertion is that the JSON is well formed and the process
+       exit code AGREES with the payload's `success` field (issue #63).
+    6. `--output` on a failing command must not leave a file behind.
+
+    Deliberately does NOT assert that Outlook is present. Only the self-hosted
+    integration runner (#31) can do that.
 
 .EXAMPLE
     .\scripts\Test-CliWorkflow.ps1
@@ -25,9 +29,7 @@
 #>
 
 [CmdletBinding()]
-param(
-    [switch]$KeepFile  # Don't delete the test file after completion
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 
@@ -48,190 +50,114 @@ if (-not $cliPath) {
 $cli = (Resolve-Path $cliPath).Path
 Write-Host "Using CLI: $cli" -ForegroundColor Cyan
 
-# Generate unique test file
-$testFile = Join-Path $env:TEMP "cli-workflow-test-$(Get-Random).pptx"
-Write-Host "Test file: $testFile" -ForegroundColor Cyan
-
 $passed = 0
 $failed = 0
 
 function Test-Step {
     param(
         [string]$Name,
-        [scriptblock]$Action,
-        [scriptblock]$Verify = $null
+        [scriptblock]$Action
     )
 
     Write-Host "`n[$Name]" -ForegroundColor Yellow
     try {
-        $result = & $Action
-        if ($Verify) {
-            $verifyResult = & $Verify $result
-            if (-not $verifyResult) {
-                Write-Host "  FAIL: Verification failed" -ForegroundColor Red
-                Write-Host "  Result: $($result | ConvertTo-Json -Depth 5 -Compress)" -ForegroundColor Gray
-                $script:failed++
-                return $null
-            }
+        $ok = & $Action
+        if (-not $ok) {
+            Write-Host "  FAIL: assertion returned false" -ForegroundColor Red
+            $script:failed++
+            return
         }
         Write-Host "  PASS" -ForegroundColor Green
         $script:passed++
-        return $result
     }
     catch {
         Write-Host "  FAIL: $_" -ForegroundColor Red
-        if ($_.ErrorDetails.Message) {
-            Write-Host "  Details: $($_.ErrorDetails.Message)" -ForegroundColor Gray
-        }
         $script:failed++
-        return $null
     }
 }
 
-# ============================================================================
-# TEST WORKFLOW
-# ============================================================================
+# Runs the CLI and returns the parsed JSON plus the real exit code.
+function Invoke-Cli {
+    param([Parameter(ValueFromRemainingArguments)] [string[]]$CliArgs)
+
+    $raw = & $cli -q @CliArgs 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    $json = $null
+    try { $json = $raw | ConvertFrom-Json } catch { }
+    Write-Verbose "args=[$($CliArgs -join ' ')] exit=$code raw=$raw"
+    [pscustomobject]@{ Json = $json; ExitCode = $code; Raw = $raw }
+}
 
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "PowerPoint CLI Workflow Test" -ForegroundColor Cyan
+Write-Host "Outlook CLI Workflow Test" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# 1. Create session (auto-starts daemon, creates file)
-$session = Test-Step "Create session (create file)" {
-    & $cli -q session create $testFile | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.sessionId -and $r.success -ne $false
+Test-Step "diag ping - daemon starts and answers" {
+    $r = Invoke-Cli diag ping
+    if ($r.ExitCode -ne 0) { throw "expected exit 0, got $($r.ExitCode)" }
+    if (-not $r.Json) { throw "response was not JSON: $($r.Raw)" }
+    $r.Json.success -eq $true
 }
 
-if (-not $session.sessionId) {
-    Write-Host "`nFATAL: Could not open session. Aborting." -ForegroundColor Red
-    exit 1
+Test-Step "diag echo - parameter round-trips through the pipe" {
+    $marker = "smoke-$(Get-Random)"
+    $r = Invoke-Cli diag echo --message $marker
+    if ($r.ExitCode -ne 0) { throw "expected exit 0, got $($r.ExitCode)" }
+    if (-not $r.Json) { throw "response was not JSON: $($r.Raw)" }
+    if ($r.Raw -notmatch [regex]::Escape($marker)) { throw "echo did not return '$marker'" }
+    $r.Json.success -eq $true
 }
 
-$sessionId = $session.sessionId
-Write-Host "  Session ID: $sessionId" -ForegroundColor Gray
-
-# 2. Create slide
-Test-Step "Create slide with Blank layout" {
-    & $cli -q slide create --session $sessionId --position 0 --layout-name Blank | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.success -eq $true
+Test-Step "diag outlook - flavour detection returns a well-formed payload" {
+    $r = Invoke-Cli diag outlook
+    if ($r.ExitCode -ne 0) { throw "expected exit 0, got $($r.ExitCode)" }
+    if (-not $r.Json) { throw "response was not JSON: $($r.Raw)" }
+    $r.Json.success -eq $true
 }
 
-# 3. List slides
-$slides = Test-Step "List slides" {
-    & $cli -q slide list --session $sessionId | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.success -eq $true -and $null -ne $r.slides
+Test-Step "service status - daemon reports itself running" {
+    $r = Invoke-Cli service status
+    if ($r.ExitCode -ne 0) { throw "expected exit 0, got $($r.ExitCode)" }
+    if (-not $r.Json) { throw "response was not JSON: $($r.Raw)" }
+    $r.Json.running -eq $true
 }
 
-Write-Host "  Slides: $(($slides.slides | Measure-Object).Count)" -ForegroundColor Gray
+# The generated dispatch surface. Whether this succeeds depends on Outlook being
+# present, so assert only on well-formedness and on exit code / payload agreement.
+Test-Step "application get-status - generated command reaches Core, exit code agrees with payload" {
+    $r = Invoke-Cli application get-status
+    if (-not $r.Json) { throw "response was not JSON: $($r.Raw)" }
+    if ($null -eq $r.Json.success) { throw "payload has no 'success' property: $($r.Raw)" }
 
-# 4. Add textbox content
-Test-Step "Add textbox to slide 1" {
-    & $cli -q shape add-textbox --session $sessionId --slide-index 1 --left 72 --top 72 --width 240 --height 48 --text "CLI smoke test" | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.success -eq $true
-}
-
-# 5. List shapes on slide 1
-$shapes = Test-Step "List shapes on slide 1" {
-    & $cli -q shape list --session $sessionId --slide-index 1 | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.success -eq $true -and $null -ne $r.shapes
-}
-
-Write-Host "  Shapes: $(($shapes.shapes | Measure-Object).Count)" -ForegroundColor Gray
-
-# 6. Close session (with save)
-Test-Step "Close session (with save)" {
-    & $cli -q session close --session $sessionId --save | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.success -eq $true
-}
-
-# 7. Reopen saved file (session open - exercises Presentations.Open path distinct from Add+SaveAs)
-#    This step would catch deployment issues like missing office.dll (issue #487) because
-#    PptBatch.ctor runs AutomationSecurity setup before opening any presentation.
-$reopenSession = Test-Step "Reopen saved file (session open)" {
-    & $cli -q session open $testFile | ConvertFrom-Json
-} -Verify {
-    param($r)
-    $r.sessionId -and $r.success -ne $false
-}
-
-# 8. List slides in reopened session (proves the file loaded correctly)
-if ($reopenSession -and $reopenSession.sessionId) {
-    $reopenSessionId = $reopenSession.sessionId
-    $reopenedSlides = Test-Step "List slides in reopened session" {
-        & $cli -q slide list --session $reopenSessionId | ConvertFrom-Json
-    } -Verify {
-        param($r)
-        $r.success -eq $true -and $null -ne $r.slides
+    $expected = if ($r.Json.success -eq $true) { 0 } else { 1 }
+    if ($r.ExitCode -ne $expected) {
+        throw "success=$($r.Json.success) but exit code was $($r.ExitCode), expected $expected (issue #63)"
     }
+    Write-Host "  (success=$($r.Json.success), exit=$($r.ExitCode))" -ForegroundColor DarkGray
+    $true
+}
 
-    Write-Host "  Reopened slides: $(($reopenedSlides.slides | Measure-Object).Count)" -ForegroundColor Gray
+Test-Step "unknown action is rejected with a non-zero exit code" {
+    $r = Invoke-Cli application definitely-not-an-action
+    if ($r.ExitCode -eq 0) { throw "unknown action returned exit 0" }
+    $true
+}
 
-    # 9. List shapes in reopened session (proves saved content loaded correctly)
-    $reopenedShapes = Test-Step "List shapes in reopened slide 1" {
-        & $cli -q shape list --session $reopenSessionId --slide-index 1 | ConvertFrom-Json
-    } -Verify {
-        param($r)
-        $r.success -eq $true -and $null -ne $r.shapes
+Test-Step "--output writes no file when the operation fails" {
+    $outFile = Join-Path $env:TEMP "cli-smoke-out-$(Get-Random).json"
+    $r = Invoke-Cli application definitely-not-an-action --output $outFile
+    try {
+        if ($r.ExitCode -eq 0) { throw "expected a non-zero exit code" }
+        if (Test-Path $outFile) { throw "output file was written despite failure: $outFile" }
+        $true
     }
-
-    Write-Host "  Reopened shapes: $(($reopenedShapes.shapes | Measure-Object).Count)" -ForegroundColor Gray
-
-    # 10. Close reopened session
-    Test-Step "Close reopened session" {
-        & $cli -q session close --session $reopenSessionId | ConvertFrom-Json
-    } -Verify {
-        param($r)
-        $r.success -eq $true
+    finally {
+        Remove-Item $outFile -Force -ErrorAction SilentlyContinue
     }
 }
-
-# 11. Verify file exists
-Test-Step "Verify file exists" {
-    if (Test-Path $testFile) {
-        $size = (Get-Item $testFile).Length
-        "File size: $size bytes"
-    } else {
-        throw "File not found"
-    }
-} -Verify {
-    param($r)
-    $r -match "bytes"
-}
-
-# ============================================================================
-# SUMMARY
-# ============================================================================
 
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "TEST SUMMARY" -ForegroundColor Cyan
+Write-Host "Passed: $passed  Failed: $failed" -ForegroundColor $(if ($failed -eq 0) { 'Green' } else { 'Red' })
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Passed: $passed" -ForegroundColor Green
-Write-Host "Failed: $failed" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "Green" })
-Write-Host "Test file: $testFile" -ForegroundColor Gray
 
-if (-not $KeepFile -and (Test-Path $testFile)) {
-    Remove-Item $testFile -Force
-    Write-Host "(Test file deleted)" -ForegroundColor Gray
-} elseif ($KeepFile) {
-    Write-Host "(Test file kept for inspection)" -ForegroundColor Yellow
-}
-
-if ($failed -gt 0) {
-    Write-Host "`nSome tests FAILED!" -ForegroundColor Red
-    exit 1
-} else {
-    Write-Host "`nAll tests PASSED!" -ForegroundColor Green
-    exit 0
-}
+exit $(if ($failed -eq 0) { 0 } else { 1 })

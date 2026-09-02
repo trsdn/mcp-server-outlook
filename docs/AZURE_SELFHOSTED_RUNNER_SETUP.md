@@ -18,7 +18,6 @@ Until then, the workflow exits with a status message instead of pretending that 
 - Windows 11 or Windows Server with desktop experience
 - Microsoft 365 Apps / Outlook (classic desktop) installed, licensed, and with a working mail profile
 - .NET SDK `9.0.x`
-- `uv` available on PATH for `llm-tests/`
 - Stable disk space for build outputs and test artifacts
 - Runner labels: `self-hosted`, `windows`, `outlook`
 
@@ -68,5 +67,4 @@ Prerequisites:
 Manual local command:
 
 ```powershell
-.\scripts\Test-LlmRegressionGate.ps1
 ```

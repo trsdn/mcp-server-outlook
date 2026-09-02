@@ -83,7 +83,7 @@ LLMs already know Outlook, JSON, and the MCP protocol. They need server-specific
 
 **All MCP prompts are auto-generated from `skills/shared/*.md`:**
 - Source of truth: `skills/shared/*.md` — edit these files
-- Auto-embedded and auto-generated `PptSkillPrompts.g.cs` at build time
+- Auto-embedded and auto-generated `OutlookSkillPrompts.g.cs` at build time
 - NEVER create hand-crafted prompt files — add `.md` to `skills/shared/` instead
 - To add a new prompt: add `.md` to `skills/shared/`, add description override in `GenerateSkillPromptsClass` task in `McpServer.csproj`, rebuild
 

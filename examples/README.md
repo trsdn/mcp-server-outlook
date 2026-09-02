@@ -47,5 +47,3 @@ There is no session or batch concept in the Outlook surface. Outlook is a shared
 application the server attaches to, not a document it opens and closes, so there is nothing to open,
 save, or dispose. Each call acts on the live mailbox immediately.
 
-The dormant `session` plumbing that remains in `ComInterop/Session/*` is legacy infrastructure that
-nothing calls; see [the ComInterop README](../src/OutlookMcp.ComInterop/README.md).

@@ -5,7 +5,7 @@ namespace OutlookMcp.ComInterop;
 
 /// <summary>
 /// COM interface for handling incoming and outgoing COM calls.
-/// Used to intercept _pptApp busy/retry scenarios.
+/// Used to intercept Outlook COM busy/retry scenarios.
 /// </summary>
 [GeneratedComInterface]
 [Guid("00000016-0000-0000-C000-000000000046")]

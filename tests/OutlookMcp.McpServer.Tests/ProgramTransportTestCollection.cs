@@ -11,11 +11,7 @@ namespace OutlookMcp.McpServer.Tests;
 /// These tests MUST run sequentially because they share static state in Program.cs.
 /// </summary>
 /// <remarks>
-/// Tests in this collection:
-/// - PptFileToolOperationTrackingTests
-/// - PptDesignToolTests
-/// 
-/// Both use Program.ConfigureTestTransport() which sets static pipe fields.
+/// Tests in this collection use Program.ConfigureTestTransport(), which sets static pipe fields.
 /// Running them in parallel causes "writer already completed" errors.
 /// </remarks>
 [CollectionDefinition("ProgramTransport")]

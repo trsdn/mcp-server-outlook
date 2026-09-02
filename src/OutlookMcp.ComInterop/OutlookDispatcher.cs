@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace OutlookMcp.ComInterop.Session;
+namespace OutlookMcp.ComInterop;
 
 /// <summary>
 /// Process-wide single-threaded apartment (STA) dispatcher that serializes all Outlook COM
@@ -19,10 +19,10 @@ namespace OutlookMcp.ComInterop.Session;
 /// per-call work onto this shared queue instead of owning STA thread lifecycle itself.
 /// </para>
 /// <para>
-/// Mirrors <see cref="PptBatch"/>'s <c>Channel&lt;Func&lt;Task&gt;&gt;</c> work-queue pattern
-/// (worth reusing per ADR-002), but the queue here is <b>bounded</b> to give overlapping callers
-/// an explicit back-pressure story: once the queue is full, new callers block (subject to the
-/// same overall timeout) instead of piling up unboundedly, and <see cref="OleMessageFilter"/> is
+/// Uses a <c>Channel&lt;Func&lt;Task&gt;&gt;</c> work queue, <b>bounded</b>
+/// to give overlapping callers an explicit back-pressure story: once the queue is full, new
+/// callers block (subject to the same overall timeout) instead of piling up unboundedly, and
+/// <see cref="OleMessageFilter"/> is
 /// registered exactly once for the dispatcher's entire lifetime rather than per operation.
 /// </para>
 /// </remarks>

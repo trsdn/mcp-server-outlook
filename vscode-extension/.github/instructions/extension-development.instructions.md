@@ -8,7 +8,7 @@ applyTo: "vscode-extension/**"
 
 ## Extension Overview
 
-The OutlookMcp VS Code Extension provides one-click installation of the OutlookMcp MCP server for Visual Studio Code, enabling AI assistants like GitHub Copilot to automate Microsoft PowerPoint.
+The OutlookMcp VS Code Extension provides one-click installation of the OutlookMcp MCP server for Visual Studio Code, enabling AI assistants like GitHub Copilot to automate Microsoft Outlook.
 
 **Key Files:**
 - `package.json` - Extension manifest (metadata, dependencies, version)

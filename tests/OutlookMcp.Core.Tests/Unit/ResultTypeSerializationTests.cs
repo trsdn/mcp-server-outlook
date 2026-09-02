@@ -124,7 +124,7 @@ public class ResultTypeSerializationTests
             Success = true,
             Action = "delete",
             Message = "Deleted slide 3",
-            FilePath = @"C:\test\pres.pptx"
+            FilePath = @"C:\test\report.pdf"
         };
 
         var json = JsonSerializer.Serialize(original, JsonOptions);

@@ -1,40 +1,24 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using OutlookMcp.ComInterop.Session;
 
 namespace OutlookMcp.CLI.Infrastructure;
 
 /// <summary>
-/// System tray icon for the migration CLI daemon process.
-/// Shows inherited legacy presentation sessions and allows closing them or stopping the service.
-/// Ported from the old OutlookMcp.Service.ServiceTray with auto-update removed.
+/// System tray icon for the CLI daemon process. Shows service status and allows stopping it.
 /// </summary>
 internal sealed class CliServiceTray : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _contextMenu;
-    private readonly ToolStripMenuItem _sessionsMenu;
-    private readonly SessionManager _sessionManager;
     private readonly Action _requestShutdown;
-    private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly TaskbarNotificationWindow _taskbarWindow;
     private bool _disposed;
-    private DateTime _lastBalloonShown = DateTime.MinValue;
 
-    public CliServiceTray(SessionManager sessionManager, Action requestShutdown)
+    public CliServiceTray(Action requestShutdown)
     {
-        _sessionManager = sessionManager;
         _requestShutdown = requestShutdown;
 
         _contextMenu = new ContextMenuStrip();
-
-        // Sessions submenu (Alt+S mnemonic)
-        _sessionsMenu = new ToolStripMenuItem("&Sessions (0)");
-        _sessionsMenu.AccessibleDescription = "Lists active legacy presentation sessions";
-        _sessionsMenu.DropDownItems.Add(new ToolStripMenuItem("No active sessions") { Enabled = false });
-        _contextMenu.Items.Add(_sessionsMenu);
-
-        _contextMenu.Items.Add(new ToolStripSeparator());
 
         // About (Alt+A mnemonic)
         var aboutItem = new ToolStripMenuItem("&About...");
@@ -46,7 +30,7 @@ internal sealed class CliServiceTray : IDisposable
 
         // Exit (Alt+X mnemonic)
         var exitItem = new ToolStripMenuItem("E&xit");
-        exitItem.AccessibleDescription = "Stop the migration CLI service and exit";
+        exitItem.AccessibleDescription = "Stop the CLI service and exit";
         exitItem.Click += (_, _) => ExitService();
         _contextMenu.Items.Add(exitItem);
 
@@ -56,22 +40,13 @@ internal sealed class CliServiceTray : IDisposable
         _notifyIcon = new NotifyIcon
         {
             Icon = icon,
-            Text = "Outlook Migration CLI Service",
+            Text = "OutlookMcp CLI Service",
             ContextMenuStrip = _contextMenu,
             Visible = true
         };
 
-        _notifyIcon.DoubleClick += (_, _) => ShowSessions();
-
-        // Refresh timer
-        _refreshTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _refreshTimer.Tick += (_, _) => RefreshSessionsMenu();
-        _refreshTimer.Start();
-
         // Listen for explorer.exe restarts so we can re-register the tray icon
         _taskbarWindow = new TaskbarNotificationWindow(_notifyIcon);
-
-        RefreshSessionsMenu();
 
         // Check for updates after a short delay so the UI is responsive at startup
         CheckForUpdateAsync();
@@ -122,132 +97,8 @@ internal sealed class CliServiceTray : IDisposable
         }
     }
 
-    private void RefreshSessionsMenu()
-    {
-        if (_disposed) return;
-
-        try
-        {
-            var sessions = _sessionManager.GetActiveSessions();
-
-            if (_contextMenu.InvokeRequired)
-            {
-                _contextMenu.Invoke(RefreshSessionsMenu);
-                return;
-            }
-
-            _sessionsMenu.Text = $"&Sessions ({sessions.Count})";
-            _sessionsMenu.DropDownItems.Clear();
-
-            if (sessions.Count == 0)
-            {
-                _sessionsMenu.DropDownItems.Add(new ToolStripMenuItem("No active sessions") { Enabled = false });
-            }
-            else
-            {
-                foreach (var session in sessions)
-                {
-                    var fileName = Path.GetFileName(session.FilePath);
-                    var sessionMenu = new ToolStripMenuItem(fileName);
-                    sessionMenu.AccessibleName = $"Session: {fileName}";
-                    sessionMenu.AccessibleDescription = $"Legacy presentation session for {session.FilePath}";
-                    sessionMenu.ToolTipText = $"Session: {session.SessionId}\nPath: {session.FilePath}";
-
-                    // Close session with save prompt
-                    var closeItem = new ToolStripMenuItem("&Close Session...");
-                    closeItem.AccessibleDescription = $"Close {fileName} with option to save";
-                    closeItem.Click += (_, _) => PromptCloseSession(session.SessionId, fileName);
-                    sessionMenu.DropDownItems.Add(closeItem);
-
-                    _sessionsMenu.DropDownItems.Add(sessionMenu);
-                }
-
-                _sessionsMenu.DropDownItems.Add(new ToolStripSeparator());
-
-                var closeAllItem = new ToolStripMenuItem("Close &All Sessions");
-                closeAllItem.AccessibleDescription = "Close all active sessions without saving";
-                closeAllItem.Click += (_, _) => CloseAllSessions();
-                _sessionsMenu.DropDownItems.Add(closeAllItem);
-            }
-
-            _notifyIcon.Text = sessions.Count > 0
-                ? $"Outlook Migration CLI - {sessions.Count} legacy session(s)"
-                : "Outlook Migration CLI Service";
-        }
-        catch (Exception)
-        {
-            // UI refresh errors should not crash the service
-        }
-    }
-
-    private void PromptCloseSession(string sessionId, string fileName)
-    {
-        var result = MessageBox.Show(
-            $"Do you want to save changes to '{fileName}' before closing?",
-            "Close Session",
-            MessageBoxButtons.YesNoCancel,
-            MessageBoxIcon.Question);
-
-        if (result == System.Windows.Forms.DialogResult.Cancel)
-            return;
-
-        CloseSession(sessionId, save: result == System.Windows.Forms.DialogResult.Yes);
-    }
-
-    private void CloseSession(string sessionId, bool save)
-    {
-        try
-        {
-            _sessionManager.CloseSession(sessionId, save: save);
-            RefreshSessionsMenu();
-            ShowBalloon("Session Closed",
-                save ? "Session saved and closed." : "Session closed without saving.");
-        }
-        catch (Exception ex)
-        {
-            ShowBalloon("Error", $"Failed to close session: {ex.Message}", ToolTipIcon.Error);
-        }
-    }
-
-    private void CloseAllSessions()
-    {
-        try
-        {
-            var sessions = _sessionManager.GetActiveSessions().ToList();
-            foreach (var session in sessions)
-            {
-                _sessionManager.CloseSession(session.SessionId, save: false);
-            }
-            RefreshSessionsMenu();
-            ShowBalloon("Sessions Closed", $"Closed {sessions.Count} session(s).");
-        }
-        catch (Exception ex)
-        {
-            ShowBalloon("Error", $"Failed to close sessions: {ex.Message}", ToolTipIcon.Error);
-        }
-    }
-
-    private void ShowSessions()
-    {
-        // Debounce: prevent duplicate balloons when clicking on/near balloon tips
-        if ((DateTime.Now - _lastBalloonShown).TotalSeconds < 2)
-            return;
-
-        var sessions = _sessionManager.GetActiveSessions();
-        if (sessions.Count == 0)
-        {
-            ShowBalloon("Outlook Migration CLI Service", "No active legacy sessions.");
-        }
-        else
-        {
-            var message = string.Join("\n", sessions.Select(s => $"• {Path.GetFileName(s.FilePath)}"));
-            ShowBalloon($"Active Sessions ({sessions.Count})", message);
-        }
-    }
-
     private void ShowBalloon(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
     {
-        _lastBalloonShown = DateTime.Now;
         _notifyIcon.ShowBalloonTip(3000, title, message, icon);
     }
 
@@ -434,60 +285,20 @@ internal sealed class CliServiceTray : IDisposable
         return informational?.Split('+')[0] ?? assembly.GetName().Version?.ToString() ?? "0.0.0";
     }
 
+
     private void ExitService()
     {
-        var sessions = _sessionManager.GetActiveSessions();
-        if (sessions.Count > 0)
-        {
-            var result = MessageBox.Show(
-                $"There are {sessions.Count} active session(s).\n\n" +
-                "Do you want to save all sessions before exiting?",
-                "Exit OutlookMcp CLI",
-                MessageBoxButtons.YesNoCancel,
-                MessageBoxIcon.Question);
-
-            if (result == System.Windows.Forms.DialogResult.Cancel)
-                return;
-
-            if (result == System.Windows.Forms.DialogResult.Yes)
-            {
-                try
-                {
-                    foreach (var session in sessions)
-                    {
-                        _sessionManager.CloseSession(session.SessionId, save: true);
-                    }
-                    ShowBalloon("Sessions Saved", $"Saved and closed {sessions.Count} session(s).");
-                }
-                catch (Exception ex)
-                {
-                    var continueResult = MessageBox.Show(
-                        $"Error saving sessions: {ex.Message}\n\nExit anyway?",
-                        "Error",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Error);
-
-                    if (continueResult != System.Windows.Forms.DialogResult.Yes)
-                        return;
-                }
-            }
-            else
-            {
-                try
-                {
-                    foreach (var session in sessions)
-                    {
-                        _sessionManager.CloseSession(session.SessionId, save: false);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    ShowBalloon("Warning", $"Error closing sessions: {ex.Message}", ToolTipIcon.Warning);
-                }
-            }
-        }
-
         _requestShutdown();
+    }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _taskbarWindow.DestroyHandle();
+        _notifyIcon.Visible = false;
+        _notifyIcon.Dispose();
+        _contextMenu.Dispose();
     }
 
     /// <summary>
@@ -524,16 +335,4 @@ internal sealed class CliServiceTray : IDisposable
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        _refreshTimer.Stop();
-        _refreshTimer.Dispose();
-        _taskbarWindow.DestroyHandle();
-        _notifyIcon.Visible = false;
-        _notifyIcon.Dispose();
-        _contextMenu.Dispose();
-    }
 }

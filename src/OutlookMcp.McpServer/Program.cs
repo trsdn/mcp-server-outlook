@@ -128,24 +128,22 @@ public class Program
             })
             // #23: explicit allow-list of Outlook-only types via the reflection-based WithTools/
             // WithPrompts(IEnumerable<Type>) overloads, instead of .WithToolsFromAssembly()/
-            // .WithPromptsFromAssembly(). The assembly still carries 33 generated legacy
-            // PowerPoint tool types (plus the hand-written file tool) that compile but must not
-            // be offered to MCP clients -- an unfiltered scan would flood tools/list, waste LLM
-            // context, and invite mis-selection (see #11 for the broader legacy-removal plan;
-            // deleting those types is a later step). The generic WithTools<T>/WithPrompts<T>
+            // .WithPromptsFromAssembly(). Registering by an explicit list keeps tools/list
+            // deterministic: anything newly generated has to be added here on purpose rather than
+            // silently appearing and wasting LLM context. The generic WithTools<T>/WithPrompts<T>
             // overloads require a non-static T, but the generated tool/prompt classes are static,
             // so the non-generic Type-list overloads are used instead.
-            // PptSkillPrompts.g.cs is itself narrowed to only Outlook-relevant prompts (see
+            // OutlookSkillPrompts.g.cs is itself narrowed to only Outlook-relevant prompts (see
             // GenerateSkillPrompts target in the .csproj), so registering the whole type is safe.
             .WithTools(
             [
-                typeof(OutlookMcp.McpServer.Tools.PptApplicationTool),
-                typeof(OutlookMcp.McpServer.Tools.PptAttachmentTool),
-                typeof(OutlookMcp.McpServer.Tools.PptCalendarTool),
-                typeof(OutlookMcp.McpServer.Tools.PptFolderTool),
-                typeof(OutlookMcp.McpServer.Tools.PptMailTool),
+                typeof(OutlookMcp.McpServer.Tools.OutlookApplicationTool),
+                typeof(OutlookMcp.McpServer.Tools.OutlookAttachmentTool),
+                typeof(OutlookMcp.McpServer.Tools.OutlookCalendarTool),
+                typeof(OutlookMcp.McpServer.Tools.OutlookFolderTool),
+                typeof(OutlookMcp.McpServer.Tools.OutlookMailTool),
             ])
-            .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.PptSkillPrompts)]);
+            .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.OutlookSkillPrompts)]);
 
         if (_testInputPipe != null && _testOutputPipe != null)
         {

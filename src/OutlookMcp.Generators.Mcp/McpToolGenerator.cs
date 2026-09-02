@@ -141,10 +141,6 @@ public class McpToolGenerator : IIncrementalGenerator
 
         // XML doc: parameter descriptions
         sb.AppendLine($"    /// <param name=\"action\">The action to perform</param>");
-        if (!info.NoSession)
-        {
-            sb.AppendLine($"    /// <param name=\"session_id\">Session ID from file 'open' action</param>");
-        }
         foreach (var p in mcpParams)
         {
             if (!string.IsNullOrEmpty(p.Description))
@@ -155,13 +151,12 @@ public class McpToolGenerator : IIncrementalGenerator
         }
 
         // Attributes
-        var title = info.McpToolTitle ?? $"PowerPoint {info.CategoryPascal} Operations";
+        var title = info.McpToolTitle ?? $"Outlook {info.CategoryPascal} Operations";
         var destructive = info.McpToolDestructive ? "true" : "false";
         sb.AppendLine($"    [McpServerTool(Name = \"{info.McpToolName}\", Title = \"{title}\", Destructive = {destructive})]");
 
         var category = info.McpToolCategory ?? "data";
         sb.AppendLine($"    [McpMeta(\"category\", \"{category}\")]");
-        sb.AppendLine($"    [McpMeta(\"requiresSession\", {(!info.NoSession).ToString().ToLower()})]");
 
         // Method-level [Description] from [McpTool(Description = "...")] attribute or fallback to title.
         // Source generators can't read XML docs from metadata references.
@@ -185,13 +180,6 @@ public class McpToolGenerator : IIncrementalGenerator
         // Action parameter (nullable to prevent SDK-level exception on missing param)
         sb.AppendLine($"        [Description(\"The action to perform\"), DefaultValue(null)] {enumTypeName}? action,");
 
-        // Session parameter (if required)
-        if (!info.NoSession)
-        {
-            sb.Append("        [Description(\"Session ID from file 'open' action\")] string session_id");
-            if (mcpParams.Count > 0) sb.Append(",");
-            sb.AppendLine();
-        }
 
         // Exposed parameters with [Description] and [DefaultValue]
         for (int i = 0; i < mcpParams.Count; i++)
@@ -236,7 +224,7 @@ public class McpToolGenerator : IIncrementalGenerator
         // Null check: action is nullable to prevent SDK-level exception when param is missing.
         // Return a helpful error so the LLM can retry with the correct action.
         sb.AppendLine($"        if (action == null)");
-        sb.AppendLine($"            return PptToolsBase.MissingActionError(\"{toolName}\");");
+        sb.AppendLine($"            return OutlookToolsBase.MissingActionError(\"{toolName}\");");
         sb.AppendLine();
         var hasPreProcessing = false;
         foreach (var p in mcpParams)
@@ -263,28 +251,20 @@ public class McpToolGenerator : IIncrementalGenerator
 
         var indent = hasProgress ? "            " : "        ";
 
-        sb.AppendLine($"{indent}return PptToolsBase.ExecuteToolAction(");
+        sb.AppendLine($"{indent}return OutlookToolsBase.ExecuteToolAction(");
         sb.AppendLine($"{indent}    \"{toolName}\",");
         sb.AppendLine($"{indent}    ServiceRegistry.{registryName}.ToActionString(action.Value),");
         sb.AppendLine($"{indent}    () => ServiceRegistry.{registryName}.RouteAction(");
         sb.AppendLine($"{indent}        action.Value,");
 
-        if (!info.NoSession)
-        {
-            sb.AppendLine($"{indent}        session_id,");
-        }
-        else
-        {
-            sb.AppendLine($"{indent}        \"\",");
-        }
 
         if (mcpParams.Count == 0)
         {
-            sb.AppendLine($"{indent}        PptToolsBase.ForwardToServiceFunc");
+            sb.AppendLine($"{indent}        OutlookToolsBase.ForwardToServiceFunc");
         }
         else
         {
-            sb.AppendLine($"{indent}        PptToolsBase.ForwardToServiceFunc,");
+            sb.AppendLine($"{indent}        OutlookToolsBase.ForwardToServiceFunc,");
         }
 
         // Named arguments to RouteAction
@@ -432,15 +412,15 @@ public class McpToolGenerator : IIncrementalGenerator
     private static string GetClassName(ServiceInfo info)
     {
         // Use CategoryPascal which is already correctly cased
-        // e.g., "PowerQuery" → "PptPowerQueryTool"
-        return $"Ppt{info.CategoryPascal}Tool";
+        // e.g., "Mail" → "OutlookMailTool"
+        return $"Outlook{info.CategoryPascal}Tool";
     }
 
     private static string GetMethodName(ServiceInfo info)
     {
         // Use CategoryPascal which is already correctly cased
-        // e.g., "PowerQuery" → "PptPowerQuery"
-        return $"Ppt{info.CategoryPascal}";
+        // e.g., "Mail" → "OutlookMail"
+        return $"Outlook{info.CategoryPascal}";
     }
 
     private static string[] WrapXmlDocLines(string text)

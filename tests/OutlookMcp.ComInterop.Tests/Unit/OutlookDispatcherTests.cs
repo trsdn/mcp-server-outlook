@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using OutlookMcp.ComInterop.Session;
 using Xunit;
 
 namespace OutlookMcp.ComInterop.Tests.Unit;

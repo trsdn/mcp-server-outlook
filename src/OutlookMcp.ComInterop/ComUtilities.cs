@@ -1,11 +1,9 @@
 using System.Runtime.InteropServices;
-using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 
 namespace OutlookMcp.ComInterop;
 
 /// <summary>
-/// Low-level COM interop utilities shared across the migration.
-/// Includes generic COM lifecycle helpers plus a few legacy PowerPoint cleanup helpers.
+/// Low-level COM interop utilities shared across the Outlook automation stack.
 /// </summary>
 public static class ComUtilities
 {
@@ -14,21 +12,21 @@ public static class ComUtilities
     /// </summary>
     /// <param name="comObject">The COM object to release</param>
     /// <remarks>
-    /// Use this helper to release intermediate COM objects (like slides, shapes)
-    /// to prevent PowerPoint process from staying open. This is especially important when
-    /// iterating through collections or accessing multiple COM properties.
+    /// Use this helper to release intermediate COM objects (like folders, items)
+    /// to prevent the host Office process from staying open. This is especially important
+    /// when iterating through collections or accessing multiple COM properties.
     /// </remarks>
     /// <example>
     /// <code>
-    /// dynamic? slides = null;
+    /// dynamic? items = null;
     /// try
     /// {
-    ///     slides = presentation.Slides;
-    ///     // Use slides...
+    ///     items = folder.Items;
+    ///     // Use items...
     /// }
     /// finally
     /// {
-    ///     ComUtilities.Release(ref slides);
+    ///     ComUtilities.Release(ref items);
     /// }
     /// </code>
     /// </example>
@@ -45,30 +43,6 @@ public static class ComUtilities
                 // Ignore errors during release — COM object may already be released or RPC disconnected
             }
             comObject = null;
-        }
-    }
-
-    /// <summary>
-    /// Safely attempts to quit a legacy PowerPoint application COM object.
-    /// This is a fire-and-forget cleanup helper - errors are swallowed.
-    /// </summary>
-    /// <param name="powerPoint">The PowerPoint.Application COM object</param>
-    /// <remarks>
-    /// Use this for cleanup scenarios where you want to quit a legacy PowerPoint instance but don't
-    /// need to handle or report errors. For production shutdown with retry
-    /// logic, use PptShutdownService.CloseAndQuit instead.
-    /// </remarks>
-    public static void TryQuitPowerPoint(PowerPoint.Application? powerPoint)
-    {
-        if (powerPoint == null) return;
-
-        try
-        {
-            powerPoint.Quit();
-        }
-        catch (Exception)
-        {
-            // Swallow errors during cleanup — PowerPoint may already be gone
         }
     }
 
@@ -131,5 +105,4 @@ public static class ComUtilities
     public static void KernelSleep(int milliseconds) =>
         Sleep((uint)Math.Max(0, milliseconds));
 }
-
 

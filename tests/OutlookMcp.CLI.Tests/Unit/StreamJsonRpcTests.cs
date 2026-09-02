@@ -30,7 +30,7 @@ public sealed class StreamJsonRpcTests : IDisposable
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
         var rpcTarget = new DaemonRpcTarget(_service);
         using var serverRpc = JsonRpc.Attach(serverStream, rpcTarget);
-        var clientProxy = JsonRpc.Attach<IPptDaemonRpc>(clientStream);
+        var clientProxy = JsonRpc.Attach<IOutlookDaemonRpc>(clientStream);
 
         try
         {
@@ -59,7 +59,7 @@ public sealed class StreamJsonRpcTests : IDisposable
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
         var rpcTarget = new DaemonRpcTarget(_service);
         using var serverRpc = JsonRpc.Attach(serverStream, rpcTarget);
-        var clientProxy = JsonRpc.Attach<IPptDaemonRpc>(clientStream);
+        var clientProxy = JsonRpc.Attach<IOutlookDaemonRpc>(clientStream);
 
         try
         {
@@ -89,7 +89,7 @@ public sealed class StreamJsonRpcTests : IDisposable
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
         var rpcTarget = new DaemonRpcTarget(_service);
         using var serverRpc = JsonRpc.Attach(serverStream, rpcTarget);
-        var clientProxy = JsonRpc.Attach<IPptDaemonRpc>(clientStream);
+        var clientProxy = JsonRpc.Attach<IOutlookDaemonRpc>(clientStream);
 
         // Act — dispose client (simulates CLI process exit)
         ((IDisposable)clientProxy).Dispose();
@@ -111,7 +111,7 @@ public sealed class StreamJsonRpcTests : IDisposable
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
         var rpcTarget = new DaemonRpcTarget(_service);
         using var serverRpc = JsonRpc.Attach(serverStream, rpcTarget);
-        var clientProxy = JsonRpc.Attach<IPptDaemonRpc>(clientStream);
+        var clientProxy = JsonRpc.Attach<IOutlookDaemonRpc>(clientStream);
 
         try
         {
@@ -146,7 +146,7 @@ public sealed class StreamJsonRpcTests : IDisposable
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
         var rpcTarget = new DaemonRpcTarget(_service);
         using var serverRpc = JsonRpc.Attach(serverStream, rpcTarget);
-        var clientProxy = JsonRpc.Attach<IPptDaemonRpc>(clientStream);
+        var clientProxy = JsonRpc.Attach<IOutlookDaemonRpc>(clientStream);
 
         try
         {

@@ -57,7 +57,6 @@ jobs:
           # silently when classic Outlook is unavailable (#22).
           allow-dependencies-licenses: >-
             pkg:nuget/Microsoft.Office.Interop.Outlook,
-            pkg:nuget/Microsoft.Office.Interop.PowerPoint,
             pkg:nuget/StreamJsonRpc,
             pkg:nuget/Xunit.SkippableFact
           

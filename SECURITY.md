@@ -56,7 +56,6 @@ Outlook items are addressed by entry ID, usually obtained from `mail list`, `mai
 
 Outlook COM work is serialized through `OutlookDispatcher` on a dedicated STA thread. See `docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md` for the documented model.
 
-The retained `PptSession`, `PptBatch`, `PptContext`, `SessionManager`, and `OleMessageFilter` layer is dormant legacy infrastructure. It is not used by the current Outlook command surface.
 
 ### CLI Daemon
 

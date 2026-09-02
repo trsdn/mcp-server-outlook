@@ -33,8 +33,8 @@ running classic Outlook for Windows; it never launches its own instance.
 
 **Core layers:**
 1. **ComInterop** (`src/OutlookMcp.ComInterop`) - `OutlookDispatcher` (the process-wide STA
-   thread that every Outlook call is marshalled onto), the OLE message filter, resilience
-   pipelines, and a retained product-neutral document-session layer that Outlook does not use.
+   thread that every Outlook call is marshalled onto), the OLE message filter, and COM lifecycle
+   helpers.
 2. **Core** (`src/OutlookMcp.Core`) - Outlook business logic. `Commands/` contains exactly
    six directories: `Application`, `Attachment`, `Calendar`, `Folder`, `Mail`, and the
    `OutlookInterop` helper that hosts `OutlookInteropRunner`.
@@ -69,8 +69,8 @@ dotnet test --filter "Feature=ServiceDaemon"
 
 Valid `Feature` trait values today: `ActionEnums`, `ActionValidation`, `Batch`, `CliExitCode`,
 `Configuration`, `DestructiveAnnotations`, `Diag`, `FileLocking`, `McpProtocol`,
-`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`, `PptBatch`,
-`PptSession`, `ServiceDaemon`, `ServiceRegistry`, `SessionManager`, `SkillGeneration`,
+`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`,
+`ServiceDaemon`, `ServiceRegistry`, `SkillGeneration`,
 `StreamJsonRpc`, `VersionCheck`. Confirm against the source before relying on any of them.
 
 ### Code patterns
@@ -114,10 +114,10 @@ The CLI and MCP surfaces for that method are generated. You do not write them.
 **Success flag:** never `Success = true` alongside an `ErrorMessage`. Set `Success = true`
 only on the real success path; the `onException` delegate always sets it false.
 
-**No batch API for Outlook.** `PptSession`, `PptBatch`, `PptContext` and `IPptBatch` still
-exist under `src/OutlookMcp.ComInterop/Session/` but no Outlook code path touches them. See
-`docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md` and `src/OutlookMcp.ComInterop/README.md`. Do
-not introduce a batch API into an Outlook command.
+**No batch or session API.** Outlook has no document to open, save or close - there is one
+long-lived running application, which is why every call goes through `OutlookDispatcher`. The
+inherited document-session layer was deleted; do not reintroduce a batch API. See
+`docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md`.
 
 **Never final-release the shared `Outlook.Application`.** It is the user's single running
 instance and its RCW is shared process-wide. Use `ReleaseSharedComObject` for it and
@@ -174,9 +174,6 @@ GitHub Copilot auto-loads instructions based on the files you are editing:
 | 6 | CLI workflow test | `Test-CliWorkflow.ps1` | End-to-end CLI smoke test |
 | 7 | MCP smoke test | `dotnet test --filter "...SmokeTest..."` | All MCP tools functional |
 
-> **Known issue (#65):** check 6 still drives the PowerPoint CLI surface deleted by #26, so the
-> hook currently fails for everyone who installs it. Do not install the hook until #65 lands.
-
 **Note (#25):** `audit-core-coverage.ps1`, `check-mcp-core-implementations.ps1`,
 `check-cli-coverage.ps1` and `check-cli-action-coverage.ps1` were removed. They regex-scraped a
 hand-authored `ToolActions.cs` that predates the move to Roslyn source generators (#5/#11) and
@@ -189,25 +186,6 @@ pre-commit hook and CI (`build-cli.yml` / `build-mcp-server.yml`).
 ```powershell
 Copy-Item scripts\pre-commit.ps1 .git\hooks\pre-commit
 ```
-
----
-
-## LLM integration tests (`llm-tests/`)
-
-A separate pytest project validating LLM behaviour using `pytest-aitest`:
-
-```powershell
-cd llm-tests
-uv sync
-
-uv run pytest -m mcp -v      # MCP Server tests
-uv run pytest -m cli -v      # CLI tests
-uv run pytest -m aitest -v   # All LLM tests
-```
-
-**Prerequisites:**
-- Azure OpenAI endpoint: `$env:AZURE_OPENAI_ENDPOINT = "https://<resource>.openai.azure.com/"`
-- Build the MCP Server: `dotnet build src\OutlookMcp.McpServer -c Release`
 
 ---
 

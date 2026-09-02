@@ -63,11 +63,6 @@ internal abstract class ServiceCommandBase<TSettings> : AsyncCommand<TSettings>
     where TSettings : CommandSettings
 {
     /// <summary>
-    /// Gets the session ID from settings.
-    /// </summary>
-    protected abstract string? GetSessionId(TSettings settings);
-
-    /// <summary>
     /// Gets the action from settings.
     /// </summary>
     protected abstract string? GetAction(TSettings settings);
@@ -83,25 +78,11 @@ internal abstract class ServiceCommandBase<TSettings> : AsyncCommand<TSettings>
     protected abstract (string command, object? args) Route(TSettings settings, string action);
 
     /// <summary>
-    /// Whether this command requires a session ID. Default is true.
-    /// Override to return false for commands that don't need a session.
-    /// </summary>
-    protected virtual bool RequiresSession => true;
-
-    /// <summary>
     /// Validates settings and executes the command.
     /// Returns early with error code if validation fails.
     /// </summary>
     public sealed override async Task<int> ExecuteAsync(CommandContext context, TSettings settings, CancellationToken cancellationToken)
     {
-        // Session validation
-        var sessionId = GetSessionId(settings);
-        if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
-        {
-            AnsiConsole.MarkupLine("[red]Session ID is required. Use --session <id>[/]");
-            return 1;
-        }
-
         // Action validation
         var rawAction = GetAction(settings);
         if (string.IsNullOrWhiteSpace(rawAction))
@@ -140,7 +121,6 @@ internal abstract class ServiceCommandBase<TSettings> : AsyncCommand<TSettings>
         var response = await client.SendAsync(new ServiceRequest
         {
             Command = command,
-            SessionId = sessionId,
             Args = args != null ? JsonSerializer.Serialize(args, ServiceProtocol.JsonOptions) : null
         }, cancellationToken);
 

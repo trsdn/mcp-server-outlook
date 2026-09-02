@@ -11,7 +11,7 @@ Agent Skill for coding assistants using the inherited Outlook CLI surface.
 
 ## Transitional note
 
-Project and assembly names are still inherited (`OutlookMcp.*`), and some infrastructure is still `Ppt*`-prefixed. That naming debt is tracked as #12. The CLI binary is `outlookcli`.
+Project and assembly names are `OutlookMcp.*`. Remaining naming debt is tracked as #12. The CLI binary is `outlookcli`.
 
 ## Current Outlook seed
 

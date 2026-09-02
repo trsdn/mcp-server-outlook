@@ -4,16 +4,14 @@
 [![.NET](https://img.shields.io/badge/.NET-9-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#requirements)
 
-**Outlook-first MCP server migration built on the architecture of `mcp-server-outlook`.**
+**Outlook automation MCP server and CLI for classic Outlook on Windows.**
 
-This repository is no longer intended to remain a PowerPoint product. It is the active Outlook migration target bootstrapped from the local `mcp-server-outlook` baseline.
+This repository was bootstrapped from a mature Office-automation MCP architecture and has since
+been rebuilt around Outlook. The inherited presentation surface - 33 command domains and the
+document-session layer that backed them - has been removed; what remains is Outlook-only.
 
-Today the repository is still in transition:
-
-- the repo identity is now Outlook-first
-- the tool surface is now Outlook-only: the 33 inherited PowerPoint command domains were deleted in #26
-- the internal codebase still contains inherited `OutlookMcp` and `Ppt*` type names
-- some docs, packaging and tooling still reflect PowerPoint-era naming
+- the tool surface is 5 tools and 30 operations, identical through the MCP server and the CLI
+- there is no session or batch concept: every COM call is marshalled onto a single STA thread
 - the long-term goal is full Outlook COM coverage with MCP, CLI, and VS Code extension parity
 
 ## Current reality
@@ -22,7 +20,7 @@ What is true right now:
 
 - the copied architecture is mature and reusable: `Core`, `Service`, `ComInterop`, generators, CLI, MCP server, VS Code extension, skills, and tests
 - the semantic surface is Outlook-only: 5 tools, 30 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
-- the retained `ComInterop/Session/*` layer is dormant COM plumbing kept deliberately; nothing calls it, and Outlook does not use it (see [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md))
+- there is no session or batch concept: every COM call is marshalled onto a single STA thread owned by `OutlookDispatcher` (see [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md))
 - **no Outlook behaviour is verified by CI.** Integration tests need a self-hosted Windows runner with classic Outlook installed, which does not exist yet, so correctness claims rest on local runs only
 - this repo should be treated as an Outlook rebuild on top of reusable plumbing, not as a large search-and-replace exercise
 
@@ -63,13 +61,13 @@ The migration keeps the proven generator-driven shape of the original project wh
 - `src\OutlookMcp.CLI` provides the command-line surface
 - `vscode-extension` packages the user-facing VS Code integration
 
-The biggest architectural change is the session model:
+The biggest architectural difference from the inherited baseline is the execution model:
 
-- PowerPoint is file-centric and presentation-centric
+- the baseline was file-centric and document-centric, with a per-document session
 - Outlook is application-, folder-, and item-centric
-- Outlook also behaves much more like a single shared desktop application instance
+- Outlook behaves like a single shared desktop application instance
 
-That means current `file`, `slide`, `shape`, and presentation-session assumptions cannot simply be renamed.
+That is why the document-session layer was deleted rather than renamed. See [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md).
 
 ## Keep / adapt / remove guidance
 
@@ -93,7 +91,7 @@ That means current `file`, `slide`, `shape`, and presentation-session assumption
 
 ### Removed
 
-The PowerPoint-centric command families are **gone** as of #26: `slide`, `shape`, `text`, `chart`,
+The inherited presentation command families are **gone** as of #26: `slide`, `shape`, `text`, `chart`,
 `animation`, `transition`, `slideshow`, `master`, `slideimport`, `customshow`, `background`,
 `pagesetup`, `shapealign`, `placeholder`, `headerfooter`, `design`, `image`, `media`, `export`,
 `smartart`, `vba`, and the rest of the 33 inherited domains. Neither the MCP server nor the CLI
@@ -101,14 +99,9 @@ exposes them.
 
 ## Important naming note
 
-This repo is now `mcp-server-outlook`, but several inherited names are still present during migration:
-
-- solution and projects still use `OutlookMcp.*`
-- `Ppt*`-prefixed infrastructure remains, including `PptToolsBase`, which the generated Outlook tools depend on
-- the retained `ComInterop/Session/*` types are still `Ppt*`-named; they should **not** be renamed to `Outlook*`, because Outlook does not use them (see #12)
-- some docs and examples still refer to PowerPoint
-
-That cleanup is intentional work still to be completed, not hidden compatibility debt.
+This repo is `mcp-server-outlook` and the solution and projects use `OutlookMcp.*` throughout.
+Historical references to the inherited product remain only in `CHANGELOG.md` and the ADRs,
+where they explain why decisions were made.
 
 ## Immediate migration priorities
 

@@ -350,7 +350,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 - **ALWAYS** search OTHER open source GitHub repositories for working examples
 - **NEVER** search your own repository - only search external projects
 - **NetOffice is THE BEST source for ALL COM Interop work**: https://github.com/NetOfficeFw/NetOffice
-  - Strongly-typed C# wrappers for ALL Office COM APIs (Excel, Word, PowerPoint, Outlook, etc.)
+  - Strongly-typed C# wrappers for ALL Office COM APIs (Outlook, Excel, Word, etc.)
   - Search for ANY Outlook COM operation: MAPIFolder, Items.Restrict, MailItem, AppointmentItem, Attachments, Recipients, etc.
   - Study their patterns for dynamic interop conversion and proper COM object handling
   - NetOffice source is essentially a comprehensive reference for every Outlook COM API

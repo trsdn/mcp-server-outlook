@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using OutlookMcp.ComInterop;
-using OutlookMcp.ComInterop.Session;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookMcp.Core.Commands.OutlookInterop;

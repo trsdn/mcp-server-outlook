@@ -137,7 +137,6 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         sb.AppendLine($"        public const string Category = \"{info.Category}\";");
         sb.AppendLine($"        public const string McpToolName = \"{info.McpToolName}\";");
-        sb.AppendLine($"        public const bool RequiresSession = {(info.NoSession ? "false" : "true")};");
 
         // CLI command name: remove underscores from tool name
         var cliCommandName = info.McpToolName.Replace("_", "");
@@ -271,16 +270,15 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("        /// </summary>");
         sb.AppendLine($"        public static string RouteAction(");
         sb.AppendLine($"            {info.CategoryPascal}Action action,");
-        sb.AppendLine($"            string sessionId,");
         // Collect all unique exposed parameters across all methods
         var allExposedParams = GetAllExposedParameters(info);
         if (allExposedParams.Count == 0)
         {
-            sb.AppendLine($"            System.Func<string, string, object?, string> forwardToService)");
+            sb.AppendLine($"            System.Func<string, object?, string> forwardToService)");
         }
         else
         {
-            sb.AppendLine($"            System.Func<string, string, object?, string> forwardToService,");
+            sb.AppendLine($"            System.Func<string, object?, string> forwardToService,");
             for (int i = 0; i < allExposedParams.Count; i++)
             {
                 var p = allExposedParams[i];
@@ -295,7 +293,7 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         foreach (var method in info.Methods)
         {
             var forwardArgs = BuildForwardArgs(method, allExposedParams);
-            sb.AppendLine($"                {info.CategoryPascal}Action.{method.MethodName} => Forward{method.MethodName}(sessionId, forwardToService{forwardArgs}),");
+            sb.AppendLine($"                {info.CategoryPascal}Action.{method.MethodName} => Forward{method.MethodName}(forwardToService{forwardArgs}),");
         }
         sb.AppendLine($"                _ => throw new System.ArgumentException($\"Unknown action: {{action}}\")");
         sb.AppendLine("            };");
@@ -482,14 +480,6 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("            public string Action { get; init; } = string.Empty;");
         sb.AppendLine();
 
-        // Session ID (always required for session-based tools)
-        if (!info.NoSession)
-        {
-            sb.AppendLine("            [Spectre.Console.Cli.CommandOption(\"-s|--session <SESSION>\")]");
-            sb.AppendLine("            [System.ComponentModel.Description(\"Session ID from 'session open' command\")]");
-            sb.AppendLine("            public string SessionId { get; init; } = string.Empty;");
-            sb.AppendLine();
-        }
 
         // Generate all exposed parameters
         foreach (var p in allParams)
@@ -562,7 +552,7 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         sb.AppendLine($"        /// <summary>Forward method for {method.ActionName} action</summary>");
 
         // Build parameter list - Core params might need transforms
-        var methodParams = new List<string> { "string sessionId", "System.Func<string, string, object?, string> forwardToService" };
+        var methodParams = new List<string> { "System.Func<string, object?, string> forwardToService" };
 
         foreach (var p in method.Parameters)
         {
@@ -618,11 +608,11 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         // Build the request object - always use method-specific command constant
         if (method.Parameters.Count == 0)
         {
-            sb.AppendLine($"            return forwardToService({method.MethodName}Command, sessionId, null);");
+            sb.AppendLine($"            return forwardToService({method.MethodName}Command, null);");
         }
         else
         {
-            sb.AppendLine($"            return forwardToService({method.MethodName}Command, sessionId, new");
+            sb.AppendLine($"            return forwardToService({method.MethodName}Command, new");
             sb.AppendLine("            {");
             foreach (var p in method.Parameters)
             {
@@ -797,7 +787,6 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         sb.AppendLine($"GENERATED FROM: I{info.CategoryPascal}Commands");
         sb.AppendLine($"CATEGORY: {info.Category}");
         sb.AppendLine($"MCP TOOL: {info.McpToolName}");
-        sb.AppendLine($"REQUIRES SESSION: {!info.NoSession}");
         sb.AppendLine();
         sb.AppendLine("METHODS:");
 
@@ -825,11 +814,11 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
             var enumValue = method.MethodName;
             if (method.Parameters.Count > 0)
             {
-                sb.AppendLine($"  PowerQueryAction.{enumValue} => Forward{method.MethodName}(sessionId, ...),");
+                sb.AppendLine($"  {info.CategoryPascal}Action.{enumValue} => Forward{method.MethodName}(...),");
             }
             else
             {
-                sb.AppendLine($"  PowerQueryAction.{enumValue} => PptToolsBase.ForwardToService(\"{info.Category}.{method.ActionName}\", sessionId),");
+                sb.AppendLine($"  {info.CategoryPascal}Action.{enumValue} => OutlookToolsBase.ForwardToService(\"{info.Category}.{method.ActionName}\"),");
             }
         }
         sb.AppendLine();
@@ -876,7 +865,7 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         foreach (var cat in categories.OrderBy(c => c.CategoryPascal))
         {
             var cliCommandName = cat.McpToolName.Replace("_", "");
-            sb.AppendLine($"        (\"{cliCommandName}\", \"ServiceRegistry.{cat.CategoryPascal}\", {(cat.NoSession ? "false" : "true")}),");
+            sb.AppendLine($"        (\"{cliCommandName}\", \"ServiceRegistry.{cat.CategoryPascal}\", false),");
         }
 
         sb.AppendLine("    };");
@@ -1157,8 +1146,6 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("        public static string? DispatchToCore(");
         sb.AppendLine($"            {interfaceFullName} commands,");
         sb.AppendLine($"            {info.CategoryPascal}Action action,");
-        if (!info.NoSession)
-            sb.AppendLine("            OutlookMcp.ComInterop.Session.IPptBatch batch,");
         sb.AppendLine("            string? argsJson)");
         sb.AppendLine("        {");
         sb.AppendLine("            switch (action)");
@@ -1238,10 +1225,6 @@ public class ServiceRegistryGenerator : IIncrementalGenerator
 
         // Build method call argument list
         var callArgs = new List<string>();
-        // Only pass batch if the method actually has an IPptBatch parameter
-        if (!info.NoSession && method.HasBatchParameter)
-            callArgs.Add("batch");
-
         foreach (var p in method.Parameters)
         {
             if (p.IsEnum || (p.IsFromString && !StringHelper.IsStringType(p.TypeName)))

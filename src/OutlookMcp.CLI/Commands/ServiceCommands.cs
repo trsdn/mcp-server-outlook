@@ -87,7 +87,6 @@ internal sealed class ServiceStatusCommand : AsyncCommand
                         success = true,
                         running = status.Running,
                         processId = status.ProcessId,
-                        sessionCount = status.SessionCount,
                         startTime = status.StartTime,
                         uptime = status.Uptime.ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture)
                     }, ServiceProtocol.JsonOptions));

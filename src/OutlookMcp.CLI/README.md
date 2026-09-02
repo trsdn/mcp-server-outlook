@@ -73,5 +73,5 @@ to stdout.
 ## Naming note
 
 Project and assembly names are still inherited (`OutlookMcp.*`), and some shared infrastructure is
-still `Ppt*`-prefixed. That naming debt is tracked as #12. It is transitional, not the intended
+now Outlook-named throughout. Any residual naming debt is tracked as #12. It is transitional, not the intended
 long-term branding.

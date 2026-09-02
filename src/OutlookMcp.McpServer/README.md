@@ -21,7 +21,7 @@ identical actions, parameters, defaults, and validation.
 See [FEATURES.md](../../FEATURES.md) for the full action list.
 
 There are no `slide`, `shape`, `text`, `chart`, `animation`, `transition`, `slideshow`, `file`, or
-`window` tools. Those inherited PowerPoint families were deleted in #26.
+`window` tools. Those inherited families were deleted in #26.
 
 ## Prompts
 
@@ -47,6 +47,6 @@ Cline, and Windsurf snippets, and [`mcpb/`](../../mcpb/) for the Claude Desktop 
 
 ## Naming note
 
-Project and assembly names are still inherited (`OutlookMcp.*`), and `PptToolsBase` is still
-`Ppt*`-prefixed despite the generated Outlook tools depending on it. That naming debt is tracked as
+Project and assembly names are `OutlookMcp.*`, the hand-written base class is `OutlookToolsBase`
+and the generated tool types are `Outlook*Tool`. Any residual naming debt is tracked as
 #12. It is transitional, not the intended long-term branding.

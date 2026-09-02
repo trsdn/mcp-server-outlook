@@ -30,5 +30,5 @@ npx skills add trsdn/mcp-server-outlook --skill outlook-mcp   # conversational A
 ## Naming note
 
 Project and type names are still inherited: the solution uses `OutlookMcp.*`, and some
-infrastructure is still `Ppt*`-prefixed (see #12). The skill folders themselves are Outlook-named
+infrastructure is now Outlook-named (see #12). The skill folders themselves are Outlook-named
 and describe only Outlook behaviour.

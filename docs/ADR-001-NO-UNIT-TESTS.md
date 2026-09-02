@@ -15,7 +15,7 @@
 > JSON parsing, HRESULT classification, result-type invariants, guard clauses that return before any
 > COM call - are permitted, because they exercise real code paths and would otherwise go unverified.
 > The "Exceptions" section below is now the normative list; it replaces the earlier hypothetical
-> phrasing ("if we had complex calculations independent of PowerPoint (we don't)"), which was simply
+> phrasing ("if we had complex calculations independent of Outlook (we don't)"), which was simply
 > untrue by the time it was read.
 >
 > Three files were deleted under this decision: `ComUtilitiesTests`, `ComUtilitiesExtendedTests`, and
@@ -35,48 +35,100 @@
 
 ## Context and Problem Statement
 
-OutlookMcp is a COM automation library that wraps PowerPoint's COM API. During code review, the question inevitably arises: **"Why don't you have unit tests?"**
+OutlookMcp is a COM automation library that wraps the classic Outlook for Windows COM API. During code review, the question inevitably arises: **"Why don't you have unit tests?"**
 
 This ADR documents our architectural decision and the reasoning behind our testing strategy.
+
+Only the **classic Outlook for Windows desktop app** can be automated. The new Outlook for Windows exposes no COM object model, and Office COM automation is unavailable on Linux and macOS.
 
 ---
 
 ## Decision
 
-**We do NOT write traditional unit tests for OutlookMcp.** Our test suite consists exclusively of **integration tests** that interact with real PowerPoint instances via COM automation.
+**We do NOT write traditional unit tests for OutlookMcp's COM-dependent behavior.** Our Outlook behavior coverage consists of **integration tests** that interact with a real classic Outlook instance via COM automation.
 
 ### What We DON'T Do
 
-❌ Mock PowerPoint COM objects  
-❌ Write unit tests for business logic  
-❌ Test internal methods in isolation  
-❌ Separate "unit" from "integration" concerns  
+❌ Mock Outlook COM objects  
+❌ Write mocked tests for mailbox, mail, calendar, folder, or attachment behavior  
+❌ Test COM-dependent internal methods in isolation  
+❌ Count pure .NET tests as coverage for Outlook automation  
 
 ### What We DO Do
 
-✅ Write comprehensive integration tests against real PowerPoint  
-✅ Test every operation with actual PowerPoint presentations  
-✅ Verify behavior through COM API interactions  
-✅ Run tests on CI/CD with PowerPoint installed (Azure self-hosted runner)  
+✅ Write integration tests against real classic Outlook  
+✅ Test Outlook operations through the actual COM object model  
+✅ Verify behavior by re-reading real Outlook state  
+✅ Keep pure tests only for logic that reaches no COM object at all  
+✅ State honestly that hosted CI does not verify Outlook behavior today  
 
 ---
 
 ## Rationale
 
-### 1. PowerPoint COM Cannot Be Meaningfully Mocked
+### 1. Outlook COM Cannot Be Meaningfully Mocked
 
-**The Problem**: PowerPoint's COM API is the "database" we're automating against. Consider this code:
+**The Problem**: Outlook's COM API is the external system we're automating against. Every Outlook operation goes through `OutlookInteropRunner.Execute(...)`, which marshals work onto the single process-wide STA thread owned by `OutlookMcp.ComInterop.OutlookDispatcher`. Consider this simplified shape from the real folder commands:
 
 ```csharp
-public async Task<OperationResult> CreateSlide(IPptBatch batch, string sheetName)
+public OutlookFolderResolveResult ResolvePath(string? folder = null, bool includeItemCount = true)
 {
-    return await batch.ExecuteAsync((ctx, ct) => 
-    {
-        dynamic sheets = ctx.Presentation.Slides;  // COM object
-        dynamic newSheet = sheets.Add();       // COM method
-        newSheet.Name = sheetName;             // COM property
-        return new OperationResult { Success = true };
-    });
+    return OutlookInteropRunner.Execute(
+        "OutlookFolderResolvePath",
+        (application, session) =>
+        {
+            Outlook.Explorer? explorer = null;
+            Outlook.MAPIFolder? resolvedFolder = null;
+            object? items = null;
+
+            try
+            {
+                resolvedFolder = OutlookInteropRunner.ResolveFolder(
+                    application,
+                    session,
+                    folder,
+                    DefaultFolderAliases,
+                    ref explorer);
+
+                if (resolvedFolder == null)
+                {
+                    return new OutlookFolderResolveResult
+                    {
+                        Success = false,
+                        RequestedFolder = folder,
+                        Resolved = false,
+                        ErrorMessage = BuildUnknownFolderMessage(folder)
+                    };
+                }
+
+                if (includeItemCount)
+                {
+                    items = resolvedFolder.Items;
+                }
+
+                return new OutlookFolderResolveResult
+                {
+                    Success = true,
+                    RequestedFolder = folder,
+                    Resolved = true,
+                    Name = resolvedFolder.Name,
+                    FolderPath = OutlookInteropRunner.GetFolderPath(resolvedFolder)
+                };
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref items);
+                OutlookInteropRunner.ReleaseComObject(ref resolvedFolder);
+                OutlookInteropRunner.ReleaseComObject(ref explorer);
+            }
+        },
+        ex => new OutlookFolderResolveResult
+        {
+            Success = false,
+            RequestedFolder = folder,
+            Resolved = false,
+            ErrorMessage = $"Failed to resolve the Outlook folder: {ex.Message}"
+        });
 }
 ```
 
@@ -84,22 +136,22 @@ public async Task<OperationResult> CreateSlide(IPptBatch batch, string sheetName
 
 ```csharp
 // Option 1: Mock the COM object
-var mockBook = new Mock<dynamic>();  // ❌ Cannot mock dynamic COM objects
-mockBook.Setup(b => b.Slides).Returns(...);  // ❌ Runtime binding fails
+var mockNamespace = new Mock<dynamic>();  // ❌ Cannot meaningfully mock dynamic COM objects
+mockNamespace.Setup(n => n.GetDefaultFolder(...)).Returns(...);  // ❌ Runtime binding lies
 
-// Option 2: Test without PowerPoint
+// Option 2: Test without Outlook
 [Fact]
-public void CreateSlide_ReturnsSuccess()
+public void ResolvePath_ReturnsSuccess()
 {
-    var result = CreateSlide(null!, "Test");  // ❌ What are we testing?
-    Assert.True(result.Success);  // ❌ This proves nothing!
+    var result = ResolvePath(null!);  // ❌ No Outlook.NameSpace, no MAPIFolder
+    Assert.True(result.Success);      // ❌ This proves nothing
 }
 ```
 
 **The Truth**: The ONLY way to verify this code works is to:
-1. Open a real PowerPoint instance
-2. Call the real COM API
-3. Verify the slide actually exists in PowerPoint
+1. Attach to a real running classic Outlook instance
+2. Call the real COM API on the dispatcher STA thread
+3. Verify the folder, mail item, appointment, or draft actually exists or changed in Outlook
 
 **That's an integration test by definition.**
 
@@ -115,7 +167,7 @@ In COM automation architecture:
 - **E2E tests** don't exist (we ARE the library, not an application)
 
 **Analogy**: OutlookMcp is like a database driver (e.g., Npgsql for PostgreSQL):
-- You don't mock `DbConnection` to test SQL queries
+- You don't mock `DbConnection` to prove SQL semantics
 - You test against a real database instance
 - The "integration test" IS the unit test
 
@@ -128,7 +180,7 @@ This pattern is **normal and correct** for COM/browser/external system automatio
 | **Selenium WebDriver** | Browser DOM | Integration tests against real browsers |
 | **Playwright** | Browser automation | Integration tests with browser instances |
 | **AWS SDK** | Cloud services | Integration tests against AWS (or LocalStack) |
-| **OutlookMcp** | PowerPoint COM | Integration tests against PowerPoint instances |
+| **OutlookMcp** | Outlook COM | Integration tests against classic Outlook |
 
 **None of these libraries have meaningful unit tests** for their core automation logic. They all test against the real external system.
 
@@ -153,18 +205,19 @@ public static string ValidateAndNormalizePath(string path)
 - Our code does: null check (trivial)
 
 **Testing this**:
+
 ```csharp
 [Fact]
 public void ValidatePath_WithTraversal_ThrowsException()
 {
-    Assert.Throws<ArgumentException>(() => 
+    Assert.Throws<ArgumentException>(() =>
         PathValidator.ValidateAndNormalizePath("../../etc/passwd"));
 }
 ```
 
 **Problem**: This test verifies .NET's `Path.GetFullPath()` works, not our code. We're testing Microsoft's code, not ours.
 
-**Better approach**: Trust .NET's APIs (they're battle-tested). If our path validation is wrong, our integration tests will fail when we try to open a file.
+**Better approach**: Trust .NET's APIs (they're battle-tested). If our path validation is wrong, our integration tests will fail when we try to resolve a folder or file attachment path through Outlook.
 
 ### 5. The MCP Protocol Argument
 
@@ -173,26 +226,30 @@ public void ValidatePath_WithTraversal_ThrowsException()
 **Answer**: No, the MCP SDK handles protocol compliance.
 
 ```csharp
-public class RangeValueResult : ResultBase
+public class MailListResult : ResultBase
 {
-    public List<List<object?>> Values { get; set; }
+    public List<MailItemInfo> Items { get; set; } = [];
 }
 
 // MCP SDK serializes this to JSON automatically
 ```
 
 **What a unit test would look like**:
+
 ```csharp
 [Fact]
-public void RangeValueResult_SerializesToJson()
+public void MailListResult_SerializesToJson()
 {
-    var result = new RangeValueResult { Values = [[1, 2]] };
+    var result = new MailListResult
+    {
+        Items = [new MailItemInfo { Subject = "Hello" }]
+    };
     var json = JsonSerializer.Serialize(result);
-    Assert.Contains("[[1,2]]", json);
+    Assert.Contains("Hello", json);
 }
 ```
 
-**Problem**: This tests `System.Text.Json`, not our code. If JSON serialization breaks, the MCP SDK will fail to parse responses, and our integration tests will catch it.
+**Problem**: This tests `System.Text.Json`, not our code. If JSON serialization breaks, the MCP SDK will fail to parse responses, and protocol integration tests will catch it.
 
 ---
 
@@ -200,48 +257,84 @@ public void RangeValueResult_SerializesToJson()
 
 ### What Our Integration Tests Actually Test
 
-**Scenario**: Create a slide named "Sales"
+**Scenario**: Resolve the Inbox and inspect its item payload.
 
 ```csharp
 [Fact]
-public async Task CreateSlide_ValidName_CreatesSheet()
+[Trait("Category", "Integration")]
+[Trait("Feature", "OutlookSeed")]
+public void Folder_ListItems_Inbox_ReturnsMailboxPayload()
 {
-    // Arrange
-    var testFile = await CreateUniqueTestFile(".pptx");
-    
-    // Act
-    await using var batch = await PptSession.BeginBatchAsync(testFile);
-    var result = await _commands.CreateAsync(batch, "Sales");
-    await batch.Save();
-    
-    // Assert - Round-trip validation
-    Assert.True(result.Success);
-    
-    await using var batch2 = await PptSession.BeginBatchAsync(testFile);
-    var list = await _commands.ListAsync(batch2);
-    Assert.Contains(list.Items, s => s.Name == "Sales");
+    // Act - real Outlook COM via OutlookInteropRunner and OutlookDispatcher
+    var resolveResult = _folderCommands.ResolvePath("inbox");
+    var listResult = _folderCommands.ListItems("inbox", maxCount: 10, includePreview: false);
+
+    // Assert - verify actual Outlook state, not just a wrapper return value
+    Assert.True(resolveResult.Success);
+    Assert.True(resolveResult.Resolved);
+    Assert.False(string.IsNullOrWhiteSpace(resolveResult.FolderPath));
+
+    Assert.True(listResult.Success);
+    Assert.Equal("Inbox", listResult.FolderName, ignoreCase: true);
+    Assert.True(listResult.ReturnedCount <= 10);
+    Assert.All(listResult.Items, item =>
+    {
+        Assert.False(string.IsNullOrWhiteSpace(item.ItemType));
+        Assert.False(string.IsNullOrWhiteSpace(item.MessageClass));
+    });
+}
+```
+
+**Scenario**: Create a draft, modify it, then re-read it through a fresh call.
+
+```csharp
+[Fact]
+[Trait("Category", "Integration")]
+[Trait("Feature", "OutlookSeed")]
+public void Mail_CreateDraft_SetSubject_Read_VerifiesMailboxState()
+{
+    var createResult = _mailCommands.CreateMailDraft(
+        subject: "OutlookMcp integration seed",
+        body: "Created by an integration test.");
+    Assert.True(createResult.Success);
+    Assert.False(string.IsNullOrWhiteSpace(createResult.EntryId));
+
+    var updateResult = _mailCommands.SetSubject(
+        "OutlookMcp integration seed updated",
+        entryId: createResult.EntryId,
+        storeId: createResult.StoreId,
+        useActiveMail: false);
+    Assert.True(updateResult.Success);
+
+    var readResult = _mailCommands.Read(
+        entryId: createResult.EntryId,
+        storeId: createResult.StoreId,
+        useActiveMail: false);
+    Assert.True(readResult.Success);
+    Assert.Equal("OutlookMcp integration seed updated", readResult.Subject);
 }
 ```
 
 **What this ACTUALLY tests**:
-1. ✅ PowerPoint session management (PptSession.BeginBatchAsync)
-2. ✅ COM object lifecycle (Presentations.Open, Slides.Add)
-3. ✅ Batch transaction handling (IPptBatch)
-4. ✅ Error handling (COM exceptions)
-5. ✅ Resource cleanup (IDisposable, COM release)
-6. ✅ Persistence (presentation.Save)
-7. ✅ Re-opening presentations (validates saved state)
-8. ✅ Business logic (slide creation)
-9. ✅ API contract (ISheetCommands interface)
+1. ✅ Outlook process attachment (`Outlook.Application` via `GetActiveObject`)
+2. ✅ Single process-wide STA dispatch (`OutlookDispatcher.Shared.Execute`)
+3. ✅ COM object lifecycle (`Outlook.NameSpace`, `MAPIFolder`, `Items`, `MailItem`)
+4. ✅ Outlook Object Model Guard error surfacing
+5. ✅ Error handling (`Success` false with `ErrorMessage`)
+6. ✅ Resource cleanup (`OutlookInteropRunner.ReleaseComObject(ref obj)`)
+7. ✅ Re-reading mailbox state through a fresh command call
+8. ✅ Business logic (folder resolution, draft creation, mail mutation)
+9. ✅ API contract (`IFolderCommands`, `IMailCommands`)
 
-**A unit test could verify**: None of the above (requires real PowerPoint).
+**A unit test could verify**: None of the above (requires real classic Outlook).
 
 ### Test Statistics
 
-- **Integration Tests**: ~200+ tests covering all operations
-- **Execution Time**: 10-20 minutes (acceptable for CI/CD)
-- **Coverage**: All production code paths
-- **False Positives**: Near zero (tests against real PowerPoint)
+- **Outlook command domains**: 5 (`Application`, `Attachment`, `Calendar`, `Folder`, `Mail`)
+- **Current product surface**: 30 operations across those domains
+- **Hosted CI Outlook coverage**: 0 operations
+- **Manual Outlook smoke coverage**: `Feature=OutlookSeed`
+- **False Positives**: Lower when tests use real Outlook state instead of mocked COM
 
 ---
 
@@ -249,65 +342,67 @@ public async Task CreateSlide_ValidName_CreatesSheet()
 
 ### Positive
 
-✅ **Tests verify real behavior** - We test what actually happens in PowerPoint, not mocked abstractions  
-✅ **High confidence** - If tests pass, the code works in production  
+✅ **Tests verify real behavior** - We test what actually happens in Outlook, not mocked abstractions  
+✅ **High confidence** - A passing local Outlook integration test proves the operation works against the real COM surface  
 ✅ **No mock maintenance** - No complex mock setup that becomes outdated  
-✅ **Catches integration bugs** - We discover COM quirks (e.g., 1-based indexing, Type 3/4 connection discrepancy)  
+✅ **Catches integration bugs** - We discover COM quirks such as STA affinity, RCW lifetime, Object Model Guard prompts, and MAPI item shape differences  
 ✅ **Industry standard** - Follows proven patterns from Selenium, Playwright, AWS SDK  
 
 ### Negative
 
-⚠️ **Slower tests** - 10-20 minutes vs seconds for unit tests  
-⚠️ **Requires PowerPoint** - CI/CD needs Windows + PowerPoint (Azure self-hosted runner)  
-⚠️ **Resource intensive** - Each test opens/closes PowerPoint COM instance  
-⚠️ **Cannot run on Linux** - PowerPoint COM is Windows-only  
+⚠️ **Slower tests** - Real Outlook tests are slower than pure .NET checks  
+⚠️ **Requires classic Outlook** - Integration tests need Windows, classic Outlook installed, running, and signed in  
+⚠️ **Shared application state** - Outlook is a long-running desktop application with a real mailbox, not a disposable test document  
+⚠️ **Cannot run on Linux/macOS** - Office COM automation is Windows-only  
+⚠️ **Hosted CI gap** - GitHub-hosted runners can build and run CI-safe tests, but cannot automate Outlook  
 
 ### Mitigation Strategies
 
 **For slow tests**:
-- Run tests in parallel (xUnit parallelization)
-- Cache PowerPoint instances where safe
-- Use OnDemand trait for expensive tests
-- Optimize CI/CD with dedicated Windows runners
+- Run the smallest targeted test command for the changed layer
+- Prefer CI-safe metadata and protocol tests for fast feedback
+- Use `Feature=OutlookSeed` for manual Outlook smoke coverage
+- Keep destructive Outlook scenarios explicit and cleaned up
 
-**For PowerPoint dependency**:
-- Azure self-hosted runner with Office 365 installed
-- Local development requires PowerPoint (documented in CONTRIBUTING.md)
-- Pre-commit hooks run quick validation only
+**For Outlook dependency**:
+- Local Outlook integration testing requires classic Outlook for Windows, already running and signed in
+- Run the test process at the same elevation level as Outlook; `GetActiveObject` cannot cross integrity levels
+- Treat tests that touch Outlook as real mailbox automation
+- Track real CI execution behind issue #31, `ENABLE_OUTLOOK_INTEGRATION_CI`, and a self-hosted runner labelled `outlook`
 
 ---
 
 ## Alternatives Considered
 
-### Alternative 1: Mock PowerPoint COM Objects
+### Alternative 1: Mock Outlook COM Objects
 
 **Rejected** because:
 - `dynamic` COM objects cannot be meaningfully mocked
-- Mocks would just verify our mock setup, not real PowerPoint behavior
-- PowerPoint's COM API has quirks (1-based indexing, async RefreshAll issues) that mocks wouldn't catch
+- Mocks would just verify our mock setup, not real Outlook behavior
+- Outlook's COM API has quirks (single-instance process model, STA dispatch, Object Model Guard, MAPI folder/item shape) that mocks would not catch
 
 ### Alternative 2: Record/Replay COM Interactions
 
 **Rejected** because:
-- Fragile (breaks when PowerPoint updates)
-- Doesn't test actual PowerPoint state
+- Fragile (breaks when Outlook updates or mailbox state changes)
+- Doesn't test actual Outlook state
 - High maintenance burden
-- Doesn't verify persistence (save/reload)
+- Doesn't verify the Object Model Guard, dispatcher, or live MAPI behavior
 
 ### Alternative 3: Separate Business Logic from COM
 
 **Rejected** because:
-- There IS no business logic separate from COM interaction
-- Our "business logic" IS calling PowerPoint COM methods correctly
+- There IS no business logic separate from COM interaction for Outlook behavior
+- Our "business logic" IS calling Outlook COM methods correctly
 - Would create artificial abstraction layers with no value
 
-### Alternative 4: Test Against PowerPoint Interop Primary Assemblies
+### Alternative 4: Test Against Outlook Interop Primary Assemblies
 
 **Rejected** because:
-- Still requires PowerPoint installed
+- Still requires classic Outlook installed
 - PIAs are just type definitions, not implementation
 - Doesn't reduce test execution time
-- We use late binding (`dynamic`) intentionally for flexibility
+- We use COM objects at runtime and must verify real runtime behavior
 
 ---
 
@@ -356,7 +451,7 @@ Two entries deserve their caveats stated rather than buried:
   defects get lost. Resolution is deferred to #59.
 
 **The standing expectation is unchanged**: nearly all logic in this repository involves COM
-interaction, so nearly all tests must be integration tests.
+interaction, so nearly all Outlook behavior tests must be integration tests.
 
 ---
 
@@ -364,12 +459,12 @@ interaction, so nearly all tests must be integration tests.
 
 When reviewers ask "Why no unit tests?", respond:
 
-> **OutlookMcp is a COM automation library.** We test against real PowerPoint instances because:
+> **OutlookMcp is a COM automation library.** We test against real classic Outlook because:
 > 
-> 1. **PowerPoint COM cannot be mocked** - Dynamic COM objects don't support traditional mocking frameworks
-> 2. **Integration tests ARE our unit tests** - We test business logic (COM interaction) in the only way possible
+> 1. **Outlook COM cannot be mocked** - Dynamic COM objects don't support meaningful traditional mocking
+> 2. **Integration tests ARE our unit tests** - We test COM interaction in the only way possible
 > 3. **Industry standard** - Selenium, Playwright, AWS SDK all use the same pattern
-> 4. **High confidence** - Tests verify actual PowerPoint behavior, not mock abstractions
+> 4. **High confidence** - Tests verify actual Outlook behavior, not mock abstractions
 > 
 > See `docs/ADR-001-NO-UNIT-TESTS.md` for full rationale.
 
@@ -403,41 +498,45 @@ When reviewers ask "Why no unit tests?", respond:
 **Supersedes**: N/A  
 **Superseded by**: N/A  
 
-**Last Reviewed**: November 2, 2025  
-**Next Review**: When adding features that don't require PowerPoint COM (if ever)
+**Last Reviewed**: September 2, 2026  
+**Next Review**: When adding Outlook features that do not require COM (if ever)
 
 ---
 
 ## Appendix: Test Execution Strategy
 
 ### Local Development
+
 ```powershell
-# Fast feedback (integration tests, excludes VBA, excludes OnDemand)
-dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust"
+# Everything that runs without Outlook
+dotnet test --filter "Category!=Integration"
+```
+
+```powershell
+# Targeted examples by current Feature trait
+dotnet test tests\OutlookMcp.McpServer.Tests\OutlookMcp.McpServer.Tests.csproj --filter "Feature=McpProtocol"
+dotnet test tests\OutlookMcp.ComInterop.Tests\OutlookMcp.ComInterop.Tests.csproj --filter "Feature=OutlookDispatcher"
+dotnet test tests\OutlookMcp.CLI.Tests\OutlookMcp.CLI.Tests.csproj --filter "Feature=CliExitCode"
+```
+
+```powershell
+# Manual Outlook smoke tests on Windows with classic Outlook running
+dotnet test tests\OutlookMcp.Core.Tests\OutlookMcp.Core.Tests.csproj --filter "Feature=OutlookSeed"
 ```
 
 ### Pre-Commit
-```powershell
-# Comprehensive (all integration tests except OnDemand and VBA)
-dotnet test --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust"
-```
 
-### Session/Batch Code Changes
 ```powershell
-# MANDATORY when modifying PptSession.cs or PptBatch.cs
-dotnet test --filter "RunType=OnDemand"
-```
-
-### VBA Tests (Manual Only)
-```powershell
-# Requires "Trust access to VBA project object model" enabled
-dotnet test --filter "(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand"
+# Fast CI-safe guard for generated Core/MCP surface coverage
+dotnet test tests\OutlookMcp.McpServer.Tests\OutlookMcp.McpServer.Tests.csproj --filter "FullyQualifiedName~CoreCommandsCoverageTests"
 ```
 
 ### CI/CD Pipeline
-- **GitHub Actions**: Build verification only (no PowerPoint)
-- **Azure Self-Hosted Runner**: All integration tests (PowerPoint installed)
-- **Both must pass** before merge to main
+
+- **GitHub-hosted runners**: build verification and CI-safe tests only; they do not verify Outlook COM behavior.
+- **`.github\workflows\integration-tests.yml`**: wired but disabled. It reports `integration-runner-disabled` while `ENABLE_OUTLOOK_INTEGRATION_CI` is not `true`.
+- **Self-hosted Outlook runner**: required before CI can run Outlook integration tests. It must be a Windows runner labelled `outlook` with classic Outlook installed, running, and signed in. This is tracked by issue #31.
+- **Merge posture**: do not claim automated Outlook runtime verification until that runner exists and the gate is enabled.
 
 ---
 

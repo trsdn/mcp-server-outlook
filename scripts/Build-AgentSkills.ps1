@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds the PowerPoint MCP Agent Skills package for distribution.
+    Builds the Outlook MCP Agent Skills package for distribution.
 
 .DESCRIPTION
     Creates distributable artifacts for Agent Skills:

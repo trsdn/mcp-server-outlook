@@ -22,7 +22,7 @@ namespace OutlookMcp.McpServer.Tests.Integration.Tools;
 [Trait("Speed", "Fast")]
 [Trait("Layer", "McpServer")]
 [Trait("Feature", "DestructiveAnnotations")]
-[Trait("RequiresPowerPoint", "false")]
+[Trait("RequiresOutlook", "false")]
 public class DestructiveAnnotationTests
 {
     [Theory]
@@ -73,7 +73,7 @@ public class DestructiveAnnotationTests
     [Fact]
     public void CalendarTool_DeclaresDestructiveTrue()
     {
-        AssertGeneratedToolDestructive(typeof(PptCalendarTool), "PptCalendar", expected: true);
+        AssertGeneratedToolDestructive(typeof(OutlookCalendarTool), "OutlookCalendar", expected: true);
     }
 
     /// <summary>
@@ -83,7 +83,7 @@ public class DestructiveAnnotationTests
     [Fact]
     public void AttachmentTool_DeclaresDestructiveTrue()
     {
-        AssertGeneratedToolDestructive(typeof(PptAttachmentTool), "PptAttachment", expected: true);
+        AssertGeneratedToolDestructive(typeof(OutlookAttachmentTool), "OutlookAttachment", expected: true);
     }
 
     private static void AssertGeneratedToolDestructive(Type toolType, string methodName, bool expected)

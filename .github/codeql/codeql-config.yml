@@ -63,17 +63,17 @@ query-filters:
 
   # ============================================================================
   # INTENTIONAL PATTERN: COM Interop Exception Handling
-  # PowerPoint COM automation requires catching exceptions at session/batch boundaries
+  # Outlook COM automation requires catching exceptions at the dispatcher boundary
   # to ensure proper COM cleanup and resource management.
   # ============================================================================
   - exclude:
       id: cs/catch-of-all-exceptions
       paths:
-        - src/OutlookMcp.ComInterop/Session/**
+        - src/OutlookMcp.ComInterop/**
 
   # ============================================================================
   # INTENTIONAL PATTERN: Dynamic COM Calls
-  # PowerPoint COM interop uses late binding (dynamic) extensively.
+  # Outlook COM interop uses late binding (dynamic) extensively.
   # These are not invalid calls - they're the standard COM interop pattern.
   # ============================================================================
   - exclude:
@@ -85,7 +85,7 @@ query-filters:
   # ============================================================================
   # INTENTIONAL PATTERN: Explicit GC for COM Cleanup
   # GC.Collect() is required after releasing COM objects to ensure
-  # PowerPoint process cleanup. This follows Microsoft guidance for COM interop.
+  # Outlook process cleanup. This follows Microsoft guidance for COM interop.
   # ============================================================================
   - exclude:
       id: cs/call-to-gc

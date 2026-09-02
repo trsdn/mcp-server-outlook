@@ -80,10 +80,6 @@
 
   <ItemGroup>
     <!-- Office COM interop references - EmbedInteropTypes=true embeds only used types at compile time -->
-    <PackageReference Include="Microsoft.Office.Interop.PowerPoint">
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-      <NoWarn>NU1701</NoWarn>
-    </PackageReference>
     <PackageReference Include="Microsoft.Office.Interop.Outlook">
       <EmbedInteropTypes>true</EmbedInteropTypes>
       <NoWarn>NU1701</NoWarn>

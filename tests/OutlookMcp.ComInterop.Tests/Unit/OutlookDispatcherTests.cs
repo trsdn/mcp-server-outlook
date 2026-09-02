@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Xunit;
 
 namespace OutlookMcp.ComInterop.Tests.Unit;
@@ -95,5 +96,106 @@ public class OutlookDispatcherTests
 
         int result = OutlookDispatcher.Shared.Execute("after-timeout", () => 7, TimeSpan.FromSeconds(30));
         Assert.Equal(7, result);
+    }
+
+    [Fact]
+    public async Task Execute_WhenCallerTimesOutWhileQueued_NeverRunsTheOperation()
+    {
+        // Regression test for #19: "Timeout no longer leaves a thread that will mutate shared COM
+        // state". A work item whose caller has already given up must not execute afterwards.
+        // Outlook operations are not all read-only -- mail.send, mail.delete and folder.create
+        // mutate the user's mailbox -- so running an abandoned item means performing a mailbox
+        // side effect that the caller was told had timed out, and which it may legitimately retry.
+        using var blockerRunning = new ManualResetEventSlim(false);
+        using var releaseBlocker = new ManualResetEventSlim(false);
+        int abandonedRanCount = 0;
+
+        var occupier = Task.Run(() => OutlookDispatcher.Shared.Execute("occupy-dispatcher", () =>
+        {
+            blockerRunning.Set();
+            releaseBlocker.Wait(TimeSpan.FromSeconds(10));
+            return 0;
+        }, TimeSpan.FromSeconds(30)));
+
+        Assert.True(blockerRunning.Wait(TimeSpan.FromSeconds(5)), "occupying operation never started");
+
+        // Queued behind the occupier, this caller gives up long before its work item is reached.
+        Assert.Throws<TimeoutException>(() =>
+            OutlookDispatcher.Shared.Execute("queued-then-abandoned", () =>
+            {
+                Interlocked.Increment(ref abandonedRanCount);
+                return 1;
+            }, TimeSpan.FromMilliseconds(100)));
+
+        releaseBlocker.Set();
+        await occupier;
+
+        // A subsequent operation completing proves the pump has drained past the abandoned item,
+        // so this assertion is not just observing "it has not run yet".
+        Assert.Equal(99, OutlookDispatcher.Shared.Execute("drain-marker", () => 99, TimeSpan.FromSeconds(30)));
+
+        Assert.Equal(0, Volatile.Read(ref abandonedRanCount));
+    }
+
+    [Fact]
+    public async Task Execute_WhenInFlightOperationIsPastItsDeadline_FailsFastInsteadOfQueueingBehindIt()
+    {
+        // Regression test for #19's "quarantine a timed-out dispatcher". A blocking cross-apartment
+        // COM call cannot be interrupted (Thread.Abort is unsupported on .NET 5+, and
+        // OleMessageFilter only governs *incoming* calls), so an operation wedged on a modal Object
+        // Model Guard dialog holds the single STA thread until a person dismisses it. Without
+        // quarantine, every subsequent caller silently queues behind it and burns its own full
+        // DefaultOperationTimeout -- five minutes each -- before reporting a generic timeout.
+        // Once the in-flight operation is past its own deadline nobody can ever observe its result,
+        // so new callers must fail immediately and say what is actually stuck.
+        using var wedgedRunning = new ManualResetEventSlim(false);
+        using var releaseWedged = new ManualResetEventSlim(false);
+
+        var wedged = Task.Run(() => OutlookDispatcher.Shared.Execute("wedged-op", () =>
+        {
+            wedgedRunning.Set();
+            releaseWedged.Wait(TimeSpan.FromSeconds(10));
+            return 0;
+        }, TimeSpan.FromMilliseconds(100)));
+
+        Assert.True(wedgedRunning.Wait(TimeSpan.FromSeconds(5)), "wedged operation never started");
+
+        try
+        {
+            // Its own caller has already given up; the STA thread is still held.
+            await Assert.ThrowsAsync<TimeoutException>(() => wedged);
+
+            var stopwatch = Stopwatch.StartNew();
+            var ex = Assert.Throws<TimeoutException>(() =>
+                OutlookDispatcher.Shared.Execute("call-behind-wedge", () => 1, TimeSpan.FromSeconds(30)));
+            stopwatch.Stop();
+
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+                $"expected a fail-fast rejection, but the caller waited {stopwatch.Elapsed}");
+            Assert.Contains("wedged-op", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            releaseWedged.Set();
+        }
+
+        // Quarantine must lift on its own once the stuck operation finally returns: this is a
+        // transient condition (a dismissed dialog), not a permanently poisoned dispatcher.
+        SpinWait.SpinUntil(
+            () =>
+            {
+                try
+                {
+                    return OutlookDispatcher.Shared.Execute("after-wedge-cleared", () => true, TimeSpan.FromSeconds(30));
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+            },
+            TimeSpan.FromSeconds(10));
+
+        Assert.Equal(5, OutlookDispatcher.Shared.Execute("after-wedge", () => 5, TimeSpan.FromSeconds(30)));
     }
 }

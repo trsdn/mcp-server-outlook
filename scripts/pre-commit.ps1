@@ -26,16 +26,16 @@
 $ErrorActionPreference = "Stop"
 $rootDir = Split-Path -Parent $PSScriptRoot
 
-# CRITICAL: Check branch FIRST - never commit directly to main (Rule 6)
+# CRITICAL: Check branch FIRST - never commit directly to master (Rule 6)
 Write-Host "Checking current branch..." -ForegroundColor Cyan
 $currentBranch = git branch --show-current
 
-if ($currentBranch -eq "main") {
+if ($currentBranch -eq "master") {
     Write-Host ""
-    Write-Host "BLOCKED: Cannot commit directly to 'main' branch!" -ForegroundColor Red
+    Write-Host "BLOCKED: Cannot commit directly to 'master' branch!" -ForegroundColor Red
     Write-Host ""
     Write-Host "   Rule 6: All Changes Via Pull Requests" -ForegroundColor Yellow
-    Write-Host "   'Never commit to main. Create feature branch -> PR -> CI/CD + review -> merge.'" -ForegroundColor Yellow
+    Write-Host "   'Never commit to master. Create feature branch -> PR -> CI/CD + review -> merge.'" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "   To fix:" -ForegroundColor Cyan
     Write-Host "   1. git stash                                    # Save your changes" -ForegroundColor White
@@ -47,7 +47,7 @@ if ($currentBranch -eq "main") {
     exit 1
 }
 
-Write-Host "Branch check passed - on '$currentBranch' (not main)" -ForegroundColor Green
+Write-Host "Branch check passed - on '$currentBranch' (not master)" -ForegroundColor Green
 Write-Host ""
 
 # Kill stale PowerPoint and MCP server processes to avoid file locks on Release binaries

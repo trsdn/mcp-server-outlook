@@ -55,24 +55,24 @@ mcp_github_github_pull_request_read(method="get_review_comments", owner="trsdn",
 **See testing-strategy.instructions.md for complete test commands.**
 
 Quick reference:
-- Development: `Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust`
-- Session/batch changes: `RunType=OnDemand`
-- VBA tests: `(Feature=VBA|Feature=VBATrust)&RunType!=OnDemand`
+- Everything that runs without Outlook: `Category!=Integration`
+- Dispatcher and COM plumbing: `Feature=OutlookDispatcher`
+- MCP protocol surface: `Feature=McpProtocol`
 
 ## CI/CD Workflows
 
 **Automated on Pull Requests:**
 - `build-mcp-server.yml` - Builds MCP Server on code changes
 - `build-cli.yml` - Builds CLI on code changes
-- `integration-tests.yml` - Real PowerPoint COM integration workflow; activates only when repository variable `ENABLE_POWERPOINT_INTEGRATION_CI=true` and a self-hosted runner labeled `powerpoint` is available
+- `integration-tests.yml` - Real Outlook COM integration workflow; activates only when repository variable `ENABLE_OUTLOOK_INTEGRATION_CI=true` and a self-hosted runner labeled `outlook` is available (see #31)
 - `codeql.yml` - Security analysis
 - `dependency-review.yml` - Dependency security scanning
 
 **Manual/on-demand gates:**
-- `scripts\Test-LlmRegressionGate.ps1` - Canonical LLM regression gate
-- `integration-tests.yml` `workflow_dispatch` inputs can opt into `RunType=OnDemand` and the LLM gate when the PowerPoint runner is available
+- `scripts\Test-LlmRegressionGate.ps1` - LLM regression gate. Currently non-functional: it names PowerPoint scenarios deleted by #26. See #68.
+- `integration-tests.yml` `workflow_dispatch` inputs can opt into `RunType=OnDemand` and the LLM gate when the Outlook runner is available
 
-**Note:** The workflow file is active, but the PowerPoint job intentionally no-ops unless `ENABLE_POWERPOINT_INTEGRATION_CI=true`. See `docs/AZURE_SELFHOSTED_RUNNER_SETUP.md`.
+**Note:** The workflow file is active, but the `outlook-integration` job intentionally no-ops unless `ENABLE_OUTLOOK_INTEGRATION_CI=true`, reporting `integration-runner-disabled` instead. See `docs/AZURE_SELFHOSTED_RUNNER_SETUP.md`.
 
 ## Workflow Config Updates
 

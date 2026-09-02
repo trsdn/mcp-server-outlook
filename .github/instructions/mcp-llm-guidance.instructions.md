@@ -10,39 +10,39 @@ applyTo: "src/OutlookMcp.McpServer/Prompts/**/*.md"
 
 **Write FOR expert LLMs (GitHub Copilot, Claude), not ABOUT the system.**
 
-LLMs already know PowerPoint, JSON, and MCP protocol. They need server-specific patterns only.
+LLMs already know Outlook, JSON, and the MCP protocol. They need server-specific patterns only.
 
 ## What to Include
 
 **1. Action Catalog:**
 - Complete list of valid action values
-- Example: "Actions: get-values, set-values, clear-all"
+- Example: "Actions: read, read-active, list, search, create-draft"
 
 **2. Action Disambiguation:**
 - When to use each action
-- Example: "clear-all removes formatting, clear-contents preserves it"
+- Example: "read-active uses the currently open item; read requires an entryId"
 
 **3. Tool Selection:**
 - When to use this tool vs other tools
-- Example: "Use shape for content, slide for lifecycle"
+- Example: "Use mail for items, folder for navigation"
 
 **4. Server-Specific Behavior:**
 - Quirks of THIS implementation
-- Example: "Single cell returns [[value]] (2D array), not scalar"
-- Example: "For named ranges, use sheetName='' (empty string)"
+- Example: "entryId is only meaningful together with storeId"
+- Example: "Outlook must already be running; the server never launches it"
 
 **5. Common Mistakes:**
 - Pitfalls specific to this server
-- Example: "Don't forget batch mode for multiple operations"
+- Example: "Reading a sender address can trigger a modal Outlook security prompt"
 
 **6. Parameter Value Examples:**
 - Actual values for string parameters
-- Example: rangeAddress can be "A1", "A1:C10", or "SalesData"
+- Example: folder can be "inbox", "drafts", "sent", or a full folder path
 
 ## What to Exclude
 
 **❌ DON'T explain:**
-- PowerPoint concepts (slides, shapes, animations)
+- Outlook concepts (mail, folders, appointments, attachments)
 - JSON syntax
 - Programming basics (arrays, null, types)
 - MCP protocol syntax
@@ -76,7 +76,7 @@ LLMs already know PowerPoint, JSON, and MCP protocol. They need server-specific 
 - ✅ One markdown file per tool
 - ✅ 50-150 lines total per tool
 - ✅ Focus on disambiguation, not explanation
-- ❌ Don't write PowerPoint tutorials
+- Don't write Outlook tutorials
 - ❌ Don't explain JSON syntax
 
 ## Format Guidelines
@@ -125,7 +125,7 @@ LLMs already know PowerPoint, JSON, and MCP protocol. They need server-specific 
 - After LIST operations: Suggest actions based on count
 - After UPDATE operations: Suggest verification
 - After FAILURE: Suggest troubleshooting
-- Batch mode hints: "Creating multiple? Use begin_ppt_batch"
+- Precondition hints: "Requires classic Outlook for Windows to be running"
 
 ## Success Criteria
 
@@ -135,7 +135,7 @@ A good prompt:
 - ✅ Explains server-specific quirks
 - ✅ Helps choose between tools
 - ✅ Under 150 lines
-- ❌ Doesn't teach PowerPoint concepts
+- Doesn't teach Outlook concepts
 - ❌ Doesn't show JSON syntax
 - ❌ Doesn't duplicate schema info
 

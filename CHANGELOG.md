@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Pre-commit branch guard never fired**: `scripts/pre-commit.ps1` blocked commits to a branch
+  named `main`, but this repository's default branch is `master`, so the Rule 6 guard silently
+  passed on every direct commit to the default branch.
 - **CLI returned exit code 0 when an operation failed** (#63): `outlookcli` printed
   `{"success": false, "errorMessage": "..."}` on stdout and then exited 0, so every script, CI step,
   and agent that branched on `$LASTEXITCODE` treated a failed Outlook operation as a success.
@@ -27,6 +30,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`.github/instructions/` rewritten for Outlook COM** (#62): the instruction files are
+  auto-loaded into every Copilot session in this repository, so they were actively steering
+  contributors toward a PowerPoint batch/session API that no Outlook code path uses.
+  - `ppt-com-interop.instructions.md` and `ppt-com-patterns-guide.instructions.md` were replaced
+    by a single `outlook-com-interop.instructions.md` documenting the real execution model:
+    `OutlookInteropRunner.Execute` on the shared `OutlookDispatcher` STA thread, strongly-typed
+    `Microsoft.Office.Interop.Outlook` rather than `dynamic`, try-finally release, the
+    never-final-release-the-shared-Application rule (#19), and the Object Model Guard posture.
+  - `copilot-instructions.md`, `critical-rules.instructions.md` (Rules 1b, 5, 7, 9, 12, 14, 16,
+    18, 22, 24, 28, 30), `architecture-patterns`, `testing-strategy`, `mcp-server-guide`,
+    `coverage-prevention-strategy`, `mcp-llm-guidance`, `development-workflow` and `meta` were
+    retargeted to Outlook.
+  - Corrected claims that became false after #5/#11 and #26: `ToolActions.cs` and
+    `ActionExtensions.cs` no longer exist (the MCP tool, its action enum and the CLI command are
+    all generated from `[ServiceCategory]`/`[ServiceAction]`), the test `Feature` traits no longer
+    include `Slide`/`Shape`/`Text`/`VBA`/`Screenshot`, and the surface is five tools, not 19.
+  - Added a warning that stale generator output under `obj/` is not the source of truth.
+- **Orphaned `.github/agents/copilot-instructions.md` deleted**: an auto-generated spec-kit stub
+  whose generator (`.specify/`) is not in the repository. Nothing referenced it and its content
+  was a placeholder plus stale "PowerPoint COM automation via `dynamic`" technology notes.
 - **Rule 30 / ADR-001 narrowed: the ban is on mocked-COM unit tests, not on all unit tests** (#37):
   the rule said "NEVER write unit tests" while 16 files sat under `tests/**/Unit/`. A rule that the
   codebase visibly contradicts gets ignored wholesale rather than obeyed selectively, so #37 asked
@@ -45,8 +68,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directly above a comment conceding that no COM object was involved. `OleMessageFilterTests` also
   fails the new test, but is deliberately left in place because it is currently failing on `master`
   (#59) and deleting a failing test is how real defects get lost.
-
-### Removed
 
 - **Dead documentation deleted** (#34): `.github/ISSUE_TEMPLATE/breaking-changes-issue.md` (it had no
   YAML front matter, so it was never a real issue template, and every document and tool it referenced

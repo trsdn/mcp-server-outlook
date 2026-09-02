@@ -23,11 +23,11 @@ applyTo: "src/OutlookMcp.McpServer/**/*.cs"
 
 ```csharp
 [McpServerTool]
-public async Task<string> PptSlide(string action, string pptPath, ...)
+public async Task<string> Mail(string action, ...)
 {
     return action.ToLowerInvariant() switch
     {
-        "list" => List(...),      // Synchronous methods
+        "list" => List(...),        // Synchronous methods
         "view" => View(...),      // No await!
         _ => ThrowUnknownAction(action, "list", "view", ...)
     };
@@ -57,9 +57,9 @@ private static string ForwardSomeAction(string sessionId, string? param)
 
 **When to Throw McpException:**
 - ✅ **Parameter validation** - missing required params, invalid formats (pre-conditions)
-- ✅ **File not found** - presentation doesn't exist (pre-conditions)
-- ✅ **Batch not found** - invalid batch session (pre-conditions)
-- ❌ **NOT for business logic errors** - table not found, shape not found, operation failed, etc.
+- **Unsupported action value** for the tool (pre-conditions)
+- **Malformed identifier** - an entryId that is not a valid EntryID string (pre-conditions)
+- **NOT for business logic errors** - item not found, folder not found, Outlook not running, Object Model Guard denial, operation failed
 
 **Why This Pattern:**
 - ✅ MCP spec requires business errors return JSON with `isError: true` flag
@@ -69,7 +69,7 @@ private static string ForwardSomeAction(string sessionId, string? param)
 
 **Example - Business Error (return JSON):**
 ```csharp
-// Core returns: { Success = false, ErrorMessage = "Table 'Sales' not found" }
+// Core returns: { Success = false, ErrorMessage = "Folder 'Archive' not found" }
 // MCP Tool: Return this as-is
 return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
 // Client receives via MCP protocol:
@@ -77,7 +77,7 @@ return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
 //   "jsonrpc": "2.0",
 //   "id": 4,
 //   "result": {
-//     "content": [{"type": "text", "text": "{\"success\": false, \"errorMessage\": \"Table 'Sales' not found\"}"}],
+//     "content": [{"type": "text", "text": "{\"success\": false, \"errorMessage\": \"Folder 'Archive' not found\"}"}],
 //     "isError": true
 //   }
 // }
@@ -86,9 +86,9 @@ return JsonSerializer.Serialize(result, PptToolsBase.JsonOptions);
 **Example - Validation Error (throw exception):**
 ```csharp
 // Missing required parameter - PROTOCOL ERROR
-if (string.IsNullOrWhiteSpace(tableName))
+if (string.IsNullOrWhiteSpace(entryId))
 {
-    throw new ModelContextProtocol.McpException("tableName is required for create-from-table action");
+    throw new ModelContextProtocol.McpException("entryId is required for the read action");
 }
 // Client receives: JSON-RPC error with HTTP error code
 ```
@@ -99,7 +99,7 @@ if (string.IsNullOrWhiteSpace(tableName))
 
 ```csharp
 [McpServerTool]
-public static async Task<string> PptTool(ToolAction action, ...)
+public static async Task<string> Mail(MailAction action, ...)
 {
     try
     {
@@ -120,13 +120,13 @@ public static async Task<string> PptTool(ToolAction action, ...)
         {
             Success = false,
             ErrorMessage = ex.Message,
-            FilePath = pptPath,
+
             Action = action.ToActionString(),
             SuggestedNextActions = new List<string>
             {
-                "Check if PowerPoint is showing a dialog or prompt",
-                "Verify data source connectivity",
-                "For large datasets, operation may need more time"
+                "Check whether Outlook is showing a modal dialog or security prompt",
+                "Verify Outlook is running at the same elevation as this process",
+                "For large folders, the operation may need more time"
             },
             OperationContext = new Dictionary<string, object>
             {
@@ -142,7 +142,7 @@ public static async Task<string> PptTool(ToolAction action, ...)
     }
     catch (Exception ex)
     {
-        PptToolsBase.ThrowInternalError(ex, action.ToActionString(), pptPath);
+        PptToolsBase.ThrowInternalError(ex, action.ToActionString());
         throw; // Unreachable but satisfies compiler
     }
 }
@@ -155,13 +155,13 @@ public static async Task<string> PptTool(ToolAction action, ...)
 ```csharp
 // Tool signature: async Task<string> (MCP SDK requirement)
 [McpServerTool]
-public static async Task<string> PptSlide(string action, ...)
+public static async Task<string> Mail(string action, ...)
 {
     // Action methods: synchronous (no await!)
     return action.ToLowerInvariant() switch
     {
-        "list" => ForwardList(...),        // ✅ Synchronous
-        "view" => ForwardView(...),        // ✅ Synchronous
+        "list" => ForwardList(...),        // Synchronous
+        "read" => ForwardRead(...),        // Synchronous
         _ => throw new McpException("Unknown action")
     };
 }
@@ -169,14 +169,14 @@ public static async Task<string> PptSlide(string action, ...)
 // Action methods forward to in-process OutlookMcpService:
 private static string ForwardList(string sessionId)
 {
-    return PptToolsBase.ForwardToService("slide.list", sessionId);
+    return PptToolsBase.ForwardToService("mail.list", sessionId);
 }
 
-private static string ForwardView(string sessionId, string slideIndex)
+private static string ForwardRead(string sessionId, string entryId)
 {
-    if (string.IsNullOrEmpty(slideIndex))
-        PptToolsBase.ThrowMissingParameter("slideIndex", "view");
-    return PptToolsBase.ForwardToService("slide.view", sessionId, new { slideIndex });
+    if (string.IsNullOrEmpty(entryId))
+        PptToolsBase.ThrowMissingParameter("entryId", "read");
+    return PptToolsBase.ForwardToService("mail.read", sessionId, new { entryId });
 }
 ```
 
@@ -191,7 +191,7 @@ return JsonSerializer.Serialize(result, JsonOptions);
 
 ## JSON Deserialization & COM Marshalling
 
-**⚠️ CRITICAL:** MCP deserializes JSON arrays to `JsonElement`, NOT primitives. PowerPoint COM requires proper types.
+**⚠️ CRITICAL:** MCP deserializes JSON arrays to `JsonElement`, NOT primitives. Outlook COM requires proper types.
 
 **Problem:** `values: [["text", 123, true]]` → `List<List<object?>>` where each object is `JsonElement`.
 
@@ -234,13 +234,13 @@ private static object ConvertToCellValue(object? value)
 
 **❌ WRONG: Verbose guidance (LLM doesn't need step-by-step instructions)**
 ```csharp
-errorMessage = "Operation failed. This usually means: (1) Slide doesn't exist, (2) Shape not found, or (3) Session closed. " +
-               "Use slide(action: 'list') to verify slide exists, then file(action: 'list') to check sessions.";
+errorMessage = "Operation failed. This usually means: (1) the item does not exist, (2) the folder was not found, or (3) Outlook is not running. " +
+               "Use folder(action: 'list') to verify the folder exists, then mail(action: 'list') to find the item.";
 ```
 
 **✅ CORRECT: State facts (LLM determines next action)**
 ```csharp
-errorMessage = $"Cannot read shape '{shape}' on slide '{slide}': {ex.Message}";
+errorMessage = $"Cannot read mail item '{entryId}' in folder '{folder}': {ex.Message}";
 ```
 
 **Why:** LLMs are intelligent agents that determine workflow. Error messages should report what failed and why, not prescribe solutions.
@@ -295,8 +295,8 @@ Before committing MCP tool changes:
 - [ ] Build passes with 0 warnings
 - [ ] No `if (!result.Success) throw McpException` blocks (violates MCP spec)
 - [ ] **Tool XML documentation (`/// <summary>`) documents server-specific behavior**
-- [ ] **Non-enum parameter values explained (layoutType, shapeType, etc.)**
-- [ ] **Performance guidance (batch mode) is accurate**
+- [ ] **Non-enum parameter values explained (folder aliases, output formats, etc.)**
+- [ ] **Preconditions documented (Outlook must be running; Object Model Guard exposure)**
 - [ ] **Related tools referenced correctly**
 
 ## Tool Description vs Prompt Files
@@ -325,9 +325,9 @@ Before committing MCP tool changes:
 **When updating a tool, verify:**
 1. ✅ Tool purpose and use cases are clear
 2. ✅ Server-specific behavior is documented (defaults, quirks, important notes)
-3. ✅ Performance guidance (batch mode) is accurate
+3. Preconditions are documented (Outlook running, elevation, Object Model Guard)
 4. ✅ Related tools referenced correctly
-5. ✅ Non-enum parameter guidance is complete (layoutType options, shape types, etc.)
+5. Non-enum parameter guidance is complete (folder aliases, output formats, etc.)
 
 **What NOT to include in descriptions:**
 - ❌ **Enum action lists** - MCP SDK auto-generates enum values in schema (LLMs see them automatically)
@@ -337,18 +337,19 @@ Before committing MCP tool changes:
 **Example - Good tool description:**
 ```csharp
 /// <summary>
-/// Manage slides in a PowerPoint presentation.
-/// 
-/// LAYOUT OPTIONS (non-enum parameter):
-/// - 'blank': Empty slide with no placeholders (DEFAULT)
-/// - 'title': Title slide layout
-/// - 'title-content': Title and content layout
-/// - 'section-header': Section header layout
-/// - 'two-content': Two content areas side by side
-/// 
-/// TIMEOUT: Long-running operations auto-timeout after 5 minutes.
-/// 
-/// Use shape tool for adding content to slides.
+/// Read, list and search mail items in the running Outlook session.
+///
+/// FOLDER (non-enum parameter): accepts a well-known alias or a full folder path.
+/// Aliases: inbox, drafts, sent, outbox, deleted, junk, calendar, contacts, tasks, notes.
+///
+/// PRECONDITION: classic Outlook for Windows must already be running. This server never
+/// launches Outlook, and cannot reach an Outlook running at a different elevation level.
+///
+/// SECURITY: reading sender addresses or recipients may trigger Outlook''s Object Model
+/// Guard, which raises a modal prompt that a person must answer. It cannot be answered
+/// programmatically.
+///
+/// Use the folder tool to discover folder paths.
 /// </summary>
 ```
 ✅ Describes purpose and use cases

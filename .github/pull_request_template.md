@@ -44,8 +44,8 @@ and are generated from the same interfaces, so a half-finished action ships as b
 
 - [ ] Added the method to the Core Commands interface (e.g. `IMailCommands`)
 - [ ] Implemented it in the Core Commands class (e.g. `MailCommands`)
-- [ ] Added the enum value to `ToolActions.cs`
-- [ ] Added the `ToActionString` mapping in `ActionExtensions.cs` (a missing mapping throws at runtime)
+- [ ] Annotated the interface method with `[ServiceAction]`, and `Destructive = true` if it mutates or deletes
+- [ ] Ran `CoreCommandsCoverageTests` to confirm the generated enum matches the interface
 - [ ] Verified the action appears in **both** the generated MCP tool and the generated CLI command
 - [ ] Added integration tests
 - [ ] Updated `FEATURES.md`, including the operation count
@@ -63,8 +63,8 @@ and are generated from the same interfaces, so a half-finished action ships as b
 - [ ] Code follows project style guidelines
 - [ ] Self-review completed
 - [ ] `Success` is never `true` alongside an `ErrorMessage`
-- [ ] Core commands do not catch exceptions to return an error result; exceptions propagate
-- [ ] Every `dynamic` COM object is released in a `finally` block via `ComUtilities.Release(ref obj!)`
+- [ ] Core commands do not catch exceptions inside the action lambda; failures flow through the runner's `onException`
+- [ ] Every COM object is released in a `finally` block via `OutlookInteropRunner.ReleaseComObject`, and the shared `Outlook.Application` is never final-released
 - [ ] No TODO / FIXME / HACK markers, and no commented-out code
 - [ ] Escapes user input with `.EscapeMarkup()` in CLI output
 - [ ] Returns consistent exit codes (`0` on success, non-zero when the operation reports `success: false`)

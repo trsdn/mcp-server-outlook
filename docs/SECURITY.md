@@ -2,108 +2,224 @@
 
 ## Supported Versions
 
-We currently support the following versions of OutlookMcp with security updates:
+We actively support the current major version of OutlookMcp with security updates.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
+| Version | Supported | Status |
+| ------- | --------- | ------ |
+| 1.x.x   | Yes       | Active |
+
+## Security Features
+
+OutlookMcp includes security measures appropriate for local Outlook COM automation.
+
+### Input Validation
+
+- File paths used for attachments and output files are normalized and validated by the command layer.
+- Destructive operations require explicit action names and parameters.
+- `mail send` requires `confirm=true` before a draft is sent.
+- Optional `operationId` support on `mail send` reduces duplicate-send risk after retries.
+
+### Code Analysis
+
+- Security and reliability analyzers run as part of the build.
+- Warnings are treated as errors.
+- CodeQL and dependency scanning are configured in repository workflows.
+
+### Outlook COM Security
+
+- OutlookMcp uses the classic Outlook for Windows COM object model through `Outlook.Application`.
+- New Outlook for Windows is not supported because it exposes no COM object model.
+- Outlook must already be running. The command layer deliberately avoids creating a new untrusted Outlook instance for normal operations.
+- Operations run as the current Windows user and do not elevate privileges.
+- Outlook Object Model Guard prompts can block sensitive operations. A person must respond in Outlook; OutlookMcp cannot bypass or approve those prompts.
+- Entry IDs identify items, but can change when an item moves between stores.
+
+### OutlookMcp Service Security
+
+The MCP server runs Outlook operations in-process. The CLI uses a local daemon and named pipe.
+
+**MCP Server:** Runs fully in-process with the MCP host. There is no additional network listener created by OutlookMcp.
+
+**CLI:** Uses a Windows named pipe for communication between `outlookcli` commands and the daemon process.
+
+| Protection | Status | Description |
+| ---------- | ------ | ----------- |
+| User isolation | Enforced | The pipe name includes the current Windows user SID. |
+| Windows ACLs | Enforced | The named pipe restricts access to the current user. |
+| Local only | Enforced | Named pipes are local IPC only. |
+| Same-user process restriction | Not enforced | Any same-user process can connect to the daemon. |
+
+What this means:
+
+1. Same-user applications can request Outlook operations through the CLI daemon.
+2. Other Windows users cannot access the daemon through the default pipe.
+3. Remote network clients cannot connect to the daemon.
+4. The daemon does not provide capabilities beyond what the current user can already do in Outlook.
+
+### Dependency Management
+
+- Dependabot monitors package updates.
+- Dependency review checks pull requests.
+- Central package management keeps versions consistent.
 
 ## Reporting a Vulnerability
 
-We take security seriously. If you discover a security vulnerability in OutlookMcp, please report it responsibly.
+We take security vulnerabilities seriously. If you discover a security issue, please follow these steps.
 
-### How to Report
+### 1. Do Not Create a Public Issue
 
-1. **Do NOT create a public GitHub issue** for security vulnerabilities
-2. Contact me directly
-3. Include the following information:
-   - Description of the vulnerability
-   - Steps to reproduce the issue
-   - Potential impact
-   - Suggested fix (if you have one)
+Please do not create a public GitHub issue for security vulnerabilities.
 
-### What to Expect
+### 2. Report Privately
 
-- We will acknowledge receipt of your vulnerability report within 48 hours
-- We will provide an estimated timeline for addressing the vulnerability within 1 week
-- We will notify you when the vulnerability has been fixed
-- We will credit you in the security advisory (if you wish)
+Preferred method: GitHub Security Advisories
 
-## Security Considerations
+1. Go to <https://github.com/trsdn/mcp-server-outlook/security/advisories>.
+2. Click "Report a vulnerability".
+3. Fill out the advisory form.
 
-### Enhanced Security Features (Latest Version)
+Alternative: contact the maintainer through GitHub at [@trsdn](https://github.com/trsdn).
 
-OutlookMcp implements comprehensive security measures:
+Subject: `[SECURITY] OutlookMcp Vulnerability Report`
 
-- **Input Validation**: All file paths validated with length limits (32767 chars) and extension restrictions
-- **File Size Limits**: 1GB maximum file size to prevent DoS attacks  
-- **Path Security**: `Path.GetFullPath()` prevents path traversal attacks
-- **Resource Protection**: Protection against memory exhaustion and process hanging
-- **Code Analysis**: Enhanced security rules enforced (CA2100, CA3003, CA3006, etc.)
-- **Quality Enforcement**: All warnings treated as errors for robust code
+### 3. Information to Include
 
-### PowerPoint COM Automation
+- Description: Clear description of the vulnerability.
+- Impact: What could an attacker do?
+- Affected Versions: Which versions are affected?
+- Proof of Concept: Steps to reproduce, if possible.
+- Suggested Fix: Optional mitigation or patch idea.
 
-OutlookMcp uses PowerPoint COM automation with security safeguards:
+Example:
 
-- **Macro Execution**: OutlookMcp can execute VBA macros when using script-run command
-- **VBA Trust**: VBA operations require "Trust access to the VBA project object model" to be manually enabled in PowerPoint settings (one-time setup)
-- **File Validation**: Strict file extension validation (.pptx, .pptm, .ppt only)
-- **File Access**: OutlookMcp requires read/write access to PowerPoint files with size validation
-- **Process Isolation**: Each command runs in a separate process that terminates after completion
-- **PowerPoint Instance**: Creates temporary PowerPoint instances that are properly cleaned up
-- **Input Sanitization**: All arguments validated for length and content
+```text
+Vulnerability: Unsafe attachment save path handling
+Impact: Attacker could write files outside the intended directory
+Affected Versions: 1.0.0 - 1.0.2
+PoC: outlookcli attachment save --destination-directory "..\..\target"
+Suggested Fix: Validate normalized output paths before writing
+```
 
-### Power Query Privacy Levels
+### 4. What to Expect
 
-OutlookMcp implements security-first privacy level handling:
+- Acknowledgment within 48 hours.
+- Initial assessment within 5 business days.
+- Regular status updates.
+- Fix timeline based on severity.
 
-- **Explicit Consent**: Privacy levels must be specified explicitly via `--privacy-level` parameter or `PPT_DEFAULT_PRIVACY_LEVEL` environment variable
-- **No Auto-Application**: Privacy levels are never applied automatically without user consent
-- **Privacy Detection**: Analyzes existing queries to recommend appropriate privacy levels
-- **Clear Guidance**: Provides detailed explanations of privacy level implications
-- **Security Options**: Supports None, Private (most secure), Organizational, and Public levels
+### 5. Coordinated Disclosure
 
-### VBA Security Considerations
+1. Private fix development.
+2. GitHub Security Advisory when appropriate.
+3. CVE request when applicable.
+4. Public release with security notes.
+5. Researcher credit if desired.
 
-- **Macro Content**: VBA scripts imported via script-import will be executed when called
-- **Manual Trust Setup**: VBA trust must be enabled manually through PowerPoint's Trust Center settings (never modified automatically by OutlookMcp)
-- **File Format**: Only .pptm files can contain and execute VBA code
-- **Code Injection**: Always validate VBA source files before importing
-- **User Control**: OutlookMcp never modifies registry settings or security configurations automatically
+## Security Best Practices for Users
 
-### Best Practices for Users
+### MCP Server Security
 
-1. **File Validation**: Only run OutlookMcp on trusted PowerPoint files
-2. **VBA Source Control**: Validate VBA code files before importing with script-import
-3. **Network Files**: Be cautious when processing files from network locations
-4. **Permissions**: Run OutlookMcp with minimal necessary permissions
-5. **Backup**: Always backup important PowerPoint files before processing
-6. **VBA Trust**: Only enable VBA trust in PowerPoint settings on systems where it's needed (manual one-time setup)
-7. **Code Review**: Review VBA scripts before execution, especially from external sources
-8. **Privacy Levels**: Choose appropriate Power Query privacy levels based on data sensitivity (Private for sensitive data, Organizational for internal data, Public for public APIs)
-9. **Environment Variables**: Use `PPT_DEFAULT_PRIVACY_LEVEL` environment variable for consistent automation security
+- Use only trusted MCP hosts and AI assistants.
+- Review destructive tool calls before allowing them.
+- Remember that output can contain mailbox data.
+- Monitor MCP client logs according to your local policy.
 
-### Known Limitations
+### CLI Security
 
-- **Windows Only**: OutlookMcp only works on Windows with PowerPoint installed
-- **COM Dependencies**: Relies on PowerPoint COM objects which may have their own security considerations
-- **File System Access**: Requires appropriate file system permissions for PowerPoint file access
+- Review scripts before running them.
+- Protect files written by attachment save operations.
+- Avoid running the CLI as Administrator unless Outlook is also running at the same elevation level.
+- Stop the CLI daemon when you do not need it:
 
-## Dependency Security
+```powershell
+outlookcli service stop
+```
 
-OutlookMcp has minimal dependencies to reduce attack surface:
+### Outlook Data Security
 
-- **.NET 10**: Microsoft-maintained runtime with regular security updates
-- **Spectre.Console**: Well-maintained library for console output
-- **No External APIs**: No network connections or external service dependencies
+- Be cautious with attachment add and save operations.
+- Re-read or re-list items after moving them between stores because entry IDs can change.
+- Treat sent mail, deleted mail, moved mail, and calendar updates as real mailbox changes.
 
-## Version Updates
+### Development Security
 
-- Security patches will be released as soon as possible
-- Users are encouraged to keep OutlookMcp updated to the latest version
-- Breaking changes will be clearly documented in release notes
+- All changes require pull request review before merge.
+- Main branch protection and CI checks are expected.
+- Build with zero warnings.
+- Do not include private mailbox data, customer names, or secrets in tests, issues, logs, or PRs.
 
-## Contact
+## Known Security Considerations
 
-For security-related questions or concerns, please contact Torsten Mahr through GitHub issues (for non-sensitive matters) or the security reporting method outlined above.
+### Classic Outlook Dependency
+
+- Local only.
+- Windows only.
+- Requires classic Outlook for Windows desktop app.
+- Does not support new Outlook for Windows.
+- Uses the user's already-running Outlook session.
+
+### Shared Desktop Application
+
+- Outlook is a single shared desktop app per user session.
+- Automation is not isolated from the Outlook instance the user is also operating.
+- There is no supported show or hide control for Outlook windows.
+
+### AI Integration
+
+- Only use trusted AI platforms.
+- Review operations that send, move, delete, or mutate mailbox data.
+- Avoid exposing sensitive mailbox data to AI assistants unless your policy allows it.
+
+### Testing Gap
+
+No Outlook behavior is currently verified by hosted CI. Outlook integration tests require a self-hosted Windows runner with classic Outlook installed and signed in.
+
+## Security Updates
+
+Security updates are published through:
+
+- GitHub Security Advisories: <https://github.com/trsdn/mcp-server-outlook/security/advisories>
+- Release Notes: <https://github.com/trsdn/mcp-server-outlook/releases>
+- NuGet Advisories: package vulnerabilities shown in NuGet
+
+Subscribe to repository notifications to receive security alerts.
+
+## Vulnerability Disclosure Policy
+
+### Our Commitment
+
+- We will acknowledge receipt of vulnerability reports within 48 hours.
+- We will keep reporters informed of progress.
+- We will credit researchers in security advisories if desired.
+- We will not take legal action against researchers following responsible disclosure.
+
+### Researcher Guidelines
+
+- Give us time to fix before public disclosure.
+- Do not access, modify, or delete other users' data.
+- Act in good faith to help improve security.
+- Follow all applicable laws.
+
+## Security Contacts
+
+- GitHub Security: <https://github.com/trsdn/mcp-server-outlook/security>
+- Maintainer: @trsdn
+
+## Additional Resources
+
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [Microsoft Security Response Center](https://msrc.microsoft.com/)
+- [CVE Database](https://cve.mitre.org/)
+- [National Vulnerability Database](https://nvd.nist.gov/)
+
+## Version History
+
+| Version | Date | Security Changes |
+| ------- | ---- | ---------------- |
+| 1.x     | 2026 | Outlook COM command surface with STA dispatcher and CLI named pipe isolation |
+
+---
+
+**Last Updated:** 2026-09-02
+
+Thank you for helping keep OutlookMcp and its users safe.

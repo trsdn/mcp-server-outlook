@@ -1,10 +1,10 @@
 # Claude Desktop Configuration
 
-PowerPoint MCP Server works with Claude Desktop on Windows, but requires specific configuration for the Windows container environment.
+The Outlook MCP Server works with Claude Desktop on Windows. It automates the **classic Outlook for
+Windows desktop app** through COM, so that app must be installed and running on the same machine.
 
 ## Configuration Location
 
-Claude Desktop config file:
 ```
 %APPDATA%\Claude\claude_desktop_config.json
 ```
@@ -23,6 +23,7 @@ Claude Desktop config file:
 ```
 
 Or using the .NET tool:
+
 ```json
 {
   "mcpServers": {
@@ -34,73 +35,72 @@ Or using the .NET tool:
 }
 ```
 
-## Windows Container Considerations
+## Windows Considerations
 
-Claude Desktop runs in a Windows container with specific constraints:
+### Outlook instance
 
-### File System Access
+- The server attaches to the Outlook instance the user is already running, rather than starting its
+  own hidden copy. Operations act on the real mailbox.
+- There is no window show/hide control. Outlook stays as the user left it.
+- A modal dialog open in Outlook can block COM calls until it is dismissed.
 
-The container has limited file system access. PowerPoint files should be in accessible locations:
+### File system access
 
-- **User Documents**: `C:\Users\<username>\Documents\`
-- **User Desktop**: `C:\Users\<username>\Desktop\`
-- **Temp directory**: `%TEMP%` or `C:\Users\<username>\AppData\Local\Temp\`
+Claude Desktop runs with limited file system access, which matters for `attachment.save` and
+`attachment.add`. Prefer paths under:
 
-**Recommendation**: Work with files in your Documents folder.
+- `C:\Users\<username>\Documents\`
+- `C:\Users\<username>\Desktop\`
+- `%TEMP%`
 
-### PowerPoint Instance
+### Session persistence
 
-- PowerPoint MCP Server manages its own PowerPoint instance via COM automation
-- The PowerPoint window may be visible or hidden depending on operation
-- Long-running operations show PowerPoint's progress indicators
+The server holds no document session. Outlook itself is the state, so closing Claude Desktop does
+not discard work. Drafts you created remain in the Drafts folder.
 
-### Session Persistence
-
-Sessions are tied to the Claude Desktop session:
-- Closing Claude Desktop terminates active PowerPoint sessions
-- Unsaved changes may be lost
-- Use explicit `file(action: 'close', save: true)` to persist work
-
-## Recommended Workflow
+## Recommended First Call
 
 ```
-1. Create or open file in accessible location:
-   file(action: 'create', filePath: 'C:\\Users\\Me\\Documents\\report.pptx')
-
-2. Perform operations with returned sessionId
-
-3. Explicitly save and close when done:
-   file(action: 'close', sessionId: '...', save: true)
+application.get-status
 ```
+
+This reports whether classic Outlook is available. If it returns `NewOutlookOnly`, stop: the new
+Outlook for Windows exposes no COM object model and cannot be automated.
 
 ## Troubleshooting
 
-### "PowerPoint not found" Error
-- Ensure Microsoft PowerPoint is installed on the Windows system
-- PowerPoint 2016, 2019, 2021, or Microsoft 365 required
+### `NewOutlookOnly` status
 
-### "Access denied" Error
-- Check file path is in accessible directory
-- Ensure file is not open in another PowerPoint instance
-- Try using Documents folder instead of other locations
+Only the new Outlook for Windows is installed. Install classic Outlook, or switch the "New Outlook"
+toggle off, then restart the server.
 
-### "COM timeout" Error
-- PowerPoint may be showing a dialog - check for visible PowerPoint window
-- Operation may be long-running - wait for completion
-- Restart Claude Desktop if PowerPoint becomes unresponsive
+### "Outlook not found" / COM activation failure
 
-### VBA Operations Fail
-VBA requires explicit trust setting in PowerPoint:
-1. Open PowerPoint Options → Trust Center → Trust Center Settings
-2. Enable "Trust access to the VBA project object model"
-3. Restart PowerPoint MCP Server
+- Confirm classic Outlook is installed and has been launched at least once.
+- Confirm the `Outlook.Application` ProgID is registered.
+- Claude Desktop and Outlook must run as the same Windows user. An elevated Outlook and a
+  non-elevated server will not connect.
+
+### "Access denied" on attachment paths
+
+Use a path under Documents, Desktop, or `%TEMP%`.
+
+### Calls hang or time out
+
+- Outlook is probably showing a dialog. Check for a modal window and dismiss it.
+- A very large `mail.list` or `mail.search` over a busy mailbox is slow. Constrain by folder and
+  count.
+
+### An entry ID stopped resolving
+
+Entry IDs change when an item moves between stores. Re-run the `list` or `search` that produced it.
 
 ## MCPB Bundle Alternative
 
-For simplified installation, use the MCPB bundle which auto-configures Claude Desktop:
+For simplified installation, use the MCPB bundle, which auto-configures Claude Desktop:
 
 1. Download `outlook-mcp-bundle.mcpb` from releases
 2. Double-click to install
 3. Restart Claude Desktop
 
-See the main repository for MCPB installation instructions.
+See [`mcpb/README.md`](../../../mcpb/README.md) for details.

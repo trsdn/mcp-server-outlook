@@ -1,33 +1,40 @@
 # outlook-cli-skill
 
-An [Agent Skill](https://agentskills.io) for automating Microsoft PowerPoint via the [outlookcli](https://github.com/trsdn/mcp-server-outlook) command-line tool.
+An [Agent Skill](https://agentskills.io) for automating classic Outlook for Windows via the
+[`outlookcli`](https://github.com/trsdn/mcp-server-outlook) command-line tool.
 
 ## What this skill does
 
-When loaded by an AI agent (Claude, Codex, Cursor, Gemini CLI, etc.), this skill teaches the agent how to automate PowerPoint from scripts and CI/CD pipelines:
+When loaded by an AI agent (Claude, Codex, Cursor, Gemini CLI, etc.), this skill teaches the agent
+how to drive Outlook from scripts, with the same 5 tools and 30 operations the MCP server exposes:
 
-- **Presentation management** — open, create, save, close
-- **Range operations** — read/write values, formatting, formulas
-- **Tables & PivotTables** — create, modify, refresh
-- **Charts** — create and configure chart types
-- **Power Query (M code)** — create and edit queries
-- **Data Model (DAX)** — add measures and calculated columns
-- **VBA macros, conditional formatting**, and more
+- **Mail** (16) - read the active item, read, list, search, create drafts, reply, reply-all,
+  forward, send, move, delete, set read state, set categories, set subject, body, and recipients
+- **Calendar** (5) - list and read appointments, create, update, and delete them
+- **Folders** (4) - list default folders, list children, resolve a path, list items
+- **Attachments** (4) - list, save, add, remove
+- **Application** (1) - report Outlook availability
+
+The CLI surface is deliberately token-efficient and fully discoverable through `--help`, which makes
+it a better fit than the MCP server for coding agents.
 
 ## Requirements
 
-- Windows with Microsoft PowerPoint 2016+ installed
+- Windows
+- The **classic Outlook for Windows desktop app**, installed and running. The new Outlook for
+  Windows exposes no COM object model and cannot be automated; `outlookcli application get-status`
+  reports `NewOutlookOnly` in that case.
 - Install the CLI: `dotnet tool install --global OutlookMcp.CLI`
 
 ## Install
 
-```bash
+```powershell
 npx skillpm install outlook-cli-skill
 ```
 
 Or with npm directly:
 
-```bash
+```powershell
 npm install outlook-cli-skill
 ```
 

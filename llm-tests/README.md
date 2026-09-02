@@ -1,10 +1,10 @@
 # OutlookMcp LLM Integration Tests
 
-LLM-powered integration tests for both OutlookMcp MCP Server and PowerPoint CLI using pytest-aitest.
+LLM-powered integration tests for both the Outlook MCP Server and the `outlookcli` CLI, using pytest-aitest.
 
 ## Prerequisites
 
-- Windows desktop with Microsoft PowerPoint installed
+- Windows desktop with the classic Outlook for Windows app installed and running
 - .NET 10 SDK
 - Azure OpenAI endpoint configured
 - OutlookMcp MCP Server and CLI built/installed

@@ -1,4 +1,4 @@
-name: PowerPoint Integration Tests
+name: Outlook Integration Tests
 
 permissions:
   contents: read
@@ -41,19 +41,19 @@ on:
 
 jobs:
   integration-runner-disabled:
-    if: ${{ vars.ENABLE_POWERPOINT_INTEGRATION_CI != 'true' }}
+    if: ${{ vars.ENABLE_OUTLOOK_INTEGRATION_CI != 'true' }}
     runs-on: windows-latest
     steps:
-      - name: Report disabled PowerPoint runner
+      - name: Report disabled Outlook runner
         shell: pwsh
         run: |
-          Write-Output "PowerPoint integration workflow is configured but inactive."
-          Write-Output "Set repository variable ENABLE_POWERPOINT_INTEGRATION_CI=true and provide a self-hosted runner labeled 'powerpoint' to activate it."
+          Write-Output "Outlook integration workflow is configured but inactive."
+          Write-Output "Set repository variable ENABLE_OUTLOOK_INTEGRATION_CI=true and provide a self-hosted Windows runner labeled 'outlook' with classic Outlook installed. See issue #31."
           Write-Output "See docs/AZURE_SELFHOSTED_RUNNER_SETUP.md for setup details."
 
-  powerpoint-integration:
-    if: ${{ vars.ENABLE_POWERPOINT_INTEGRATION_CI == 'true' }}
-    runs-on: [self-hosted, windows, powerpoint]
+  outlook-integration:
+    if: ${{ vars.ENABLE_OUTLOOK_INTEGRATION_CI == 'true' }}
+    runs-on: [self-hosted, windows, outlook]
 
     steps:
       - uses: actions/checkout@v5
@@ -87,7 +87,7 @@ jobs:
         shell: pwsh
         run: >
           dotnet test tests/OutlookMcp.Core.Tests/OutlookMcp.Core.Tests.csproj
-          --filter "Category=Integration&RunType!=OnDemand&Feature!=VBA&Feature!=VBATrust&Feature!=Screenshot"
+          --filter "Category=Integration&RunType!=OnDemand"
           --logger "trx;LogFileName=core-integration.trx"
 
       - name: Verify Outlook tests were not all skipped
@@ -127,7 +127,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: powerpoint-integration-${{ github.run_id }}
+          name: outlook-integration-${{ github.run_id }}
           path: |
             **/*.trx
             llm-tests/TestResults/**

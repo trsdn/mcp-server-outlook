@@ -7,49 +7,60 @@ assignees: ''
 
 ---
 
+## Check this first
+
+Ask your assistant to call `application.get-status` and paste the result.
+
+If it reports `NewOutlookOnly`, this is **not a bug**. The new Outlook for Windows exposes no COM
+object model and cannot be automated. Install or switch to the classic Outlook for Windows desktop
+app.
+
+```json
+[application.get-status result here]
+```
+
 ## Issue Description
 A clear and concise description of the MCP Server issue.
 
 ## AI Assistant
 Which AI assistant are you using with the MCP Server?
-- [ ] **GitHub Copilot** (VS Code, Visual Studio, etc.)
+- [ ] **GitHub Copilot** (VS Code, Visual Studio)
 - [ ] **Claude Desktop** (Anthropic)
-- [ ] **ChatGPT** (OpenAI)
 - [ ] **Other**: [please specify]
 
 ## MCP Tool & Action
-Which MCP tool and action are experiencing issues?
-- **Tool**: [e.g., slide, shape, text, chart, vba, file]
-- **Action**: [e.g., list, view, import, export, update, refresh, delete, etc.]
-- **File Path**: [e.g., "C:\Data\presentation.pptx"]
-- **Additional Parameters**: [describe any other parameters used]
+- **Tool**: [one of: mail, calendar, folder, attachment, application]
+- **Action**: [e.g. list, search, read, create-draft, send, save]
+- **Parameters**: [describe the parameters used, with mailbox content redacted]
 
 ## Expected Behavior
 What did you expect the MCP Server to do?
 
 ## Actual Behavior
-What did the MCP Server actually do?
+What did it actually do?
 
 ## Error Response
-If you received an error, paste the full JSON response:
+Paste the full JSON response. It includes `success`, `errorMessage`, and `suggestedNextActions`;
+please include all three.
+
 ```json
 {
-  "error": "paste error here"
+  "success": false,
+  "errorMessage": "...",
+  "suggestedNextActions": []
 }
 ```
 
 ## MCP Server Configuration
-How is the MCP Server configured?
 
-**Configuration file location**: [e.g., `.config/Code/User/globalStorage/github.copilot-chat/config.json`]
+**Configuration file location**: [e.g. `%APPDATA%\Claude\claude_desktop_config.json`]
 
-**MCP Configuration**:
 ```json
 {
   "mcpServers": {
     "outlook-mcp": {
-      "command": "mcp-outlook",
-      // or other configuration
+      "command": "outlook-mcp-server.exe",
+      "args": []
     }
   }
 }
@@ -57,50 +68,46 @@ How is the MCP Server configured?
 
 ## Environment
 - **Windows Version**: [e.g. Windows 11, Windows 10]
-- **PowerPoint Version**: [e.g. PowerPoint 365, PowerPoint 2019]
-- **OutlookMcp Version**: [e.g. v1.0.0 - run `mcp-outlook --version` or `dotnet tool list -g`]
-- **.NET Version**: [Run `dotnet --version`]
-- **Installation Method**: 
-  - [ ] Global .NET tool (`dotnet tool install --global OutlookMcp.McpServer`)
+- **Outlook**: classic Outlook for Windows [e.g. Microsoft 365, Outlook 2021, Outlook 2019]
+- **OutlookMcp Version**: [e.g. v1.0.0]
+- **.NET Version**: [run `dotnet --version`]
+- **Installation Method**:
+  - [ ] MCPB bundle
+  - [ ] VS Code extension
+  - [ ] Global .NET tool
   - [ ] Source build
   - [ ] Other: [please specify]
+- **Mailbox type**: [Exchange / Microsoft 365 / IMAP / POP / local PST]
 
 ## MCP Server Logs
-If possible, provide relevant logs from the MCP Server:
 ```
-[Paste logs here]
+[Paste logs here, with mailbox content and addresses redacted]
 ```
 
 ## Steps to Reproduce
-1. Configure AI assistant with MCP Server
-2. Ask AI assistant: "..."
-3. MCP Server receives request for tool: [tool_name], action: [action_name]
+1. Configure the AI assistant with the MCP Server
+2. Ask the assistant: "..."
+3. The server receives a request for tool [tool], action [action]
 4. See error
 
+## Before Reporting
+
+- [ ] Classic Outlook was **installed and already running**
+- [ ] Outlook had no modal dialog open (a dialog blocks COM calls)
+- [ ] Outlook and the MCP server run as the **same Windows user** and at the same elevation
+- [ ] If the failure involves an entry ID, it came from a fresh `list`, `search`, or `read-active`.
+      Entry IDs change when an item moves between stores.
+
 ## Conversation Context (Optional)
-If helpful, provide the conversation you had with the AI assistant that led to this issue:
+The exchange that led to the issue, with content redacted:
+
 ```
-User: "Can you list all slides in my presentation?"
+User: "Show me my unread mail from this week"
 AI: [response]
 [MCP Server error occurs]
 ```
 
-## PowerPoint File Details
-- **File Format**: [.pptx or .pptm]
-- **File Size**: [approximate size]
-- **Contains**: 
-  - [ ] VBA Macros
-  - [ ] Multiple slides
-  - [ ] External connections
-
-## VBA-Related Issues (if applicable)
-- [ ] VBA trust is properly configured (`OutlookMcp check-vba-trust`)
-- [ ] Using .pptm file format for VBA operations
-- [ ] VBA module exists in the presentation
-- [ ] Macro security settings allow programmatic access
-
 ## Additional Context
-Add any other context about the problem here, including:
-- Screenshots of AI assistant interaction
-- Sample PowerPoint files (with sensitive data removed)
-- Other relevant information
+
+Please do **not** attach real mail items, `.pst`/`.ost` files, screenshots of your inbox, or
+anything containing personal data. Describe the shape of the data instead.

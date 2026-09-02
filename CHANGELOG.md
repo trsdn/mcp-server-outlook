@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to OutlookMcp (PowerPoint MCP Server) will be documented in this file.
+All notable changes to OutlookMcp, an Outlook COM automation MCP server, will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
@@ -29,6 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **Dead documentation deleted** (#34): `.github/ISSUE_TEMPLATE/breaking-changes-issue.md` (it had no
+  YAML front matter, so it was never a real issue template, and every document and tool it referenced
+  had already been deleted) and `tests/OutlookMcp.Core.Tests/docs/DATA-MODEL-SETUP.md` (documented
+  Data Model tests that no longer exist and that nothing references).
 - **Legacy PowerPoint command surface deleted** (#26): removed all 33 inherited PowerPoint command
   domains from `src/OutlookMcp.Core/Commands/` (69 files: `Accessibility`, `Animation`, `Background`,
   `Chart`, `Comment`, `CustomShow`, `Design`, `DocumentProperty`, `Export`, `File`, `HeaderFooter`,
@@ -53,6 +57,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `ParameterValidationTests` (which covered only deleted PowerPoint domains).
 
 ### Changed
+
+- **Documentation and packaging purged of PowerPoint** (#34): the markdown surface went from 90 files
+  with 1041 PowerPoint references down to 44 files, and every survivor is now deliberate. Rewrote
+  `README.md`, `FEATURES.md`, `SECURITY.md`, the `docs/` set, `tests/README.md`, every project
+  `README.md`, the `mcpb/` and `vscode-extension/` packaging metadata, the `packages/*` skill
+  READMEs, `examples/README.md`, and all four GitHub issue/PR templates.
+  - **The two shipped MCP prompts were the most urgent part.** Every `.md` under `skills/shared/` is
+    code-generated into an `[McpServerPrompt]` and copied into both skill reference folders.
+    `behavioral-rules.md` and `outlook_agent_mode.md` were entirely PowerPoint, so the server was
+    actively shipping LLM instructions for `slide()`, `shape()`, and `window()` tools that #26
+    deleted. `behavioral-rules.md` was replaced with nine Outlook rules, and `outlook_agent_mode.md`
+    was replaced by a new `outlook-workflows.md` (its premise -- window show/hide -- has no Outlook
+    equivalent). Slide-design prompts moved to `eval/skills/`, out of the shipped prompt set.
+  - **Breaking for anyone activating the integration runner:** the repository variable
+    `ENABLE_POWERPOINT_INTEGRATION_CI` is renamed to `ENABLE_OUTLOOK_INTEGRATION_CI`, and the
+    self-hosted runner label `powerpoint` becomes `outlook`. `docs/AZURE_SELFHOSTED_RUNNER_SETUP.md`
+    is updated to match and now also requires a working Outlook mail profile on the runner host.
+  - `skills/outlook-cli/references/cli-commands.md` was a stale stub listing 24 deleted domains with
+    empty sections; it is regenerated from the real `outlookcli --help`.
+  - `src/OutlookMcp.ComInterop/README.md` keeps its PowerPoint wording **on purpose** and now states
+    so explicitly, splitting the library into the active Outlook path (`OutlookDispatcher`,
+    `ComUtilities`, `OleMessageFilter`) and the dormant retained `Ppt*` session layer.
+  - Also fixed PowerPoint wording in shipped CLI help text (`Program.cs`, `CliServiceTray.cs`,
+    `SessionCommands.cs`, `ListActionsCommand.cs`), so this is not a docs-only change.
+  - Deferred by design: `.github/instructions/` and `.github/copilot-instructions.md` (#62), and
+    `eval/` plus `src/OutlookMcp.Agent/` (#61). `CHANGELOG.md` and the ADRs keep their PowerPoint
+    references as historical record.
+
+- **`vscode-extension-ci.yml` renamed to `node-ci.yml`**: the workflow was renamed to `Node Projects
+  CI` when it took on `eval/` tooling, but its filename still claimed to be extension-only.
 
 - **`CoreCommandsCoverageTests` and `ActionValidatorTests` are now reflection-driven**: both
   previously hard-coded the list of command domains, and `CoreCommandsCoverageTests` had silently

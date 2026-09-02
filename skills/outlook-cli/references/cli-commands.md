@@ -1,51 +1,160 @@
 # CLI Command Reference
 
-> Auto-generated from \outlookcli --help\. Do not edit manually.
+> Generated from `outlookcli --help`. Do not edit manually.
 
-## service
+## application
 
-## calculationmode
+```
+DESCRIPTION:
+Application operations
 
-## chart
+USAGE:
+    outlookcli application <ACTION> [OPTIONS]
 
-## chartconfig
+ARGUMENTS:
+    <ACTION>    The action to perform
 
-## conditionalformat
+OPTIONS:
+    -h, --help                                             Prints help          
+                                                           information          
+        --include-active-context <INCLUDEACTIVECONTEXT>    IncludeActiveContext 
+    -o, --output <PATH>                                    Write output to file 
+                                                           instead of stdout.   
+                                                           For image results,   
+                                                           decodes and saves as 
+                                                           binary file          
+```
 
-## connection
+## attachment
 
-## datamodel
+```
+DESCRIPTION:
+Attachment operations
 
-## datamodelrel
+USAGE:
+    outlookcli attachment <ACTION> [OPTIONS]
 
-## diag
+ARGUMENTS:
+    <ACTION>    The action to perform
 
-## namedrange
+OPTIONS:
+    -h, --help                                            Prints help           
+                                                          information           
+        --mail-entry-id <MAILENTRYID>                     MailEntryId           
+        --store-id <STOREID>                              StoreId               
+        --use-active-mail <USEACTIVEMAIL>                 UseActiveMail         
+        --destination-directory <DESTINATIONDIRECTORY>    (required for: save)  
+        --attachment-index <ATTACHMENTINDEX>              (required for: remove)
+        --overwrite <OVERWRITE>                           Overwrite             
+        --file-path <FILEPATH>                            (required for: add)   
+    -o, --output <PATH>                                   Write output to file  
+                                                          instead of stdout. For
+                                                          image results, decodes
+                                                          and saves as binary   
+                                                          file                  
+```
 
-## pivottable
+## calendar
 
-## pivottablecalc
+```
+DESCRIPTION:
+Calendar operations
 
-## pivottablefield
+USAGE:
+    outlookcli calendar <ACTION> [OPTIONS]
 
-## powerquery
+ARGUMENTS:
+    <ACTION>    The action to perform
 
-## range
+OPTIONS:
+    -h, --help                                             Prints help          
+                                                           information          
+        --folder <FOLDER>                                  Folder               
+        --start <START>                                    (required for:       
+                                                           create-appointment)  
+        --end-time <ENDTIME>                               (required for:       
+                                                           create-appointment)  
+        --max-count <MAXCOUNT>                             MaxCount             
+        --include-body-preview <INCLUDEBODYPREVIEW>        IncludeBodyPreview   
+        --entry-id <ENTRYID>                               EntryId              
+        --store-id <STOREID>                               StoreId              
+        --use-active-appointment <USEACTIVEAPPOINTMENT>    UseActiveAppointment 
+        --subject <SUBJECT>                                (required for:       
+                                                           create-appointment)  
+        --location <LOCATION>                              Location             
+        --body <BODY>                                      Body                 
+        --all-day <ALLDAY>                                 AllDay               
+        --display <DISPLAY>                                Display              
+    -o, --output <PATH>                                    Write output to file 
+                                                           instead of stdout.   
+                                                           For image results,   
+                                                           decodes and saves as 
+                                                           binary file          
+```
 
-## rangeedit
+## folder
 
-## rangeformat
+```
+DESCRIPTION:
+Folder operations
 
-## rangelink
+USAGE:
+    outlookcli folder <ACTION> [OPTIONS]
 
-## slicer
+ARGUMENTS:
+    <ACTION>    The action to perform
 
-## table
+OPTIONS:
+    -h, --help                                       Prints help information    
+        --include-item-counts <INCLUDEITEMCOUNTS>    IncludeItemCounts          
+        --parent-folder <PARENTFOLDER>               ParentFolder               
+        --folder <FOLDER>                            Folder                     
+        --include-item-count <INCLUDEITEMCOUNT>      IncludeItemCount           
+        --max-count <MAXCOUNT>                       MaxCount                   
+        --include-preview <INCLUDEPREVIEW>           IncludePreview             
+    -o, --output <PATH>                              Write output to file       
+                                                     instead of stdout. For     
+                                                     image results, decodes and 
+                                                     saves as binary file       
+```
 
-## tablecolumn
+## mail
 
-## vba
+```
+DESCRIPTION:
+Mail operations
 
-## slide
+USAGE:
+    outlookcli mail <ACTION> [OPTIONS]
 
-## worksheetstyle
+ARGUMENTS:
+    <ACTION>    The action to perform
+
+OPTIONS:
+    -h, --help                                         Prints help information  
+        --entry-id <ENTRYID>                           EntryId                  
+        --store-id <STOREID>                           StoreId                  
+        --use-active-mail <USEACTIVEMAIL>              UseActiveMail            
+        --folder <FOLDER>                              Folder                   
+        --max-count <MAXCOUNT>                         MaxCount                 
+        --unread-only <UNREADONLY>                     UnreadOnly               
+        --include-body-preview <INCLUDEBODYPREVIEW>    IncludeBodyPreview       
+        --query <QUERY>                                (required for: search)   
+        --recipient-to <RECIPIENTTO>                   RecipientTo              
+        --cc <CC>                                      Cc                       
+        --bcc <BCC>                                    Bcc                      
+        --subject <SUBJECT>                            (required for:           
+                                                       set-subject)             
+        --body <BODY>                                  (required for: set-body) 
+        --display <DISPLAY>                            Display                  
+        --confirm <CONFIRM>                            Confirm                  
+        --operation-id <OPERATIONID>                   OperationId              
+        --target-folder <TARGETFOLDER>                 (required for: move)     
+        --is-read <ISREAD>                             (required for:           
+                                                       set-read-state)          
+        --categories <CATEGORIES>                      Categories               
+    -o, --output <PATH>                                Write output to file     
+                                                       instead of stdout. For   
+                                                       image results, decodes   
+                                                       and saves as binary file 
+```

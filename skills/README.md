@@ -1,24 +1,34 @@
-# Outlook migration skill status
+# Outlook agent skills
 
-This skill area is still inherited from the original PowerPoint project.
+Two skill packages target the two entry points. Both describe the same 5 tools and 30 operations.
 
-Current reality:
+| Skill | Folder | Target | Best for |
+|---|---|---|---|
+| `outlook-cli` | `skills/outlook-cli/` | The `outlookcli` CLI | Coding agents; token-efficient and `--help` discoverable |
+| `outlook-mcp` | `skills/outlook-mcp/` | The MCP server | Conversational AI; rich tool schemas |
 
-- the repository target is now Outlook-first
-- new migration skill folders now exist as `outlook-mcp` and `outlook-cli`
-- inherited `ppt-*` skill folders still remain as migration leftovers
-- the active skill guidance is being moved toward Outlook workflows such as mailbox triage, draft creation, send, and attachment export
+## Single source of truth
 
-## Planned Outlook-first skill split
+`skills/shared/*.md` is authoritative. On a Release build it is:
 
-The skill surface should be rebuilt around Outlook workflows such as:
+1. copied into `skills/outlook-cli/references/` and `skills/outlook-mcp/references/`, for skill-based clients such as VS Code and Cursor
+2. code-generated into `[McpServerPrompt]` methods, so MCP-only clients such as Claude Desktop get the same guidance
 
-- mailbox triage
-- email drafting and reply
-- attachment workflows
-- calendar scheduling
-- contact inspection and updates
+Never create a separate prompt file for content that belongs in `skills/shared/`. Every file in that
+directory becomes an MCP prompt, so it must be Outlook guidance.
 
-## Transitional naming note
+`SKILL.md` in each package is **generated** from `skills/templates/*.sbn` plus the generated skill
+manifest. Do not hand-edit it; a Release build overwrites it. Edit the template instead.
 
-Until the cleanup pass lands, expect both the new `outlook-*` skill folders and inherited names such as `outlook-cli`, `outlook-mcp`, and `OutlookMcp.*` in this area.
+## Install
+
+```powershell
+npx skills add trsdn/mcp-server-outlook --skill outlook-cli   # coding agents
+npx skills add trsdn/mcp-server-outlook --skill outlook-mcp   # conversational AI
+```
+
+## Naming note
+
+Project and type names are still inherited: the solution uses `OutlookMcp.*`, and some
+infrastructure is still `Ppt*`-prefixed (see #12). The skill folders themselves are Outlook-named
+and describe only Outlook behaviour.

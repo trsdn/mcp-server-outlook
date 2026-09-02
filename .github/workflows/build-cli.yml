@@ -75,7 +75,7 @@ jobs:
           $version = (Get-Item "src/OutlookMcp.CLI/bin/Release/net9.0-windows/outlookcli.exe").VersionInfo.FileVersion
           Write-Output "Version: $version"
 
-          # Test CLI help command (safe - no PowerPoint COM required)
+          # Test CLI help command (safe - no Outlook COM required)
           $helpOutput = & "src/OutlookMcp.CLI/bin/Release/net9.0-windows/outlookcli.exe" --help 2>&1
           $exitCode = $LASTEXITCODE
 
@@ -97,10 +97,10 @@ jobs:
         Write-Output "🔧 CLI tool ready for direct automation"
       shell: pwsh
 
-    - name: Test CLI (requires PowerPoint)
+    - name: Test CLI (requires Outlook)
       run: |
-        Write-Output "ℹ️ Note: CLI tests skipped in CI - they require Microsoft PowerPoint"
-        Write-Output "   Run 'dotnet test tests/OutlookMcp.CLI.Tests/' locally with PowerPoint installed"
+        Write-Output "Note: CLI integration tests are skipped in CI - they require classic Outlook (see issue #31)"
+        Write-Output "      Run 'dotnet test tests/OutlookMcp.CLI.Tests/' locally with classic Outlook installed and running"
       shell: pwsh
 
     - name: Upload CLI build artifacts

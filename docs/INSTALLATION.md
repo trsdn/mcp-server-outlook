@@ -1,24 +1,27 @@
 # Installation Guide - OutlookMcp
 
-Complete installation instructions for the OutlookMcp MCP Server and CLI tool.
+Complete installation instructions for the OutlookMcp MCP server and `outlookcli` CLI.
 
 ## System Requirements
 
 ### Required
-- **Windows OS** (Windows 10 or later)
-- **Microsoft PowerPoint 2016 or later** (Desktop version - Office 365, Professional Plus, or Standalone)
-- **.NET 10 Runtime or SDK** (not required for VS Code Extension or MCPB - they bundle it)
 
-### Optional (for specific features)
-- **Microsoft Analysis Services OLE DB Provider (MSOLAP)** - Required for DAX query execution (`evaluate`, `execute-dmv` actions)
-  - Easiest: Install [Power BI Desktop](https://powerbi.microsoft.com/desktop) (includes MSOLAP)
-  - Alternative: [Microsoft OLE DB Driver for Analysis Services](https://learn.microsoft.com/analysis-services/client-libraries)
-- **Node.js** - Required for `npx` commands (`add-mcp` auto-configuration, agent skills) and the official source-side agent client in `src\OutlookMcp.Agent`. Install with `winget install OpenJS.NodeJS.LTS` or from [nodejs.org](https://nodejs.org/)
+- Windows 10 or later.
+- Classic Outlook for Windows desktop app installed and running.
+- .NET 10 Runtime or SDK for .NET tool installs. The VS Code extension and MCPB package are self-contained when published.
+
+OutlookMcp automates Outlook through the `Outlook.Application` COM ProgID. The new Outlook for Windows does not expose that COM object model and cannot be automated by this project. If only new Outlook is installed, `application get-status` reports `NewOutlookOnly`.
+
+### Optional
+
+- Node.js, only for `npx` helpers such as `add-mcp` or `skills` installation.
+- Visual Studio 2022 or VS Code, only for source development.
 
 ### Recommended
-- Windows 11 for best performance
-- Office 365 with latest updates
-- 8GB RAM minimum
+
+- Windows 11 with the latest Microsoft 365 Apps updates.
+- Start classic Outlook before invoking MCP or CLI commands.
+- Run OutlookMcp at the same elevation level as Outlook. Do not run one elevated and the other unelevated.
 
 ---
 
@@ -26,113 +29,107 @@ Complete installation instructions for the OutlookMcp MCP Server and CLI tool.
 
 Use this order to avoid setup confusion:
 
-1. **Choose one primary setup path**:
-   - VS Code Extension (Copilot users)
-   - Claude Desktop MCPB
-   - Manual MCP setup (all other MCP clients)
-2. **Validate MCP setup** (run the quick test prompt in Step 4 of manual setup, or test in your client after extension/MCPB install)
-3. **Optional:** install CLI (`outlookcli`) for scripting/RPA
-4. **Optional:** install agent skills for non-extension environments
+1. Choose one primary MCP setup path:
+   - VS Code extension for GitHub Copilot users.
+   - Claude Desktop MCPB package, when available from releases.
+   - Manual MCP setup for other MCP clients.
+2. Start classic Outlook for Windows.
+3. Validate with `application get-status`.
+4. Optionally install `outlookcli` for scripting.
+5. Optionally install agent skills for clients that support skills.
 
-### VS Code Extension (Easiest - One-Click Setup)
+### VS Code Extension
 
-**Best for:** GitHub Copilot users, beginners, anyone wanting automatic configuration
+**Best for:** GitHub Copilot users who want automatic MCP configuration.
 
-1. **Install the Extension**
-   - Open VS Code
-   - Press `Ctrl+Shift+X` (Extensions)
-   - Search for **"OutlookMcp"**
-   - Click **Install**
+1. Open VS Code.
+2. Press `Ctrl+Shift+X`.
+3. Search for `OutlookMcp`.
+4. Install the extension.
+5. Restart VS Code if prompted.
 
-2. **That's It!**
-   - Bundles self-contained MCP server and CLI (no .NET runtime or SDK needed)
-   - Auto-configures GitHub Copilot
-   - Registers agent skills (outlook-mcp + outlook-cli) via `chatSkills`
-   - Shows quick start guide on first launch
+The extension is expected to configure the MCP server for GitHub Copilot and include the packaged server bits. If the marketplace package has not been updated for the current release, use the manual MCP setup below.
 
-**Marketplace Link:** [PowerPoint MCP VS Code Extension](https://marketplace.visualstudio.com/items?itemName=trsdn.outlook-mcp)
+**Marketplace Link:** [Outlook MCP VS Code Extension](https://marketplace.visualstudio.com/items?itemName=trsdn.outlook-mcp)
 
 ---
 
-### Claude Desktop (One-Click Install)
+### Claude Desktop MCPB
 
-**Best for:** Claude Desktop users who want the simplest installation
+**Best for:** Claude Desktop users who want a packaged install.
 
-1. Download `outlook-mcp-{version}.mcpb` from the [latest release](https://github.com/trsdn/mcp-server-outlook/releases/latest)
-2. Double-click the `.mcpb` file (or drag-and-drop onto Claude Desktop)
-3. Restart Claude Desktop
-
-That's it! The MCPB bundle includes everything needed - no .NET installation required.
+1. Download `outlook-mcp-{version}.mcpb` from the [latest release](https://github.com/trsdn/mcp-server-outlook/releases/latest), if available.
+2. Double-click the `.mcpb` file or drag it onto Claude Desktop.
+3. Restart Claude Desktop.
+4. Start classic Outlook and validate with the prompt below.
 
 ---
 
 ## Manual MCP Setup (All MCP Clients)
 
-**Best for:** Other MCP clients (Cursor, Windsurf, Cline, Claude Code, Codex), advanced users
+**Best for:** Cursor, Windsurf, Cline, Claude Code, Codex, and advanced users.
 
 ### Step 1: Install .NET 10
 
-**Check if already installed:**
+Check if it is already installed:
+
 ```powershell
 dotnet --version
-# Should show 10.0.x or higher
 ```
 
-**If not installed:**
+Install the runtime if needed:
 
 ```powershell
 winget install Microsoft.DotNet.Runtime.10
 ```
 
-**Manual Download:** [.NET 10 Downloads](https://dotnet.microsoft.com/download/dotnet/10.0)
+Manual download: [.NET 10 Downloads](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ### Step 2: Install OutlookMcp MCP Server
 
 ```powershell
-# Install MCP Server tool (command: mcp-outlook)
 dotnet tool install --global OutlookMcp.McpServer
-
-# Verify installation
 dotnet tool list --global | Select-String "OutlookMcp"
 ```
 
-> **Optional:** If you also want the standalone CLI command (`outlookcli`) for scripting/RPA, install it separately:
-> ```powershell
-> dotnet tool install --global OutlookMcp.CLI
-> ```
+Optional CLI install:
+
+```powershell
+dotnet tool install --global OutlookMcp.CLI
+outlookcli --version
+```
+
+If you install both tools, keep them on the same version.
 
 ### Step 3: Configure Your MCP Client
 
-#### Option A: Auto-Configure All Agents (Recommended)
+#### Option A: Auto-Configure All Agents
 
-Use [`add-mcp`](https://github.com/neondatabase/add-mcp) to configure all detected coding agents with a single command:
+Use `add-mcp` to configure detected clients:
 
 ```powershell
 npx add-mcp "mcp-outlook" --name outlook-mcp
 ```
 
-This auto-detects and configures **Cursor, VS Code, Claude Code, Claude Desktop, Codex, Zed, Gemini CLI**, and more. Use flags to customize:
+Examples:
 
 ```powershell
-# Configure specific agents only
 npx add-mcp "mcp-outlook" --name outlook-mcp -a cursor -a claude-code
-
-# Configure globally (user-wide, all projects)
 npx add-mcp "mcp-outlook" --name outlook-mcp -g
-
-# Non-interactive (skip prompts)
 npx add-mcp "mcp-outlook" --name outlook-mcp --all -y
 ```
 
-> **Requires:** [Node.js](https://nodejs.org/) for `npx`. Install with `winget install OpenJS.NodeJS.LTS` if not already available. No permanent `add-mcp` installation needed — `npx` downloads, runs, and cleans up automatically.
+Requires Node.js for `npx`:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+```
 
 #### Option B: Manual Configuration
 
-**Quick Start:** Ready-to-use config files for all clients are available in [`examples/mcp-configs/`](https://github.com/trsdn/mcp-server-outlook/tree/master/examples/mcp-configs/)
+Ready-to-use config files are in [`examples/mcp-configs/`](https://github.com/trsdn/mcp-server-outlook/tree/master/examples/mcp-configs/).
 
-**For GitHub Copilot (VS Code):**
-
-Create `.vscode/mcp.json` in your workspace:
+**For GitHub Copilot in VS Code**, create `.vscode\mcp.json`:
 
 ```json
 {
@@ -144,9 +141,7 @@ Create `.vscode/mcp.json` in your workspace:
 }
 ```
 
-**For GitHub Copilot (Visual Studio):**
-
-Create `.mcp.json` in your solution directory or `%USERPROFILE%\.mcp.json`:
+**For GitHub Copilot in Visual Studio**, create `.mcp.json` in your solution directory or `%USERPROFILE%\.mcp.json`:
 
 ```json
 {
@@ -158,11 +153,7 @@ Create `.mcp.json` in your solution directory or `%USERPROFILE%\.mcp.json`:
 }
 ```
 
-**For Claude Desktop:**
-
-1. Locate config file: `%APPDATA%\Claude\claude_desktop_config.json`
-2. If file doesn't exist, create it with the content below
-3. If file exists, merge the `outlook-mcp` entry into your existing `mcpServers` section
+**For Claude Desktop**, merge this into `%APPDATA%\Claude\claude_desktop_config.json`:
 
 ```json
 {
@@ -176,175 +167,64 @@ Create `.mcp.json` in your solution directory or `%USERPROFILE%\.mcp.json`:
 }
 ```
 
-4. Save and restart Claude Desktop
-
-**For Cursor:**
-
-1. Open Cursor Settings (Ctrl+,)
-2. Search for "MCP" in settings
-3. Click "Edit in settings.json" or create config at: `%APPDATA%\Cursor\User\globalStorage\mcp\mcp.json`
-4. Add this configuration:
-
-```json
-{
-  "mcpServers": {
-    "outlook-mcp": {
-      "command": "mcp-outlook",
-      "args": [],
-      "env": {}
-    }
-  }
-}
-```
-
-5. Save and restart Cursor
-
-**For Cline (VS Code Extension):**
-
-1. Install Cline extension in VS Code
-2. Open Cline panel and click the MCP settings gear icon
-3. Add this configuration:
-
-```json
-{
-  "mcpServers": {
-    "outlook-mcp": {
-      "command": "mcp-outlook",
-      "args": [],
-      "env": {}
-    }
-  }
-}
-```
-
-4. Save and restart VS Code
-
-**For Windsurf:**
-
-1. Open Windsurf Settings
-2. Navigate to MCP Servers configuration  
-3. Add this configuration:
-
-```json
-{
-  "mcpServers": {
-    "outlook-mcp": {
-      "command": "mcp-outlook",
-      "args": [],
-      "env": {}
-    }
-  }
-}
-```
-
-4. Save and restart Windsurf
+**For Cursor, Cline, or Windsurf**, add the same `outlook-mcp` server entry to that client's MCP configuration file.
 
 ### Step 4: Validate MCP Setup
 
-Restart your MCP client, then ask:
-```
-Create an empty PowerPoint file called "test.pptx"
-```
+Start classic Outlook, restart your MCP client, then ask:
 
-If it works, you're all set! 🎉
-
-**💡 Tip:** Want to watch the AI work? Ask:
-```
-Show me PowerPoint while you work on test.pptx
-```
-This opens PowerPoint visibly so you can see every change in real-time - great for debugging and demos!
-
----
-
-## Optional: Official Agent Client (From Source)
-
-**Best for:** Multi-phase deck generation and repair loops driven from one natural-language task
-
-`src\OutlookMcp.Agent` is an official source component that plans a deck, executes it through standard MCP calls, verifies the result, and performs a repair pass when artifact validation fails.
-
-### Build and Run
-
-```powershell
-dotnet build src\OutlookMcp.McpServer\OutlookMcp.McpServer.csproj -c Release
-
-Set-Location src\OutlookMcp.Agent
-npm install
-npm run check
-npm test
-
-node .\src\cli.mjs run `
-  --task "Build a 5-slide executive deck on Q4 revenue performance and next actions." `
-  --output "C:\Users\you\Documents\q4-revenue-deck.pptx"
+```text
+Use OutlookMcp to get Outlook application status.
 ```
 
-### Notes
-
-- The agent is source-based today; it is not a separate released desktop product.
-- By default it looks for the MCP server at `src\OutlookMcp.McpServer\bin\Release\net9.0-windows\OutlookMcp.McpServer.exe`.
-- Override the server path with `--mcp-server`, `OUTLOOK_MCP_AGENT_MCP_SERVER`, `OUTLOOK_MCP_SERVER_COMMAND`, or `outlook_mcp_SERVER_COMMAND`.
-
-More detail:
-
-- [Agent Client README](../src/OutlookMcp.Agent/README.md)
-- [Agent Client Architecture](AGENT-CLIENT.md)
+Expected result: the `application` tool with `get-status` reports classic Outlook availability. If it reports `NewOutlookOnly`, switch to or install classic Outlook for Windows.
 
 ---
 
 ## Optional: CLI Installation (No AI Required)
 
-**Best for:** Scripting, RPA, CI/CD pipelines, automation without AI
-
-### Install CLI
+**Best for:** Scripting, RPA, and direct automation.
 
 ```powershell
-# Install CLI as a separate .NET tool
 dotnet tool install --global OutlookMcp.CLI
-
-# Verify CLI is available
 outlookcli --version
 ```
 
-> **⚠️ Version Sync:** If you install both MCP Server and CLI, keep both packages on the same version.
-
-### Quick Test
+### Quick Tests
 
 ```powershell
-# Session-based workflow (keeps PowerPoint open between commands)
-outlookcli -q session open test.pptx                   # Returns session ID
-outlookcli -q slide list --session <session-id>        # List slides
-outlookcli -q session close --session <session-id> --save
+outlookcli application get-status
+outlookcli folder list-default
+outlookcli mail list --folder Inbox --max-count 10 --include-body-preview
 ```
 
-> **💡 Tip:** Use `-q` (quiet mode) to suppress banner and get JSON output only - perfect for scripting and automation.
+The current Outlook command surface is sessionless. Mail, calendar, folder, attachment, and application commands run against the user's already-running classic Outlook desktop app.
 
-**CLI Documentation:** [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.CLI/README.md)
+Use `--quiet` or `-q` to suppress the banner for scripting:
+
+```powershell
+outlookcli -q mail list --folder Inbox --max-count 5
+```
+
+CLI documentation: [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.CLI/README.md)
 
 ---
 
-## Agent Skills Installation (Cross-Platform)
+## Agent Skills Installation
 
-**Best for:** Adding AI guidance to coding agents (Copilot, Cursor, Windsurf, Claude Code, Gemini, Codex, etc.)
+**Best for:** Adding tool-specific guidance to coding agents that support skills.
 
-Skills are auto-installed by the VS Code extension. For other platforms:
+Skills are installed by the VS Code extension when that package is current. For other clients:
 
 ```powershell
-# CLI skill (for coding agents - token-efficient workflows)
 npx skills add trsdn/mcp-server-outlook --skill outlook-cli
-
-# MCP skill (for conversational AI - rich tool schemas)
 npx skills add trsdn/mcp-server-outlook --skill outlook-mcp
-
-# Install for specific agents
 npx skills add trsdn/mcp-server-outlook --skill outlook-cli -a cursor
 npx skills add trsdn/mcp-server-outlook --skill outlook-mcp -a claude-code
-
-# Install globally (user-wide)
 npx skills add trsdn/mcp-server-outlook --skill outlook-cli --global
 ```
 
-**Supports 43+ agents** including claude-code, github-copilot, cursor, windsurf, gemini-cli, codex, goose, cline, continue, replit, and more.
-
-**📚 [Agent Skills Guide →](../skills/README.md)**
+See [Agent Skills Guide](../skills/README.md).
 
 ---
 
@@ -352,88 +232,47 @@ npx skills add trsdn/mcp-server-outlook --skill outlook-cli --global
 
 ### Check Installed Version
 
-**MCP Server and CLI:**
 ```powershell
 dotnet tool list --global | Select-String "OutlookMcp"
-
-# Or check CLI version
 outlookcli --version
+mcp-outlook --version
 ```
 
 ### Update Installed Tools
 
-> **⚠️ If both are installed:** update MCP Server and CLI together so versions stay in sync.
-
-**Step 1: Update both tools**
 ```powershell
 dotnet tool update --global OutlookMcp.McpServer
 dotnet tool update --global OutlookMcp.CLI
 ```
 
-**Step 2: Verify update**
-```powershell
-# Check installed version
-dotnet tool list --global | Select-String "OutlookMcp"
-
-# Verify both tools work
-outlookcli --version
-mcp-outlook --version
-```
-
-**Step 3: Restart your MCP client**
-- Restart VS Code, Claude Desktop, Cursor, or whichever client you're using
-- The new version will be used automatically
+Restart your MCP client after updating the MCP server.
 
 ### Troubleshooting Updates
 
 #### Update Command Fails
 
-**Error: "Tool not found"**
 ```powershell
-# The tool may need to be reinstalled
 dotnet tool uninstall --global OutlookMcp.McpServer
 dotnet tool install --global OutlookMcp.McpServer
-```
-
-**Error: "Access denied"**
-- Run PowerShell as Administrator
-- Or install in user directory (not global):
-```powershell
-dotnet tool update --global OutlookMcp.McpServer --install-dir ~/.dotnet/tools
 ```
 
 #### MCP Server Still Running Old Version
 
-**Solution:** Fully restart your MCP client
-- Close VS Code completely (including terminal windows)
-- Close Claude Desktop completely
-- Reopen the application
-
-**Still not working?**
-```powershell
-# Reinstall the tool
-dotnet tool uninstall --global OutlookMcp.McpServer
-dotnet tool install --global OutlookMcp.McpServer
-```
+Close and reopen the MCP client. Some clients keep server processes alive until the host application exits.
 
 ### Rollback to Previous Version
 
-If an update causes issues, you can downgrade:
-
 ```powershell
-# Uninstall current version
 dotnet tool uninstall --global OutlookMcp.McpServer
-
-# Install specific version
 dotnet tool install --global OutlookMcp.McpServer --version 1.2.3
-# Replace 1.2.3 with the version you want
 ```
 
-### Check What's New
+Replace `1.2.3` with the version you need.
 
-Before updating, check the release notes:
-- **GitHub Releases:** https://github.com/trsdn/mcp-server-outlook/releases
-- **Changelog:** https://github.com/trsdn/mcp-server-outlook/blob/master/CHANGELOG.md
+### Check What Changed
+
+- GitHub Releases: <https://github.com/trsdn/mcp-server-outlook/releases>
+- Changelog: <https://github.com/trsdn/mcp-server-outlook/blob/master/CHANGELOG.md>
 
 ---
 
@@ -441,37 +280,46 @@ Before updating, check the release notes:
 
 ### Common Issues
 
-#### 1. "dotnet command not found"
+#### 1. `dotnet` command not found
 
-**Solution:** Install .NET 10 SDK or Runtime (see Step 1 above)
+Install .NET 10 Runtime or SDK.
 
 #### 2. MCP Server Not Responding
 
-**Check if tool is installed:**
 ```powershell
 dotnet tool list --global | Select-String "OutlookMcp"
-```
-
-**Reinstall if missing:**
-```powershell
 dotnet tool uninstall --global OutlookMcp.McpServer
 dotnet tool install --global OutlookMcp.McpServer
 ```
 
-#### 3. "Presentation is locked" or "Cannot open file"
+Then restart the MCP client.
 
-**Solution:** Close all PowerPoint windows before running OutlookMcp
+#### 3. Classic Outlook Not Running
 
-OutlookMcp requires exclusive access to presentations (PowerPoint COM limitation).
+Start classic Outlook for Windows, sign in, let it finish loading, and retry.
+
+#### 4. New Outlook Only
+
+New Outlook for Windows has no COM object model. Install or switch to classic Outlook for Windows.
+
+#### 5. Elevation Mismatch
+
+If Outlook runs normally but the server or CLI runs as Administrator, COM may not find the running Outlook instance. Run both at the same elevation level.
+
+#### 6. Entry ID Not Found After Moving an Item
+
+Outlook entry IDs can change when an item moves between stores. Re-run list, search, or read-active and use the new entry ID.
 
 ## Uninstallation
 
 ### Uninstall MCP Server
+
 ```powershell
 dotnet tool uninstall --global OutlookMcp.McpServer
 ```
 
 ### Uninstall CLI
+
 ```powershell
 dotnet tool uninstall --global OutlookMcp.CLI
 ```
@@ -480,9 +328,9 @@ dotnet tool uninstall --global OutlookMcp.CLI
 
 ## Getting Help
 
-- **Documentation:** [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
-- **Issues:** [GitHub Issues](https://github.com/trsdn/mcp-server-outlook/issues)
-- **Contributing:** [Contributing Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/docs/CONTRIBUTING.md)
+- Documentation: [GitHub Repository](https://github.com/trsdn/mcp-server-outlook)
+- Issues: [GitHub Issues](https://github.com/trsdn/mcp-server-outlook/issues)
+- Contributing: [Contributing Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/docs/CONTRIBUTING.md)
 
 ---
 
@@ -490,67 +338,12 @@ dotnet tool uninstall --global OutlookMcp.CLI
 
 After installation:
 
-1. **Learn the basics:** Try simple commands like creating slides, setting values
-2. **Explore features:** See [README](https://github.com/trsdn/mcp-server-outlook#readme) for complete feature list
-3. **Read the guides:**
-   - [MCP Server Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.McpServer/README.md)
-   - [CLI Guide](https://github.com/trsdn/mcp-server-outlook/blob/master/src/OutlookMcp.CLI/README.md)
-   - [Agent Skills](https://github.com/trsdn/mcp-server-outlook/blob/master/skills/outlook-mcp/SKILL.md) - Cross-platform AI guidance
-4. **Join the community:** Star the repo, report issues, contribute improvements
+1. Validate status with `application get-status`.
+2. Explore folders with `folder list-default`.
+3. Read mail using `mail list`, `mail search`, and `mail read-active`.
+4. Use entry IDs from list, search, or read-active results for follow-up operations.
+5. Remember that OutlookMcp acts on the real Outlook mailbox in the shared desktop app.
 
 ---
 
-## Agent Skills (Optional)
-
-Agent Skills provide domain-specific guidance to AI coding assistants, helping them use PowerPoint MCP Server more effectively.
-
-> **Note:** Agent Skills are for **coding agents** (GitHub Copilot, Claude Code, Cursor). **Claude Desktop** uses MCP Prompts instead (included automatically via the MCP Server).
-
-### Two Skills for Different Use Cases
-
-| Skill | Target | Best For |
-|-------|--------|----------|
-| **outlook-cli** | CLI Tool | **Coding agents** (Copilot, Cursor, Windsurf) - token-efficient, `outlookcli --help` discoverable |
-| **outlook-mcp** | MCP Server | **Conversational AI** (Claude Desktop, VS Code Chat) - rich tool schemas, exploratory workflows |
-
-**VS Code Extension:** Skills are installed automatically to `~/.copilot/skills/`.
-
-**Other Platforms (Claude Code, Cursor, Windsurf, Gemini, Codex, etc.):**
-
-```powershell
-# Install CLI skill (recommended for coding agents - Copilot, Cursor, Windsurf, Codex, etc.)
-npx skills add trsdn/mcp-server-outlook --skill outlook-cli
-
-# Install MCP skill (for conversational AI - Claude Desktop, VS Code Chat)
-npx skills add trsdn/mcp-server-outlook --skill outlook-mcp
-
-# Interactive install - prompts to select outlook-cli, outlook-mcp, or both
-npx skills add trsdn/mcp-server-outlook
-
-# Install specific skill directly
-npx skills add trsdn/mcp-server-outlook --skill outlook-cli   # Coding agents
-npx skills add trsdn/mcp-server-outlook --skill outlook-mcp   # Conversational AI
-
-# Install both skills
-npx skills add trsdn/mcp-server-outlook --skill '*'
-
-# Target specific agent (optional - auto-detects if omitted)
-npx skills add trsdn/mcp-server-outlook --skill outlook-cli -a cursor
-npx skills add trsdn/mcp-server-outlook --skill outlook-mcp -a claude-code
-```
-
-**Manual Installation:**
-1. Download `outlook-skills-v{version}.zip` from [GitHub Releases](https://github.com/trsdn/mcp-server-outlook/releases/latest)
-2. The package contains both skills:
-   - `skills/outlook-cli/` - for coding agents (Copilot, Cursor, Windsurf)
-   - `skills/outlook-mcp/` - for conversational AI (Claude Desktop, VS Code Chat)
-3. Extract the skill(s) you need to your AI assistant's skills directory:
-   - Copilot: `~/.copilot/skills/outlook-cli/` or `~/.copilot/skills/outlook-mcp/`
-   - Claude Code: `.claude/skills/outlook-cli/` or `.claude/skills/outlook-mcp/`
-   - Cursor: `.cursor/skills/outlook-cli/` or `.cursor/skills/outlook-mcp/`
-
-**See:** [Agent Skills Documentation](https://github.com/trsdn/mcp-server-outlook/blob/master/skills/README.md)
-
----
-
-**Happy automating! 🚀**
+Happy automating!

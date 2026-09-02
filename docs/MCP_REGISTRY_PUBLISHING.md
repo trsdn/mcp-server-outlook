@@ -20,8 +20,8 @@ This is the MCP registry metadata file that describes the server:
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.trsdn/mcp-server-outlook",
-  "title": "PowerPoint COM Automation",
-  "description": "PowerPoint COM automation - Slides, shapes, text, charts, tables, animations, transitions, VBA",
+  "title": "Outlook COM Automation",
+  "description": "Outlook COM automation - mail, calendar, folders, attachments",
   "version": "1.0.0",
   "packages": [
     {
@@ -73,7 +73,7 @@ When a tag like `mcp-v1.0.10` is pushed, the workflow:
 ### 2. Build and Test
 - Restores dependencies
 - Builds the MCP server in Release configuration
-- Skips tests (they require PowerPoint)
+- Skips tests (integration tests require classic Outlook)
 
 ### 3. NuGet Publishing
 - Packs the NuGet package

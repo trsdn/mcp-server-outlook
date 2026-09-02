@@ -1,69 +1,66 @@
-# Outlook CLI migration surface
+# OutlookMcp.CLI
 
-This CLI area is the current command-line migration surface for `mcp-server-outlook`.
+The `outlookcli` command-line surface for Outlook automation.
 
-Current reality:
+The CLI and the MCP server are **both first-class entry points**. They are source-generated from the
+same `[ServiceCategory]` interfaces in `OutlookMcp.Core`, so they expose identical actions,
+parameters, defaults, and validation.
 
-- the repo target is now Outlook-first
-- the generated command surface includes a working Outlook seed for application, folder, mail, and attachment workflows
-- the single-entry CLI pattern remains useful for coding agents while the broader Outlook taxonomy is still being expanded
+## Surface
 
-## Implemented Outlook seed
+5 tools, 30 actions:
 
-The generated CLI/MCP command model now includes these first Outlook categories:
+| Tool | Actions |
+|---|---|
+| `mail` | `read-active`, `read`, `list`, `search`, `create-draft`, `reply`, `reply-all`, `forward`, `send`, `move`, `delete`, `set-read-state`, `set-categories`, `set-subject`, `set-body`, `set-recipients` |
+| `calendar` | `list`, `read`, `create-appointment`, `update-appointment`, `delete-appointment` |
+| `folder` | `list-default`, `list-children`, `resolve-path`, `list-items` |
+| `attachment` | `list`, `save`, `add`, `remove` |
+| `application` | `get-status` |
 
-- `application`
-- `attachment`
-- `calendar`
-- `folder`
-- `mail`
+See [FEATURES.md](../../FEATURES.md) for descriptions.
 
-Current seed actions:
+## Usage
 
-- `application.get-status`
-- `attachment.list`
-- `attachment.add`
-- `attachment.remove`
-- `attachment.save`
-- `calendar.list`
-- `calendar.read`
-- `calendar.create-appointment`
-- `calendar.update-appointment`
-- `calendar.delete-appointment`
-- `folder.list-default`
-- `folder.list-children`
-- `mail.read-active`
-- `mail.read`
-- `mail.list`
-- `mail.search`
-- `mail.create-draft`
-- `mail.reply`
-- `mail.reply-all`
-- `mail.forward`
-- `mail.send`
-- `mail.move`
-- `mail.delete`
-- `mail.set-read-state`
-- `mail.set-categories`
+```powershell
+outlookcli application get-status
+outlookcli folder list-default
+outlookcli mail list --folder Inbox
+```
 
-## Intended Outlook-first CLI workflow
+Everything is discoverable through `--help`:
 
-The Outlook CLI should evolve toward flows such as:
+```powershell
+outlookcli --help
+outlookcli mail --help
+outlookcli mail search --help
+```
 
-- connect to Outlook / establish working context
-- list folders or set current folder
-- inspect and export attachments
-- list, search, and inspect mail items
-- create or edit drafts
-- reply, reply-all, forward, send
-- manage attachments
-- create and inspect appointments
-- inspect and update contacts
+This makes the CLI the better surface for coding agents: it is token-efficient and self-describing,
+where the MCP server pays for richer schemas up front.
 
-## What is still transitional right now
+## Requirements
 
-- inherited `outlookcli` naming in some areas
-- PowerPoint examples in help and docs
-- generator output based on PowerPoint interfaces
+- Windows
+- The **classic Outlook for Windows desktop app**, installed and running. Run
+  `outlookcli application get-status` first; if it reports `NewOutlookOnly`, the new Outlook for
+  Windows is the only client present and cannot be automated.
 
-Those are migration leftovers around the CLI shell, not the intended Outlook product shape.
+## Exit codes
+
+- `0` - the command ran
+- non-zero - the arguments could not be parsed
+
+**Known defect (#63):** an Outlook operation that fails still exits `0`. Do not branch on the exit
+code. Parse the JSON and check the `success` field instead:
+
+```powershell
+$r = outlookcli folder list-default | ConvertFrom-Json
+if (-not $r.success) { throw $r.errorMessage }
+```
+
+## Naming note
+
+Project and assembly names are still inherited (`OutlookMcp.*`), and some shared infrastructure is
+still `Ppt*`-prefixed. That naming debt is tracked as #12. It is transitional, not the intended
+long-term branding.

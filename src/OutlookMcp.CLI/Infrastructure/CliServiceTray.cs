@@ -317,10 +317,10 @@ internal sealed class CliServiceTray : IDisposable
 
         var descLabel = new Label
         {
-            Text = "Outlook migration automation with legacy presentation-session support.",
+            Text = "Outlook automation service.",
             AutoSize = true,
             Location = new Point(70, 75),
-            AccessibleName = "Outlook migration automation with legacy presentation-session support",
+            AccessibleName = "Outlook automation service",
             AccessibleRole = AccessibleRole.StaticText
         };
 

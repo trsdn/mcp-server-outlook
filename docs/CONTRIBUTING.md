@@ -1,184 +1,182 @@
 # Contributing to OutlookMcp
 
-Thank you for your interest in contributing to OutlookMcp! This project is designed to be extended by the community, especially to support coding agents like GitHub Copilot.
+Thank you for your interest in contributing to OutlookMcp. The project is now focused on automating the classic Outlook for Windows desktop app through COM for MCP clients and the `outlookcli` CLI.
 
-## 🎯 Project Vision
+## Project Vision
 
-OutlookMcp aims to be the go-to command-line tool for coding agents to interact with Microsoft PowerPoint files. We prioritize:
+OutlookMcp aims to provide a small, reliable Outlook automation surface for AI assistants and scripts:
 
-- **Simplicity** - Clear, predictable commands
-- **Reliability** - Robust COM automation
-- **Extensibility** - Easy to add new features
-- **Agent-Friendly** - Designed for AI coding assistants
+- Mail operations.
+- Calendar appointment operations.
+- Folder discovery and item listing.
+- Attachment inspection and mutation.
+- Outlook application status checks.
 
-## 🚀 Getting Started
+The active product surface is 5 tools with 30 operations. Deleted presentation command domains are not part of the current product.
+
+## Getting Started
 
 ### Development Environment
 
-1. **Prerequisites**:
-   - Windows OS (required for PowerPoint COM)
-   - Visual Studio 2022 or VS Code
-   - .NET 10 SDK
-   - Microsoft PowerPoint installed
+1. Prerequisites:
+   - Windows OS.
+   - .NET 10 SDK.
+   - Visual Studio 2022 or VS Code.
+   - Classic Outlook for Windows desktop app for manual Outlook testing.
 
-2. **Setup**:
-   ```powershell
-   git clone https://github.com/trsdn/mcp-server-outlook.git
-   cd OutlookMcp
-   dotnet restore
-   dotnet build
-   ```
+2. Setup:
 
-## 🚨 **CRITICAL: Pull Request Workflow Required**
+```powershell
+git clone https://github.com/trsdn/mcp-server-outlook.git
+Set-Location mcp-server-outlook
+dotnet restore
+dotnet build --nologo -v q
+```
 
-**All changes must be made through Pull Requests (PRs).** Direct commits to `main` are prohibited.
+3. Test your setup:
+
+```powershell
+.\src\OutlookMcp.CLI\bin\Debug\net10.0-windows\outlookcli.exe application get-status
+```
+
+Classic Outlook must be installed, running, signed in, and at the same elevation level as the CLI process.
+
+## CRITICAL: Pull Request Workflow Required
+
+All changes must be made through pull requests. Direct commits to `main` are prohibited.
 
 ### Quick PR Process
 
-1. **Create feature branch**: `git checkout -b feature/your-feature`
-2. **Make changes**: Code, tests, documentation
-3. **Push branch**: `git push origin feature/your-feature`
-4. **Create PR**: Use GitHub's PR template
-5. **Address review**: Make requested changes
-6. **Merge**: After approval and CI checks pass
+1. Create feature branch: `git checkout -b feature/your-feature`.
+2. Make changes: code, tests, and documentation.
+3. Push branch: `git push origin feature/your-feature`.
+4. Create PR using GitHub's PR template.
+5. Address review.
+6. Merge after approval and required checks pass.
 
-📋 **Detailed workflow**: See [DEVELOPMENT.md](DEVELOPMENT.md) for complete instructions.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for complete instructions.
 
-3. **Test Your Setup**:
-   ```powershell
-   dotnet run -- pq-list "path/to/test.pptx"
-   ```
-
-## 📋 Development Guidelines
+## Development Guidelines
 
 ### Code Style
 
-- **C# 12** features encouraged (file-scoped namespaces, records, pattern matching)
-- **Nullable reference types** enabled - handle nulls properly
-- **No warnings** - project must build with zero warnings
-- **XML documentation** for public APIs
-- **Consistent naming** - follow established patterns
+- Use modern C# patterns already present in the codebase.
+- Nullable reference types are enabled. Handle nulls explicitly.
+- Build with zero warnings.
+- Use XML documentation for public APIs and tool-facing behavior.
+- Keep MCP and CLI behavior in sync.
+- Do not include private mailbox data, secrets, or customer identifiers in code, tests, commits, issues, or PRs.
 
 ### Architecture Patterns
 
-#### Command Pattern
-All commands follow this structure:
+#### Active Outlook Command Pattern
+
+Active commands live under `src\OutlookMcp.Core\Commands\` and are exposed through interfaces marked with `[ServiceCategory]` and methods marked with `[ServiceAction]`.
+
+Current categories:
+
+- `mail`
+- `calendar`
+- `folder`
+- `attachment`
+- `application`
+
+Example pattern:
 
 ```csharp
-// Interface
-public interface IMyCommands
+[ServiceCategory("application")]
+[NoSession]
+public interface IApplicationCommands
 {
-    int MyOperation(string[] args);
-}
-
-// Implementation  
-public class MyCommands : IMyCommands
-{
-    public int MyOperation(string[] args)
-    {
-        // Validation
-        if (!ValidateArgs(args, expectedCount, "usage string"))
-            return 1;
-            
-        // PowerPoint automation using batch API
-        var task = Task.Run(async () =>
-        {
-            await using var batch = await PptSession.BeginBatchAsync(filePath);
-            return batch.Execute((ctx, ct) =>
-            {
-                // Use ctx.Presentation for presentation access
-                // Your implementation
-                return 0; // Success
-            });
-        });
-        return task.GetAwaiter().GetResult();
-    }
+    [ServiceAction("get-status")]
+    OutlookApplicationStatusResult GetStatus(bool includeActiveContext = true);
 }
 ```
 
-#### Critical Rules
+The generators use these interfaces to keep MCP tools and CLI commands aligned.
 
-1. **Always use batch API** - Never manage PowerPoint lifecycle manually
-2. **PowerPoint uses 1-based indexing** - `collection.Item(1)` is the first element
-3. **Use `QueryTables.Add()` not `ListObjects.Add()`** - For loading Power Query data
-4. **Escape user input** - Always use `.EscapeMarkup()` with Spectre.Console
-5. **Return 0 for success, 1+ for errors** - Consistent exit codes
+#### Outlook COM Execution
 
-### PowerPoint COM Best Practices
+Outlook automation goes through `OutlookDispatcher` on a dedicated STA thread. See [ADR-002](ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md).
 
-- **Late binding with dynamic types** - Use `Type.GetTypeFromProgID("PowerPoint.Application")`
-- **Proper error handling** - Catch `COMException` and provide helpful messages
-- **Resource cleanup** - Batch API handles COM object lifecycle automatically
-- **Input validation** - Check file existence and argument counts early
+Key rules:
+
+1. Use classic Outlook through `Outlook.Application`.
+2. Do not add support claims for new Outlook; it has no COM object model.
+3. Treat Outlook as a shared desktop application and real mailbox.
+4. Use entry IDs from list, search, or read-active results for follow-up operations.
+5. Re-resolve entry IDs after moves between stores.
+6. Respect Outlook Object Model Guard prompts. Do not bypass them.
+
+#### Dormant Legacy Session Layer
+
+`src\OutlookMcp.ComInterop\Session\` still contains retained `Ppt*` infrastructure. It is dormant for the active Outlook command surface. Do not remove or rename it as part of ordinary Outlook feature work unless the naming-debt issue explicitly calls for that.
 
 ### Testing
 
 Before submitting:
 
-1. **Manual testing** with various PowerPoint files
-2. **Verify PowerPoint process cleanup** - No `powerpnt.exe` should remain after 5 seconds
-3. **Test error conditions** - Missing files, invalid arguments, etc.
-4. **VBA script testing** - For script-related commands, test with real VBA macros
-5. **Cross-version compatibility** - Test with different PowerPoint versions if possible
+1. Run `dotnet build --nologo -v q`.
+2. Run targeted tests for the changed area.
+3. If changing generated service actions, run `CoreCommandsCoverageTests`.
+4. If changing Outlook behavior, manually test on Windows with classic Outlook running and document the result.
+5. If you cannot run Outlook behavior tests, state that gap plainly.
 
-## 🔧 Adding New Commands
+Useful commands:
 
-### 1. Create Interface
-
-```csharp
-// Commands/INewCommands.cs
-namespace OutlookMcp.Commands;
-
-public interface INewCommands
-{
-    int NewOperation(string[] args);
-}
+```powershell
+dotnet build --nologo -v q
+dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
+dotnet test tests\OutlookMcp.CLI.Tests
+dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
 ```
 
-### 2. Implement Command Class
+Hosted CI does not currently verify Outlook behavior because a self-hosted Windows runner with classic Outlook is not available.
+
+## Adding New Commands
+
+### 1. Update or Add a Core Interface
+
+Add the operation to the appropriate `[ServiceCategory]` interface, or add a new category only when the product surface requires a new tool.
 
 ```csharp
-// Commands/NewCommands.cs
-using Spectre.Console;
-
-namespace OutlookMcp.Commands;
-
-public class NewCommands : INewCommands
-{
-    public int NewOperation(string[] args)
-    {
-        // Implementation following established patterns
-    }
-}
+[ServiceAction("new-action")]
+SomeResult NewAction(string requiredValue, bool optionalFlag = false);
 ```
 
-### 3. Register in Program.cs
+### 2. Implement the Command
 
-Add to the switch expression in `Main()`:
+Implement the behavior in the matching Core command class. Use existing Outlook interop helpers and return result objects with accurate success and error state.
 
-```csharp
-return args[0] switch
-{
-    "new-operation" => newCommands.NewOperation(args),
-    // ... existing commands
-    _ => ShowHelp()
-};
+### 3. Rebuild Generated Code
+
+```powershell
+dotnet build --nologo -v q
 ```
 
-### 4. Update Help Text
+### 4. Verify MCP and CLI Parity
 
-Add your command to the help output in `ShowHelp()`.
+```powershell
+dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCommandsCoverageTests"
+outlookcli mail --help
+```
 
-## 📝 Pull Request Process
+Use the relevant command instead of `mail` for other categories.
+
+### 5. Update Documentation and Skills
+
+Update user-facing docs, skills, and examples if the public command surface changes.
+
+## Pull Request Process
 
 ### Before Submitting
 
-- [ ] Code builds with zero warnings
-- [ ] All existing commands still work
-- [ ] PowerPoint processes clean up properly
-- [ ] Added appropriate error handling
-- [ ] Updated help text if needed
-- [ ] Tested with various PowerPoint files
+- [ ] Code builds with zero warnings.
+- [ ] Targeted tests pass.
+- [ ] MCP and CLI entry points remain in sync.
+- [ ] Outlook behavior was manually tested when applicable, or the gap is stated.
+- [ ] Documentation was updated as needed.
+- [ ] No private mailbox data, secrets, or customer identifiers are included.
 
 ### PR Description Template
 
@@ -193,87 +191,78 @@ Brief description of changes
 - [ ] Documentation update
 
 ## Testing
-- [ ] Tested manually with PowerPoint files
-- [ ] Verified PowerPoint process cleanup
-- [ ] Tested error conditions
-- [ ] VBA script execution tested (if applicable)
-- [ ] No build warnings
+- [ ] dotnet build --nologo -v q
+- [ ] Targeted tests listed here
+- [ ] Manual Outlook test listed here, or reason it was not run
 
 ## Checklist
-- [ ] Code follows project conventions
-- [ ] Self-review completed
-- [ ] Updated documentation as needed
+- [ ] MCP and CLI parity preserved
+- [ ] Documentation updated
+- [ ] No sensitive data included
 ```
 
-## 🎨 UI Guidelines
+## UI Guidelines
 
 ### Spectre.Console Usage
 
 ```csharp
-// Success (green checkmark)
-AnsiConsole.MarkupLine($"[green]✓[/] Operation succeeded");
-
-// Error (red)  
+AnsiConsole.MarkupLine($"[green]Success:[/] Operation succeeded");
 AnsiConsole.MarkupLine($"[red]Error:[/] {message.EscapeMarkup()}");
-
-// Warning (yellow)
-AnsiConsole.MarkupLine($"[yellow]Note:[/] {message}");
-
-// Info/debug (dim)
-AnsiConsole.MarkupLine($"[dim]{message}[/]");
-
-// Headers (cyan)
-AnsiConsole.MarkupLine($"[cyan]{title}[/]");
+AnsiConsole.MarkupLine($"[yellow]Note:[/] {message.EscapeMarkup()}");
+AnsiConsole.MarkupLine($"[dim]{message.EscapeMarkup()}[/]");
 ```
 
 ### Output Consistency
 
-- **Tables** for structured data (query lists, sheet lists)
-- **Panels** for code blocks (M code display)
-- **Progress indicators** for long operations
-- **Clear error messages** with actionable guidance
+- Prefer JSON for automation-facing output.
+- Escape markup when writing user-controlled text through Spectre.Console.
+- Provide actionable errors for missing Outlook, new Outlook only, elevation mismatch, and Object Model Guard prompts.
 
-## 🐛 Bug Reports
+## Bug Reports
 
-When reporting bugs, please include:
+When reporting bugs, include:
 
-- **PowerPoint version** and Windows version
-- **Command used** and arguments
-- **Expected behavior** vs actual behavior
-- **Sample PowerPoint file** (if possible)
-- **Error messages** (full text)
+- Windows version.
+- Outlook version and whether it is classic Outlook or new Outlook.
+- Command or MCP tool call used.
+- Expected behavior and actual behavior.
+- Full error message.
+- Whether Outlook was running and signed in.
+- Whether the process was elevated.
 
-## 💡 Feature Requests
+Do not attach or paste private mailbox data. Redact subjects, addresses, bodies, attachment names, and entry IDs when needed.
+
+## Feature Requests
 
 Great feature requests include:
 
-- **Use case description** - Why is this needed?
-- **Proposed command syntax** - How should it work?
-- **PowerPoint operations involved** - What APIs would be used?
-- **Target users** - Coding agents? Direct users?
+- Use case description.
+- Proposed tool and action structure.
+- Outlook COM object model APIs involved, if known.
+- Whether the operation is read-only or destructive.
+- Target users: MCP clients, CLI scripts, or both.
 
-## 📚 Learning Resources
+## Learning Resources
 
-- [PowerPoint VBA Object Model Reference](https://docs.microsoft.com/en-us/office/vba/api/overview/powerpoint)
-- [Power Query M Language Reference](https://docs.microsoft.com/en-us/powerquery-m/)
+- [Outlook Object Model Reference](https://learn.microsoft.com/office/vba/api/overview/outlook)
+- [.NET COM Interop Guide](https://learn.microsoft.com/dotnet/standard/native-interop/cominterop)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Spectre.Console Documentation](https://spectreconsole.net/)
-- [.NET COM Interop Guide](https://docs.microsoft.com/en-us/dotnet/framework/interop/interoperating-with-unmanaged-code)
 
-## 📦 For Maintainers
+## For Maintainers
 
-- [NuGet Publishing Guide](NUGET-GUIDE.md) - Complete guide for publishing all packages with OIDC trusted publishing
+- [NuGet Publishing Guide](NUGET-GUIDE.md) - publishing packages with OIDC trusted publishing.
 
-## 🏷️ Issue Labels
+## Issue Labels
 
-- `bug` - Something isn't working
-- `enhancement` - New feature or improvement
-- `documentation` - Documentation improvements
-- `good first issue` - Good for newcomers
-- `help wanted` - Extra attention needed  
-- `ppt-com` - PowerPoint COM automation issues
-- `power-query` - Power Query specific
-- `coding-agent` - Coding agent related
+- `bug` - Something is not working.
+- `enhancement` - New feature or improvement.
+- `documentation` - Documentation improvements.
+- `good first issue` - Good for newcomers.
+- `help wanted` - Extra attention needed.
+- `outlook-com` - Classic Outlook COM automation issues.
+- `coding-agent` - Coding agent related.
 
 ---
 
-Thank you for contributing to OutlookMcp! Together we're making PowerPoint automation more accessible to coding agents and developers worldwide. 🚀
+Thank you for contributing to OutlookMcp.

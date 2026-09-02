@@ -107,11 +107,11 @@ internal sealed class Program
             // Session commands
             config.AddBranch("session", branch =>
             {
-                branch.SetDescription("Legacy presentation-session management. WORKFLOW: open -> use sessionId -> close (--save to persist).");
+                branch.SetDescription("Dormant document-session layer. NOT used by any Outlook command; retained as reference infrastructure (see issue #12).");
                 branch.AddCommand<SessionCreateCommand>("create")
-                    .WithDescription("Create a new legacy PowerPoint file, open it, and create a session.");
+                    .WithDescription("Create a new .pptx document, open it, and create a session. Not an Outlook operation.");
                 branch.AddCommand<SessionOpenCommand>("open")
-                    .WithDescription("Open a legacy PowerPoint file and create a session.");
+                    .WithDescription("Open an existing .pptx document and create a session. Not an Outlook operation.");
                 branch.AddCommand<SessionCloseCommand>("close")
                     .WithDescription("Close a session. Use --save to persist changes.");
                 branch.AddCommand<SessionListCommand>("list")

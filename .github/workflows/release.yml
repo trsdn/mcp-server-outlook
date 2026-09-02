@@ -790,7 +790,7 @@ jobs:
 
         ### Requirements
         - Windows OS
-        - Microsoft PowerPoint 2016+
+        - Classic Outlook for Windows (the new Outlook has no COM object model)
         - .NET 10 Runtime or SDK (for NuGet installation only; VS Code and MCPB bundle it)
 
         ### Documentation

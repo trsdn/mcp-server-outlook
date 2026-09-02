@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "outlook-mcp",
-  "display_name": "PowerPoint (Windows)",
+  "display_name": "Outlook (Windows)",
   "version": "1.7.0",
-  "description": "Manage Slides, Shapes, Text, Charts, Layouts, Transitions, Animations, Formatting & more - requires PowerPoint to be installed",
-  "long_description": "Enterprise-grade MCP server for Microsoft PowerPoint automation. 23 specialized tools with 214 operations for Slides, Shapes, Charts, Layouts, Transitions, and more. Windows-only, requires Microsoft PowerPoint desktop application (2016 or later).",
+  "description": "Read, search, send and organize Outlook mail, calendar, folders and attachments - requires classic Outlook to be installed",
+  "long_description": "MCP server for Microsoft Outlook automation. 5 tools with 30 operations across Mail, Calendar, Folders, Attachments and Application status. Windows-only, and requires the classic Outlook desktop client: the new Outlook does not expose a COM object model.",
   "author": {
     "name": "TOrsten Mahr",
     "url": "https://github.com/trsdn"
@@ -20,19 +20,16 @@
   "license": "MIT",
   "privacy_policies": ["https://github.com/trsdn/mcp-server-outlook/blob/master/SECURITY.md"],
   "keywords": [
-    "powerpoint",
+    "outlook",
     "office",
-    "presentation",
+    "email",
     "automation",
-    "vba",
-    "macro",
-    "table",
-    "slides",
-    "shapes",
-    "animations",
-    "transitions",
-    "smartart",
-    "presentations"
+    "mail",
+    "calendar",
+    "appointments",
+    "attachments",
+    "folders",
+    "com"
   ],
   "server": {
     "type": "binary",

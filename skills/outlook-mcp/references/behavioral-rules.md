@@ -1,268 +1,99 @@
-# Behavioral Rules for PowerPoint MCP Operations
+# Behavioral Rules for Outlook Operations
 
-These rules ensure efficient and reliable PowerPoint automation. AI assistants should follow these guidelines when executing PowerPoint operations.
+These rules apply to every Outlook operation, through both the MCP server and the `outlookcli` CLI.
+The two surfaces expose the same 5 tools and the same 30 actions with the same parameters, so this
+guidance is identical for both.
 
-## System Prompt Rules (LLM-Validated)
+## Rule 1: Check Outlook availability before anything else
 
-These rules are validated by automated LLM tests and MUST be followed:
+Run `application.get-status` first in a session. It reports whether classic Outlook is present.
 
-- **Execute tasks immediately without asking for confirmation**
-- **Never ask clarifying questions — make reasonable assumptions and proceed**
-- Ask the user whether they want PowerPoint visible or hidden when starting multi-step tasks
-- When the user asks to "show PowerPoint" or "watch" the work, use `window(show)` + `window(arrange)` to position it
-- Format presentations professionally (proper typography, alignment, consistent colors)
-- **Always end with a text summary** — never end on just a tool call or command
+The new Outlook for Windows has **no COM object model** and cannot be automated. If status reports
+`NewOutlookOnly`, stop and tell the user they need classic Outlook. Do not retry other actions; they
+will all fail.
 
-## CRITICAL: No Clarification Questions
+## Rule 2: Discover, don't ask
 
-**STOP.** If you are about to ask "Which file?", "Which slide?", "Where should I put this?" — DON'T.
+Do not ask the user questions you can answer with a read-only call.
 
-**Instead, discover the information yourself:**
-
-| Bad (Asking) | Good (Discovering) |
+| Don't ask | Do this instead |
 |---|---|
-| "Which PowerPoint file should I use?" | `file(list)` → use the open session |
-| "Which slide has the chart?" | `slide(list)` → discover slides |
-| "What shapes are on this slide?" | `shape(list)` → check the slide |
-| "Should I create a new slide?" | YES — create it and proceed |
-| "What font should I use?" | Use `design(get-style-profile)` to get the right style |
+| "Which folder?" | `folder.list-default`, then `folder.list-children` |
+| "Which message?" | `mail.read-active` for the open item, or `mail.list` / `mail.search` |
+| "What is the entry ID?" | Get it from a `list`, `search`, or `read-active` result |
+| "Does this message have attachments?" | `attachment.list` |
 
-**You have tools to answer your own questions. USE THEM.**
+Ask the user only when the answer is a genuine preference or an irreversible decision.
 
-## Archetype Selection Rules (CRITICAL)
+## Rule 3: Sending and deleting require explicit confirmation
 
-### Force Contribution/Arithmetic Pattern for Build-Up Language
+`mail.send` and `mail.delete` are the two actions a user cannot undo from the agent.
 
-**HARD RULE: When prompt contains "waterfall," "bridge," "build-up," "show each source," "prove the math," or "demonstrate how" → MUST use contribution/arithmetic archetype, NOT big-number archetype.**
+- **Never send a draft the user has not seen.** Create it with `mail.create-draft`, describe the
+  recipients, subject, and body back to them, and send only after they confirm.
+- `mail.send` is idempotent per operation ID. If a call times out or the result is ambiguous, retry
+  with the **same** operation ID rather than sending again. Generating a new ID risks a duplicate.
+- Confirm before `mail.delete` and before `attachment.remove`.
 
-Required elements:
-- **Each source labeled explicitly**: "Platform savings: $3.1M", "Revenue uplift: $1.8M", "License consolidation: $0.4M"
-- **Each value tied to named source**: No generic placeholders
-- **Visual sum structure**: Waterfall chart or build-up table showing additive logic
-- **Mathematical flow**: Each component shows how it contributes to headline metric
+`mail.move` is recoverable, so it does not need the same ceremony, but say which folder you moved to.
 
-**NEVER use big-number archetype when build-up language is present** — the user is explicitly requesting component breakdown logic, not hero display.
+## Rule 4: Entry IDs are the addressing scheme
 
-### Business Update Title Slides — Preserve Prompt Fidelity
+Outlook items are addressed by entry ID, not by name or index. Entry IDs:
 
-**MANDATORY for business update presentations**: Title slides must preserve the core message from user prompts and include headline results, NOT generic meeting labels.
+- come from a `list`, `search`, or `read-active` result
+- are stable for an item in a folder, but **change when the item is moved between stores**
 
-**Required title content for business updates:**
-- **Include headline metric**: Specific result that answers "what happened?"
-- **Add comparison + implication**: Context showing performance vs. baseline
-- **Preserve prompt subject**: Don't drift from user's core message
+So re-read after a move rather than reusing the old ID.
 
-**WRONG — Generic meeting title:**
-- "Quarterly Business Review"
-- "Financial Update - Q4 2024"
+## Rule 5: Drafts before edits
 
-**CORRECT — Action title with headline result:**
-- "Q4 revenue beat forecast by 8%, driving record profitability"
-- "Cost reduction program delivered $5.2M savings, exceeding target"
+`set-subject`, `set-body`, `set-recipients`, `attachment.add`, and `attachment.remove` target drafts.
+Create or open a draft first, apply the edits, then send. Do not attempt to edit an already-sent
+message.
 
-## Core Execution Rules
+## Rule 6: Prefer narrow queries
 
-### Execute Immediately
+`mail.list` and `mail.search` can return very large result sets from a busy mailbox. Constrain by
+folder and by count. Read full bodies with `mail.read` only for the items you actually need, rather
+than pulling bodies for an entire folder.
 
-Do NOT ask clarifying questions for standard operations. Proceed with reasonable defaults:
+## Rule 7: Report what you did, in the user's terms
 
-- **Slide creation**: Create the slide and report what was built
-- **Shape operations**: Execute and report results
-- **Formatting**: Apply formatting and confirm completion
+Never leave a tool call as the entire response.
 
-**When to ask**: Only when the request is genuinely ambiguous (e.g., "make it better" without specifying what).
-
-### Ask About PowerPoint Visibility
-
-When starting a multi-step task, **ask the user** whether they want PowerPoint visible or hidden:
-
-> **Watch me work** — Show PowerPoint side-by-side so you see every change live. Operations run slightly slower because PowerPoint renders each update on screen.
->
-> **Work in background** — Keep PowerPoint hidden for maximum speed. You won't see changes until the task is done, but operations complete faster.
-
-**Skip asking** when the user has already stated a preference:
-- User says "show me PowerPoint", "let me watch" → Show immediately
-- User says "just do it", "work in background" → Keep hidden
-- Simple one-shot operations (e.g., "how many slides?") → Keep hidden, no need to ask
-
-**How to show PowerPoint:**
-```
-1. window(action: 'show')                         → Make visible
-2. window(action: 'arrange', preset: 'left-half') → Position for side-by-side
-```
-
-### Design-First Workflow
-
-Before building slides, query the design catalog for the right configuration:
-
-```
-1. design(get-context-model)                    → Determine density from meeting type
-2. design(get-style-profile, profileId='...')    → Get fonts, sizes, spacing
-3. design(get-palette, paletteId='...')          → Get color hex values
-4. design(get-archetype, archetypeId='...')      → Get the unified archetype view: layout rules, observed subtypes, and concrete sanitized example details when local reference data exists
-5. design(get-layout-grid, gridId='...')         → Get exact x/y/w/h positions
-```
-
-This replaces reading long reference documents — query only what you need.
-Reference examples come back embedded in `get-archetype` as sanitized ids/details; raw filenames and provenance metadata stay in local gitignored reference data.
-
-### External Controller Workflow
-
-If a host or custom client is orchestrating a larger deck build, keep the orchestration OUTSIDE the MCP server:
-
-- Planning, execution, verification, and improvement are **client-controlled phases**
-- The MCP server remains a normal request/response tool surface
-- Do **not** assume MCP batch execution or subagents are available
-- Use one controlling client that issues ordinary sequential MCP calls
-
-Recommended external flow:
-
-1. **Plan locally** — create a structured slide plan from the user task
-2. **Execute via MCP** — open/create one presentation and build slides in order
-3. **Verify via MCP** — re-read slides, inspect shapes/text, and export slide images when helpful
-4. **Apply targeted fixes** — adjust only the specific issues found
-
-### Plan Extraction Fallback
-
-External controllers should be tolerant if the model returns a plan as text instead of a perfect structured object.
-
-Accept these patterns:
-
-- JSON object with `{"slides":[...]}`
-- JSON object with `{"plan":{"slides":[...]}}`
-- Bare JSON array of slide objects
-- Markdown blocks like:
-
-```
-### Slide 1: Title
-- Archetype: executive-summary
-- Intent: ...
-- Content: ...
-```
-
-If a valid structured plan can be recovered from one of these formats, continue with execution rather than failing immediately.
-
-### Format Professionally
-
-When creating presentations:
-
-- Use action titles on every content slide (see slide-design-principles)
-- Apply consistent typography hierarchy (title, body, footnote)
-- Use colors from the chosen palette only
-- Maintain 36pt margins on all sides
-- Add source bars to every data slide
-
-### Session Lifecycle
-
-Always close sessions when done:
-
-```
-1. file(action: 'open', path: '...')  → sessionId
-2. All operations use sessionId
-3. file(action: 'close', sessionId: '...', save: true)
-```
-
-**Why**: Unclosed sessions leave PowerPoint processes running, consuming memory and locking files.
-
-### CRITICAL: Always End With a Text Response
-
-**NEVER end your turn with only a tool call.** After all operations, provide a text summary.
-
-| Bad (Silent completion) | Good (Text summary) |
+| Bad | Good |
 |---|---|
-| *(tool call with no text)* | "Created 3-card KPI dashboard on slide 2 with Corporate Blue palette." |
-| *(just runs a command)* | "Added title slide with dark hero background and accent bar." |
+| *(tool call, no text)* | "Found 12 unread messages in Inbox; 3 are from Finance." |
+| "Done." | "Created a draft to alice@example.com, subject 'Q1 numbers'. Not sent - confirm and I'll send it." |
+| "Deleted." | "Moved 4 newsletters to Deleted Items." |
 
-### Format Results as Tables
+State recipients and subject explicitly before any send. That is the user's last chance to catch a
+mistake.
 
-When presenting data to users, format as Markdown tables, not raw JSON.
+## Rule 8: Read the error, then act on it
 
-## Slide Building Rules
-
-### Shape and Text Operations
-
-When building slides programmatically:
-
-- Create shapes with explicit positions (x, y, w, h in points)
-- Use `text(set)` immediately after creating text-containing shapes
-- Apply formatting (`text(format)`) after setting text content
-- Use `--color` parameter for text color (NOT `--font-color`)
-- Use `--alignment` parameter (NOT `--horizontal-alignment`)
-
-### Multi-Line Text
-
-- **MCP Server**: `\n` in JSON strings works correctly for line breaks
-- **CLI**: `\n` literal does NOT work in `--text` arguments — use separate textboxes stacked vertically instead
-
-### Table Operations on Slides
-
-When adding tables to slides:
-- Use `slidetable(create)` to add tables directly to slides
-- Position tables using exact coordinates from layout grids
-- Format header rows with bold text and accent color fill
-- Right-align numeric columns, left-align text columns
-
-### Chart Operations
-
-When creating charts:
-- Use `chart(create)` with appropriate chart type for the data shape
-- Position charts using layout grid coordinates
-- Always add chart titles and axis labels
-- Apply palette colors to chart series
-- Add source bars below charts
-
-## Data Modification Rules
-
-### Verify Before Delete
-
-Before deleting slides, shapes, or sections:
-
-1. List existing items first
-2. Confirm the exact name/index exists
-3. Delete the specified item
-
-### Save Explicitly
-
-Call `file(action: 'close', save: true)` to persist changes:
-
-- Operations modify the in-memory presentation
-- Changes are NOT automatically saved to disk
-- Session termination WITHOUT save loses all changes
-
-## Error Handling Rules
-
-### Interpret Error Messages
-
-PowerPoint MCP errors include actionable context:
+Errors return structured, actionable context:
 
 ```json
 {
   "success": false,
-  "errorMessage": "Shape 'Title' not found on slide 1",
-  "suggestedNextActions": ["shape(action: 'list', slideIndex: 1)"]
+  "errorMessage": "Mail item not found for the supplied entry ID",
+  "suggestedNextActions": ["mail.list", "folder.list-default"]
 }
 ```
 
-Follow `suggestedNextActions` when provided.
+- `success: false` always accompanies an `errorMessage`. Never treat a result with an error message
+  as a success.
+- Follow `suggestedNextActions` before improvising.
+- If the error says Outlook is unavailable, go back to Rule 1 rather than retrying in a loop.
 
-### Retry with Corrections
+## Rule 9: Outlook is a shared desktop application
 
-If an operation fails:
+Outlook is a single running instance the user is also using. Automation is not isolated:
 
-1. Read the error message carefully
-2. Check prerequisites (session open, slide exists, shape exists)
-3. Retry with corrected parameters
+- the user may be typing in a window you are editing
+- a modal dialog in Outlook can block calls
+- operations run on the user's real mailbox, with real consequences
 
-Do NOT immediately re-run the same failing command.
-
-### Report Failures Clearly
-
-When operations fail:
-
-- State what was attempted
-- Explain what went wrong
-- Suggest the corrective action
-
-**Good**: "Failed to set text: Shape 'Title 1' not found on slide 2. Use `shape(list, slideIndex=2)` to see available shapes."
-
-**Bad**: "An error occurred."
+Work in small, verifiable steps and re-read state rather than assuming your last write stuck.

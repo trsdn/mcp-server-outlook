@@ -144,7 +144,7 @@ vscode-extension/bin/outlookcli.exe --version
 4. **In the Extension Development Host**:
    - Check if extension is loaded: Extensions panel
    - Check if MCP server is registered: Settings → MCP
-   - Ask GitHub Copilot to list PowerPoint tools
+   - Ask GitHub Copilot to list Outlook tools
 
 5. **Check Developer Tools Console** (Ctrl+Shift+I):
    - Go to Console tab
@@ -165,7 +165,7 @@ vscode-extension/bin/outlookcli.exe --version
 3. **Verify**:
    - Extension appears in Extensions panel
    - Welcome message shows on first activation
-   - GitHub Copilot can access PowerPoint tools
+   - GitHub Copilot can access Outlook tools
 
 ## Publishing
 

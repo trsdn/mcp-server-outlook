@@ -11,52 +11,46 @@ This repository is no longer intended to remain a PowerPoint product. It is the 
 Today the repository is still in transition:
 
 - the repo identity is now Outlook-first
-- the internal codebase still contains many inherited `OutlookMcp` names
-- many packages, skills, binaries, tests, and docs still reflect PowerPoint-era naming and behavior
+- the tool surface is now Outlook-only: the 33 inherited PowerPoint command domains were deleted in #26
+- the internal codebase still contains inherited `OutlookMcp` and `Ppt*` type names
+- some docs, packaging and tooling still reflect PowerPoint-era naming
 - the long-term goal is full Outlook COM coverage with MCP, CLI, and VS Code extension parity
 
 ## Current reality
 
 What is true right now:
 
-- the copied architecture is mature and reusable: `Core`, `Service`, `ComInterop`, generators, CLI, MCP server, VS Code extension, skills, eval, and tests
-- the semantic surface is still overwhelmingly PowerPoint-shaped
-- Outlook behavior has to be rebuilt around mailbox, folder, item, draft, and meeting workflows rather than presentation files
+- the copied architecture is mature and reusable: `Core`, `Service`, `ComInterop`, generators, CLI, MCP server, VS Code extension, skills, and tests
+- the semantic surface is Outlook-only: 5 tools, 30 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
+- the retained `ComInterop/Session/*` layer is dormant COM plumbing kept deliberately; nothing calls it, and Outlook does not use it (see [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md))
+- **no Outlook behaviour is verified by CI.** Integration tests need a self-hosted Windows runner with classic Outlook installed, which does not exist yet, so correctness claims rest on local runs only
 - this repo should be treated as an Outlook rebuild on top of reusable plumbing, not as a large search-and-replace exercise
 
-## Implemented Outlook seed
+## Implemented Outlook surface
 
-The repository now contains a first real Outlook seed integrated into Core, Service, MCP generation, and build validation:
+The repository exposes **5 tools with 30 operations**, generated into both the MCP server and the
+CLI from the same `[ServiceCategory]` interfaces:
 
-- `application.get-status`
-- `folder.list-default`
-- `mail.read-active`
-- `mail.list`
-- `mail.search`
-- `mail.create-draft`
-- `mail.reply`
-- `mail.reply-all`
-- `mail.forward`
-- `mail.send`
-- `attachment.list`
-- `attachment.save`
+| Tool | Operations |
+|---|---|
+| `mail` | 16 |
+| `calendar` | 5 |
+| `folder` | 4 |
+| `attachment` | 4 |
+| `application` | 1 |
 
-This is intentionally small, but it proves the first Outlook-specific path through the inherited architecture.
+See [FEATURES.md](FEATURES.md) for the full action list.
 
 ## Planned next Outlook slice
 
-The next slice should extend that seed toward:
+The seed has since been extended to attachments and calendar. The remaining gaps are:
 
-- deeper current folder selection and folder traversal
-- mail read and inspect beyond the active item
-- recipient, subject, and body editing for existing drafts
-- attachment list, add, and save
-
-After that, the next major domains are:
-
-- calendar
+- richer server-side mail search, replacing the current client-side scan (#42)
+- a paging cursor for large result sets (#43)
 - contacts
 - follow-up / task workflows if needed
+
+The single most important gap is not a feature: it is verification. See #31.
 
 ## Architecture direction
 
@@ -97,43 +91,32 @@ That means current `file`, `slide`, `shape`, and presentation-session assumption
 - shared skills and marketplace UX
 - docs, examples, eval scenarios, and smoke tests
 
-### Remove or replace outright
+### Removed
 
-These PowerPoint-centric families should not survive as Outlook concepts:
-
-- `slide`
-- `shape`
-- `animation`
-- `transition`
-- `slideshow`
-- `master`
-- `slideimport`
-- `customshow`
-- `background`
-- `pagesetup`
-- `shapealign`
-- `placeholder`
-- `headerfooter`
-- large parts of `design`, `image`, `media`, and `export` as currently modeled
+The PowerPoint-centric command families are **gone** as of #26: `slide`, `shape`, `text`, `chart`,
+`animation`, `transition`, `slideshow`, `master`, `slideimport`, `customshow`, `background`,
+`pagesetup`, `shapealign`, `placeholder`, `headerfooter`, `design`, `image`, `media`, `export`,
+`smartart`, `vba`, and the rest of the 33 inherited domains. Neither the MCP server nor the CLI
+exposes them.
 
 ## Important naming note
 
 This repo is now `mcp-server-outlook`, but several inherited names are still present during migration:
 
 - solution and projects still use `OutlookMcp.*`
-- package ids and skill names still use inherited `ppt-*` forms
+- `Ppt*`-prefixed infrastructure remains, including `PptToolsBase`, which the generated Outlook tools depend on
+- the retained `ComInterop/Session/*` types are still `Ppt*`-named; they should **not** be renamed to `Outlook*`, because Outlook does not use them (see #12)
 - some docs and examples still refer to PowerPoint
-- some public metadata still points at the original PowerPoint lineage until the Outlook surfaces are in place
 
 That cleanup is intentional work still to be completed, not hidden compatibility debt.
 
 ## Immediate migration priorities
 
-1. Define the Outlook-first command taxonomy.
-2. Rebuild COM and service abstractions around Outlook objects.
-3. Generate Outlook CLI and MCP surfaces from that taxonomy.
-4. Rewire skills and extension UX to those surfaces.
-5. Replace PowerPoint-specific tests, docs, examples, and evals.
+1. ~~Define the Outlook-first command taxonomy.~~ Done.
+2. ~~Rebuild COM and service abstractions around Outlook objects.~~ Done (#20, ADR-002).
+3. ~~Generate Outlook CLI and MCP surfaces from that taxonomy.~~ Done (#23, #26).
+4. **Stand up CI that can actually run Outlook (#31).** Nothing else is trustworthy until this exists.
+5. Rewire skills and extension UX to those surfaces.
 6. Perform the final coordinated rename of inherited `OutlookMcp` internals.
 
 ## Requirements

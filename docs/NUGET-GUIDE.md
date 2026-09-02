@@ -29,7 +29,7 @@ OutlookMcp publishes two NuGet packages (unified release):
 
 ### 2. OutlookMcp.CLI (.NET Tool)
 - **Package Type**: .NET Global Tool (executable)
-- **Purpose**: Command-line interface for PowerPoint automation
+- **Purpose**: Command-line interface for Outlook automation
 - **Tag Pattern**: `v*` (e.g., `v1.2.0`) - **unified with MCP Server**
 - **Workflow**: `.github/workflows/release-mcp-server.yml` (handles both packages)
 - **NuGet Page**: https://www.nuget.org/packages/OutlookMcp.CLI

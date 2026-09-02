@@ -6,7 +6,7 @@
     1. Gracefully stops the OutlookMcp Service via named pipe (service.shutdown)
 
     This prevents file locking issues during build when the service
-    holds handles to assemblies or presentations.
+    holds handles to assemblies.
 .NOTES
     Called from Directory.Build.props as a BeforeBuild target.
     Safe to run when no processes are running (silently succeeds).
@@ -31,8 +31,8 @@ function Stop-OutlookMcpService {
     # Look for outlookcli in build output directories (Debug/Release)
     $scriptDir = Split-Path -Parent $PSScriptRoot  # repo root
     $cliPaths = @(
-        "$scriptDir\src\OutlookMcp.CLI\bin\Debug\net10.0-windows\outlookcli.exe",
-        "$scriptDir\src\OutlookMcp.CLI\bin\Release\net10.0-windows\outlookcli.exe"
+        "$scriptDir\src\OutlookMcp.CLI\bin\Debug\net9.0-windows\outlookcli.exe",
+        "$scriptDir\src\OutlookMcp.CLI\bin\Release\net9.0-windows\outlookcli.exe"
     )
     $outlookcli = $cliPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 

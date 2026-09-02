@@ -61,8 +61,8 @@
   </PropertyGroup>
 
   <!--
-    Pre-build cleanup: gracefully stop OutlookMcp Service and kill PowerPoint processes.
-    Prevents file locking during build. Skipped in CI (no PowerPoint/Service there).
+    Pre-build cleanup: gracefully stop the OutlookMcp service so it releases build outputs.
+    Prevents file locking during build. Skipped in CI (no service running there).
   -->
   <Target Name="StopOutlookMcpProcesses" BeforeTargets="Build" Condition="'$(CI)' != 'true' AND '$(OutlookMcpSkipCleanup)' != 'true'">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\Stop-OutlookMcpProcesses.ps1&quot;"

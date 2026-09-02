@@ -209,22 +209,10 @@ FodyWeavers.xsd
 .idea/
 *.sln.iml
 
-# OutlookCli specific ignores - test files
-*.xlsx
-*.xls
-*.pq
+# OutlookMcp specific ignores - scratch files
 test_files/
 temp/
 sample_files/
-
-# Exception: Allow Data Model template (required for tests)
-!tests/OutlookMcp.Core.Tests/TestAssets/DataModelTemplate.xlsx
-
-# Exception: Allow ComInterop static test file (required for batch tests)
-!tests/OutlookMcp.ComInterop.Tests/Integration/Session/TestFiles/batch-test-static.pptx
-
-# LOCAL-ONLY diagnostic tests (reference external workbooks with confidential data)
-tests/OutlookMcp.Core.Tests/Integration/Commands/PowerQuery/PowerQueryCommandsTests.ExternalWorkbook.cs
 
 codeql-db/*
 infrastructure/azure/appinsights.secrets.local

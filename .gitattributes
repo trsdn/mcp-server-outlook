@@ -27,8 +27,6 @@
 # Binary files
 *.dll binary
 *.exe binary
-*.pptx binary
-*.pptm binary
 *.png binary
 *.jpg binary
 *.jpeg binary

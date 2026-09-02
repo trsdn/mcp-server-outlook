@@ -177,12 +177,6 @@ dotnet test tests\OutlookMcp.McpServer.Tests --filter "FullyQualifiedName~CoreCo
 
 If you could not run Outlook behavior tests because the required desktop setup is missing, state that plainly in the PR.
 
-## Source Agent Client
-
-The repository may still contain source-side agent components from the pre-Outlook migration. Treat those workflows as historical until they are verified against the current Outlook surface.
-
-Before changing `src\OutlookMcp.Agent\**`, inspect its README and code for current behavior. Do not assume it is part of the released Outlook product.
-
 ## CLI Command Code Generation
 
 ### Architecture Overview

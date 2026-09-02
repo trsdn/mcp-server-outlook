@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Dead PowerPoint harnesses deleted** (#61): removed `eval/` (82 files) and
+  `src/OutlookMcp.Agent/` (12 files). Both were PowerPoint deck-generation tooling inherited from
+  the pre-rename repository; neither is in `OutlookMcp.sln`, neither ships in any package, and
+  nothing in the Outlook product referenced them. Their documentation
+  (`docs/AGENT-CLIENT.md`, `docs/ARCHETYPE-PIPELINE.md`), the `scripts/Sync-EvalAssets.ps1` helper,
+  and the orphaned `tests/OutlookMcp.Core.Tests/TestAssets/ReferenceCatalog/` fixture set (whose
+  only consumers, `DesignReferenceCatalogTests` and `ReferenceCatalogFixture`, went in #26) are
+  removed with them.
+  - Dropped the `eval-tools` job and the `eval/` path triggers from `.github/workflows/node-ci.yml`.
+  - Dropped the nine `pkg:npm/%40github/copilot*` entries from `dependency-review.yml`'s license
+    allow-list. Those existed solely because `@github/copilot-sdk` ships under GitHub's proprietary
+    terms, which no SPDX allow-list can express; with both consumers gone, the repository no longer
+    depends on it and the exception is no longer needed.
+
+### Fixed
+
+- **`ListPrompts_ReturnsOnlyOutlookPrompts` asserted a prompt name that no longer exists**: #34
+  replaced `skills/shared/outlook_agent_mode.md` with `outlook-workflows.md`, which changes the
+  generated prompt name from `outlook_agent_mode_guide` to `outlook_workflows_guide`. The test is an
+  integration test, so no CI path currently runs it and the break was silent.
+
 ### Changed
 
 - **Rule 30 / ADR-001 narrowed: the ban is on mocked-COM unit tests, not on all unit tests** (#37):

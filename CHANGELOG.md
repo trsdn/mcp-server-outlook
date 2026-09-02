@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-002 amended: `ComInterop/Session/*` is retained, not deleted** (#40, #26): the ADR previously
+  stated that `ComInterop/Session/*` (`PptSession`, `PptBatch`, `PptContext`, `SessionManager`,
+  `ResiliencePipelines`, `PptShutdownService`) "should be deleted wholesale" once #26 removes the
+  legacy PowerPoint command surface. That directly contradicted #26's own acceptance criteria, which
+  require the layer to be **retained**. The conflict is resolved in favour of #26: the layer is kept
+  as dormant infrastructure, because it is the only mature COM plumbing in the repository (dedicated
+  STA pump, Polly resilience pipelines, operation tracking, timeout handling, named-pipe daemon) and
+  is covered by 8 integration test files, so its reconstruction cost exceeds the cost of carrying it.
+  Rewrote the "Fate of `ComInterop/Session/*`" and "Naming Plan" sections, added the rejected
+  wholesale-deletion option to "Alternatives Considered", and restated the "generalize this layer"
+  rejection, whose original rationale partly rested on the now-false premise that the layer was
+  scheduled for deletion. **The ADR's central decision is unchanged**: Outlook executes via
+  `OutlookDispatcher` (#20), never via `PptSession`/`PptBatch` -- retention is not reuse. Also noted
+  that the retained `Ppt*` types should *not* be renamed to `Outlook*` under #12, since Outlook does
+  not use them and an `Outlook*` prefix would misdescribe them; a product-neutral rename is deferred
+  to the re-scoping of #12.
+
 ### Added
 
 - **`Node Projects CI` workflow**: runs `npm ci` and `tsc` for `vscode-extension/`, and `npm ci` for `eval/`, on pull requests. Previously nothing installed those dependencies on a PR -- only the manually dispatched `release.yml` did -- so an uninstallable lockfile would first have surfaced mid-release.

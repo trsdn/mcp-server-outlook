@@ -262,6 +262,30 @@ before telling a user something went wrong.
 5. mail.send(entryId: <draft>, confirm: true)
 ```
 
+## Formatted mail, and when not to use it
+
+`create-draft`, `reply`, `reply-all`, `forward` and `set-body` all take `bodyFormat`, which is
+`plain` (the default) or `html`.
+
+Pass `html` when the body really is markup you want rendered - a bulleted list, a link, bold text, a
+table:
+
+```
+mail.create-draft(subject: "Status", body: "<ul><li>Design signed off</li><li>Build starts Monday</li></ul>", bodyFormat: "html")
+```
+
+Leave it as `plain` for ordinary prose, and in particular whenever the text came from the user rather
+than from you. Plain text is escaped, not interpreted, so `profit < loss` arrives as written. Send
+that same string as `html` and everything from the `<` onwards disappears into what the renderer
+takes for an unclosed tag - the message still sends, and still reports success, and quietly says
+something other than what the user asked you to say.
+
+An unrecognised `bodyFormat` is refused rather than treated as plain, so a typo fails loudly instead
+of putting raw tags in front of a human.
+
+On `reply`, `reply-all` and `forward` the body goes *above* the quoted original, and the quoted
+message keeps its own formatting whichever format you choose - you do not have to match it.
+
 ## Save attachments
 
 ```

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **HTML message bodies** (#15). `create-draft`, `reply`, `reply-all`, `forward` and `set-body` take
+  `bodyFormat`, which is `plain` (the default, and what every existing caller keeps getting) or
+  `html`. Composing a bulleted list, a link or a table no longer means writing tags and watching them
+  arrive as visible tag soup.
+
+  Plain text stays escaped rather than interpreted, which matters most when the text came from the
+  user: `profit < loss` sent as HTML loses everything after the bracket to what the renderer takes
+  for an unclosed tag, and the send still reports success. An unrecognised `bodyFormat` is refused
+  rather than quietly treated as plain.
+
 - **Folder mutation: `folder create`, `rename`, `move` and `delete`** (#15). The `folder` tool could
   only read, so "file these into a 2024 folder" ended at the first step.
 
@@ -81,6 +91,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `note` saying so, rather than failing the call.
 
 ### Fixed
+
+- **Replying flattened the quoted thread to plain text** (#15). Passing a `body` to `reply`,
+  `reply-all` or `forward` read the draft's plain-text `Body` - a lossy projection of a quoted
+  original that is almost always HTML - and wrote it straight back. Every word survived, so the call
+  reported success and nothing looked wrong until someone opened the draft and found the original's
+  tables, inline images, links and emphasis gone. The recipient saw a flattened thread.
+
+  The caller's text is now inserted into `HTMLBody`, just inside the `<body>` element so it sits
+  above the quote, and the quoted original is left untouched. Plain text is HTML-escaped on the way
+  in, because otherwise a user writing `profit < loss` would silently lose the rest of the sentence.
+
+  Worth recording for anyone testing this area: the obvious assertion - "the reply is still
+  `BodyFormat=HTML`" - passes against the bug, because writing plain text into an HTML draft leaves
+  the format alone and makes Outlook regenerate a wrapper. So does checking that links survived:
+  **Outlook auto-linkifies bare URLs** when it converts plain text to HTML, so `<a href>` reappears
+  in a body that has just been stripped of everything else. Both were measured by deliberately
+  reinstating the bug and watching the tests stay green. The assertion that actually holds is that
+  markup Outlook *cannot* invent - `<img>`, `<table>`, `<b>`, `<li>` - survives from the original
+  into the reply.
 
 - **Folder paths resolved against a stale listing** (#15). Resolving `\\store\Inbox\Project` walked
   `NameSpace.Folders` recursively, comparing each child's `Name`. Two problems, one of which is a

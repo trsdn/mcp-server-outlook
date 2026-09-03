@@ -936,7 +936,78 @@ public class CalendarAppointmentResult : ResultBase
     public List<string> UnresolvedAttendees { get; set; } = [];
 }
 
+/// <summary>
+/// One person's availability over the requested window.
+/// </summary>
+public class FreeBusyPersonInfo
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Address { get; set; }
+
+    /// <summary>
+    /// Whether Outlook resolved the name. An unresolved person's availability is unknown, never free.
+    /// </summary>
+    public bool Resolved { get; set; }
+
+    /// <summary>
+    /// Outlook's raw slot string: one character per interval, <c>0</c> free, <c>1</c> tentative,
+    /// <c>2</c> busy, <c>3</c> out of office, <c>4</c> working elsewhere.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Availability { get; set; }
+
+    /// <summary>
+    /// The same information as merged non-free intervals, which is what a caller looking for a slot
+    /// actually needs. Free time is everything these do not cover.
+    /// </summary>
+    public List<FreeBusyPeriodInfo> BusyPeriods { get; set; } = [];
+}
+
+/// <summary>
+/// A stretch of non-free time.
+/// </summary>
+public class FreeBusyPeriodInfo
+{
+    public DateTimeOffset Start { get; set; }
+    public DateTimeOffset End { get; set; }
+
+    /// <summary>
+    /// <c>tentative</c>, <c>busy</c>, <c>outOfOffice</c>, <c>workingElsewhere</c> or <c>unknown</c>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Status { get; set; }
+}
+
+public class CalendarFreeBusyResult : ResultBase
+{
+    public DateTimeOffset Start { get; set; }
+    public DateTimeOffset End { get; set; }
+
+    /// <summary>
+    /// Minutes covered by each character of <see cref="FreeBusyPersonInfo.Availability"/>.
+    /// </summary>
+    public int IntervalMinutes { get; set; }
+
+    public List<FreeBusyPersonInfo> People { get; set; } = [];
+
+    /// <summary>
+    /// Set when the answer covers less time than was asked for.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
+
+    /// <summary>
+    /// Attendees Outlook could not resolve. Non-empty means the lookup failed: reporting an
+    /// unresolvable person as free would schedule over a calendar nobody ever looked at.
+    /// </summary>
+    public List<string> UnresolvedAttendees { get; set; } = [];
+}
+
 public class CalendarMutationResult : ResultBase
+
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; set; }

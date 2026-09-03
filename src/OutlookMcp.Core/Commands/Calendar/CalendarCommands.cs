@@ -629,6 +629,291 @@ public class CalendarCommands : ICalendarCommands
         return null;
     }
 
+    /// <summary>
+    /// Asks Outlook when the named people are available.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Recipient.FreeBusy</c> returns one character per interval - <c>0</c> free, <c>1</c>
+    /// tentative, <c>2</c> busy, <c>3</c> out of office, <c>4</c> working elsewhere - which is
+    /// compact but useless to read directly. Both forms are returned: the raw string, and the
+    /// non-free stretches decoded into timestamps.
+    /// </para>
+    /// <para>
+    /// Outlook decides for itself how far ahead it publishes and ignores the requested length, so the
+    /// string is trimmed to the window asked for, and <c>end</c> is pulled in when Outlook returned
+    /// less than that. Padding it out would invent free time nobody looked up.
+    /// </para>
+    /// <para>
+    /// An unresolvable attendee fails the whole call. Outlook returns an all-free string for a
+    /// recipient it never looked up, so treating that as an answer would propose meetings on top of a
+    /// calendar nobody ever read.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public CalendarFreeBusyResult GetFreeBusy(
+        string attendees,
+        string? start = null,
+        int days = 7,
+        int intervalMinutes = 30)
+    {
+        string[] names = SplitAttendees(attendees);
+
+        if (names.Length == 0)
+        {
+            return new CalendarFreeBusyResult
+            {
+                Success = false,
+                ErrorMessage = "attendees is required for calendar.get-free-busy. "
+                    + "Pass one or more names or SMTP addresses separated by semicolons."
+            };
+        }
+
+        if (days < 1)
+        {
+            return new CalendarFreeBusyResult
+            {
+                Success = false,
+                ErrorMessage = "days must be at least 1 for calendar.get-free-busy."
+            };
+        }
+
+        // Outlook rejects an interval that does not divide the day evenly.
+        if (intervalMinutes < 1 || 1440 % intervalMinutes != 0)
+        {
+            return new CalendarFreeBusyResult
+            {
+                Success = false,
+                ErrorMessage = $"intervalMinutes must divide 1440 evenly (Outlook works in whole days); {intervalMinutes} does not. "
+                    + "Try 5, 10, 15, 30, 60 or 120."
+            };
+        }
+
+        if (!TryParseRange(start, null, out DateTimeOffset? parsedStart, out _, out string? parseError))
+        {
+            return new CalendarFreeBusyResult
+            {
+                Success = false,
+                ErrorMessage = parseError
+            };
+        }
+
+        // Outlook always starts the slot string at midnight of the requested day, so anchoring the
+        // window there is the only reading of the result that lines up with the data.
+        DateTimeOffset requested = parsedStart ?? DateTimeOffset.Now;
+        DateTimeOffset windowStart = new(requested.Date, requested.Offset);
+        DateTimeOffset windowEnd = windowStart.AddDays(days);
+
+        return OutlookInteropRunner.Execute(
+            "OutlookCalendarGetFreeBusy",
+            (application, session) =>
+            {
+                object? probeItem = null;
+                Outlook.AppointmentItem? probe = null;
+                Outlook.Recipients? recipients = null;
+
+                try
+                {
+                    // A Recipients collection has to belong to an item. This one exists only to own
+                    // it and is never saved, so nothing reaches the calendar.
+                    probeItem = application.CreateItem(Outlook.OlItemType.olAppointmentItem);
+                    probe = probeItem as Outlook.AppointmentItem;
+                    recipients = probe?.Recipients;
+
+                    if (recipients == null)
+                    {
+                        return new CalendarFreeBusyResult
+                        {
+                            Success = false,
+                            ErrorMessage = "Outlook did not provide a recipients collection for the free/busy lookup."
+                        };
+                    }
+
+                    foreach (string name in names)
+                    {
+                        Outlook.Recipient? added = null;
+
+                        try
+                        {
+                            added = recipients.Add(name);
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref added);
+                        }
+                    }
+
+                    _ = recipients.ResolveAll();
+
+                    var people = new List<FreeBusyPersonInfo>();
+                    var unresolved = new List<string>();
+                    int count = recipients.Count;
+                    int requestedSlots = days * (1440 / intervalMinutes);
+                    int coveredSlots = requestedSlots;
+
+                    for (int index = 1; index <= count; index++)
+                    {
+                        Outlook.Recipient? recipient = null;
+
+                        try
+                        {
+                            recipient = recipients[index];
+                            bool resolved = SafeGetBool(() => recipient.Resolved);
+                            string? name = SafeGet(() => recipient.Name);
+
+                            if (!resolved)
+                            {
+                                unresolved.Add(name ?? "(unnamed)");
+                                people.Add(new FreeBusyPersonInfo
+                                {
+                                    Name = name,
+                                    Address = SafeGet(() => recipient.Address),
+                                    Resolved = false
+                                });
+                                continue;
+                            }
+
+                            string? raw = SafeGet(() =>
+                                recipient.FreeBusy(windowStart.LocalDateTime, intervalMinutes, true));
+
+                            // Outlook decides for itself how far ahead it publishes and ignores the
+                            // requested length, so the string is trimmed to the window that was
+                            // asked for - and the window is shortened when Outlook returned less.
+                            // Padding it out would invent free time nobody looked up.
+                            string? availability = raw is null
+                                ? null
+                                : raw.Length > requestedSlots ? raw[..requestedSlots] : raw;
+
+                            if (availability != null && availability.Length < coveredSlots)
+                            {
+                                coveredSlots = availability.Length;
+                            }
+
+                            people.Add(new FreeBusyPersonInfo
+                            {
+                                Name = name,
+                                Address = SafeGet(() => recipient.Address),
+                                Resolved = true,
+                                Availability = availability,
+                                BusyPeriods = DecodeBusyPeriods(availability, windowStart, intervalMinutes)
+                            });
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref recipient);
+                        }
+                    }
+
+                    if (unresolved.Count > 0)
+                    {
+                        return new CalendarFreeBusyResult
+                        {
+                            Success = false,
+                            Start = windowStart,
+                            End = windowEnd,
+                            IntervalMinutes = intervalMinutes,
+                            People = people,
+                            UnresolvedAttendees = unresolved,
+                            ErrorMessage = "Outlook could not resolve these attendees, so their availability is unknown: "
+                                + string.Join(", ", unresolved)
+                                + ". Use a full SMTP address or a name that exists in the address book."
+                        };
+                    }
+
+                    DateTimeOffset coveredEnd = windowStart.AddMinutes((double)coveredSlots * intervalMinutes);
+
+                    return new CalendarFreeBusyResult
+                    {
+                        Success = true,
+                        Start = windowStart,
+                        End = coveredEnd,
+                        IntervalMinutes = intervalMinutes,
+                        People = people,
+                        Message = coveredSlots < requestedSlots
+                            ? $"Outlook published availability only as far as {coveredEnd:yyyy-MM-dd HH:mm}, short of the {days} day(s) requested. "
+                                + "Nothing is known about the remainder - do not treat it as free."
+                            : null
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref recipients);
+                    OutlookInteropRunner.ReleaseComObject(ref probe);
+                    OutlookInteropRunner.ReleaseComObject(ref probeItem);
+                }
+            },
+            ex => new CalendarFreeBusyResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to read Outlook free/busy information: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Splits a semicolon- or comma-separated attendee list, dropping blanks.
+    /// </summary>
+    private static string[] SplitAttendees(string? attendees) =>
+        string.IsNullOrWhiteSpace(attendees)
+            ? []
+            : attendees
+                .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToArray();
+
+    /// <summary>
+    /// Turns Outlook's slot string into merged non-free intervals. Adjacent slots with the same
+    /// status become one period, because a caller looking for a gap wants stretches, not slots.
+    /// </summary>
+    private static List<FreeBusyPeriodInfo> DecodeBusyPeriods(
+        string? availability,
+        DateTimeOffset windowStart,
+        int intervalMinutes)
+    {
+        var periods = new List<FreeBusyPeriodInfo>();
+
+        if (string.IsNullOrEmpty(availability))
+        {
+            return periods;
+        }
+
+        int runStart = -1;
+        char runStatus = '0';
+
+        for (int index = 0; index <= availability.Length; index++)
+        {
+            char slot = index < availability.Length ? availability[index] : '0';
+
+            if (slot == runStatus)
+            {
+                continue;
+            }
+
+            if (runStart >= 0 && runStatus != '0')
+            {
+                periods.Add(new FreeBusyPeriodInfo
+                {
+                    Start = windowStart.AddMinutes((double)runStart * intervalMinutes),
+                    End = windowStart.AddMinutes((double)index * intervalMinutes),
+                    Status = DescribeBusyStatus(runStatus)
+                });
+            }
+
+            runStart = index;
+            runStatus = slot;
+        }
+
+        return periods;
+    }
+
+    private static string DescribeBusyStatus(char slot) => slot switch
+    {
+        '0' => "free",
+        '1' => "tentative",
+        '2' => "busy",
+        '3' => "outOfOffice",
+        '4' => "workingElsewhere",
+        _ => "unknown"
+    };
+
     private static bool TryParseRange(
         string? start,
         string? end,

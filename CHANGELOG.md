@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Free/busy lookup** (#32). `calendar.get-free-busy` answers "when is this person available",
+  which was previously impossible - nothing exposed `Recipient.FreeBusy`, so an agent asked to
+  schedule around somebody could only guess. It returns Outlook's raw slot string and, more usefully,
+  the non-free stretches decoded into timestamps with a status (`tentative`, `busy`, `outOfOffice`,
+  `workingElsewhere`).
+
+  Two deliberate refusals to overstate the answer. Outlook ignores the requested length and returns
+  however far ahead it publishes, so the result is trimmed to the window asked for and `end` is
+  pulled *in* when Outlook returned less - with a `message` saying so, because padding it out would
+  invent free time nobody looked up. And an attendee Outlook cannot resolve fails the call: Outlook
+  reports an all-free calendar for a recipient it never looked up, so treating that as an answer
+  would schedule over a calendar nobody read.
+
+  Verified against classic Outlook: a real query returned 136 busy periods across the published
+  window, matching the owner's actual calendar.
+
 - **Attendees on calendar items** (#32). `calendar.create-appointment` accepts `requiredAttendees` and
   `optionalAttendees` (semicolon-separated), which turns the item into a meeting, and
   `sendInvitation` mails them. `calendar.read` reports `isMeeting` and an `attendees` list with each

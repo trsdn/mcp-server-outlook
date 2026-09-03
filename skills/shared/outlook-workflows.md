@@ -96,6 +96,22 @@ SMTP address rather than retrying the same name.
 (`none`, `organizer`, `tentative`, `accepted`, `declined`, `notResponded`). `none` means the item is
 not a meeting response yet - it does not mean they declined.
 
+## Check availability before proposing a time
+
+`calendar.get-free-busy` takes the same semicolon-separated attendee list and answers with each
+person's `busyPeriods` - merged stretches of non-free time. Free time is everything they do not
+cover. `availability` is Outlook's raw slot string behind that, one character per
+`intervalMinutes`.
+
+Two things will otherwise catch you out:
+
+- **`end` is what was actually answered, not what you asked for.** Outlook decides how far ahead it
+  publishes. When `end` is earlier than your window, `message` says so, and the time beyond it is
+  unknown - not free.
+- **An unresolvable attendee fails the call** rather than coming back free. Outlook reports an
+  all-free calendar for somebody it never looked up, so a "free" answer for an unresolved name would
+  be an invention.
+
 
 ## Reply to the message the user is looking at
 

@@ -22,6 +22,11 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "a truncated or empty page as proof that no such mail exists while hasMore is true. A cursor only continues the "
     + "exact folder, query and filters that produced it - changing any of them requires restarting without a cursor - "
     + "but maxCount may be changed freely mid-walk. "
+    + "Use get-conversation to retrieve a whole mail thread in one call - every message in the "
+    + "conversation, oldest first, spanning folders, so a reply in Sent Items comes back alongside "
+    + "the original in the Inbox. Prefer it over guessing which search results belong together by "
+    + "subject, which is unreliable and cannot see replies filed in other folders. read, list and "
+    + "search all report conversationId, so a thread can be reached from any of them. "
     + "Use create-draft to create and save a new Outlook draft with optional recipients, subject, and body text. "
     + "Use reply, reply-all, and forward to create saved draft responses targeting an explicit mail item by entry id/store id, "
     + "or fall back to the active mail item; works headlessly with no Outlook window focused when entryId is supplied. "
@@ -69,6 +74,14 @@ public interface IMailCommands
         string? receivedBefore = null,
         bool? hasAttachment = null,
         string? cursor = null);
+
+    [ServiceAction("get-conversation", Destructive = false)]
+    MailConversationResult GetConversation(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        int maxCount = 50,
+        bool includeBodyPreview = false);
 
     [ServiceAction("create-draft")]
     MailDraftResult CreateMailDraft(

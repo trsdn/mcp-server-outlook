@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Conversations and threads** (#39). `mail.get-conversation` returns a whole thread from any one
+  message in it, ordered oldest-first and spanning folders, so a reply sitting in Sent Items comes
+  back alongside the original in the Inbox. `mail.read`, `mail.list` and `mail.search` now carry
+  `conversationId` and `conversationTopic`, and listings carry `folderPath`, so reaching a thread
+  costs one call rather than a read per message.
+
+  Each item reports the folder it lives in, because knowing a thread exists is useless if you cannot
+  act on its parts. Items that are not mail - a meeting response in the middle of a thread, say - are
+  counted in `skippedItemCount` rather than dropped, so the count you are shown adds up.
+
+  A store with conversation view disabled returns an explicit failure carrying
+  `conversationSupported: false`, not an empty success. "This message has no replies" and "I cannot
+  tell you whether this message has replies" are different answers and must not look alike.
+
+  One caveat, found by running the tests rather than by reading the API: Outlook's conversation index
+  is eventually consistent. A reply created a moment ago is genuinely part of the conversation but
+  may not appear in the thread for a second or so. A caller that replies and immediately reads the
+  thread back to confirm should treat a missing item as "not indexed yet" rather than "lost".
+
 - **`mail.list` and `mail.search` can be paged past the first result page** (#43). Both accept a
   `cursor` and return `nextCursor`, `hasMore`, `sortedBy` and `sortDirection`.
 

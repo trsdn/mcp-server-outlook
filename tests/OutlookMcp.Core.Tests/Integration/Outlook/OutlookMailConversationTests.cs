@@ -1,0 +1,359 @@
+using System.Runtime.InteropServices;
+using OutlookMcp.Core.Commands.Mail;
+using OutlookMcp.Core.Commands.OutlookInterop;
+using OutlookMcp.Core.Models;
+using OutlookInterop = Microsoft.Office.Interop.Outlook;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace OutlookMcp.Core.Tests.Integration.Outlook;
+
+/// <summary>
+/// Conversation / thread support against a real mailbox (#39).
+///
+/// <para>
+/// The acceptance criterion these exist for is the one an agent actually depends on: <b>a reply and
+/// the message it replies to must come back from a single call, as one thread</b>. Asserting only
+/// that "a conversation id was returned" would pass against an implementation that returned a
+/// one-item thread for every message, which is exactly the useless answer #39 exists to remove.
+/// </para>
+///
+/// <para>
+/// The thread is established with a real received message plus a reply draft to it. Outlook refuses
+/// to build a reply from an unsent draft (#92), so a draft-to-draft pair - the obvious design, and
+/// the one first written here - cannot work at all. A reply draft still shares its parent's
+/// conversation, so the relationship is real and <b>nothing is sent</b> to establish it. Only the
+/// reply draft is deleted afterwards; the received original is the user's own mail.
+/// </para>
+/// </summary>
+[Trait("Category", "Integration")]
+[Trait("Feature", "MailConversation")]
+[Trait("RequiresOutlook", "true")]
+[Collection("Sequential")]
+public class OutlookMailConversationTests(ITestOutputHelper output)
+{
+    /// <summary>
+    /// The whole point of the feature: one call, both messages.
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_ForAMessageAndItsReply_ReturnsBothInOneThread()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? replyId = null;
+
+        try
+        {
+            // The original has to be a message that was actually received. Outlook cannot build a
+            // reply from an unsent draft (#92), so the earlier draft-to-draft version of this test
+            // could never have passed - it had simply never run, because #90 made every Outlook test
+            // skip itself. A reply draft still shares its parent's conversation, so the thread
+            // relationship is real and nothing is sent to establish it.
+            string originalId = FindReceivedMessage(commands);
+            replyId = CreateReply(commands, originalId);
+
+            var thread = ReadThreadContaining(commands, originalId, replyId);
+
+            Assert.True(thread.Success, thread.ErrorMessage);
+            output.WriteLine($"thread '{thread.ConversationTopic}' returned {thread.ReturnedCount} item(s).");
+
+            var ids = thread.Messages.Select(m => m.EntryId).ToList();
+            Assert.Contains(originalId, ids);
+            Assert.Contains(replyId, ids);
+        }
+        finally
+        {
+            // Only the reply is ours to delete. The original is the user's real mail.
+            DeleteQuietly(commands, replyId);
+        }
+    }
+
+    /// <summary>
+    /// A thread is only readable if it is in reading order. Asserted explicitly because "returns the
+    /// right items" and "returns them in a usable order" are different claims and the first can pass
+    /// while the second is false.
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_ReturnsItemsOldestFirst()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? replyId = null;
+
+        try
+        {
+            string originalId = FindReceivedMessage(commands);
+            replyId = CreateReply(commands, originalId);
+
+            var thread = ReadThreadContaining(commands, originalId, replyId);
+            Assert.True(thread.Success, thread.ErrorMessage);
+
+            Assert.Equal("receivedTime", thread.SortedBy);
+            Assert.Equal("ascending", thread.SortDirection);
+
+            var times = thread.Messages
+                .Select(m => m.ReceivedTime ?? m.SentOn)
+                .Where(t => t.HasValue)
+                .Select(t => t!.Value)
+                .ToList();
+
+            Assert.Equal(times.OrderBy(t => t).ToList(), times);
+        }
+        finally
+        {
+            DeleteQuietly(commands, replyId);
+        }
+    }
+
+    /// <summary>
+    /// A thread spans folders - a reply lives in Drafts or Sent Items while the original sits in the
+    /// Inbox - so each item has to say where it is. Without this a caller cannot act on a thread item
+    /// at all beyond reading it.
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_ItemsReportTheFolderTheyLiveIn()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? originalId = null;
+
+        try
+        {
+            originalId = CreateDraft(commands, $"OutlookMcp folder {Guid.NewGuid():N}");
+
+            var thread = commands.GetConversation(entryId: originalId, useActiveMail: false);
+            Assert.True(thread.Success, thread.ErrorMessage);
+            Assert.NotEmpty(thread.Messages);
+
+            Assert.All(thread.Messages, m => Assert.False(string.IsNullOrWhiteSpace(m.FolderPath)));
+        }
+        finally
+        {
+            DeleteQuietly(commands, originalId);
+        }
+    }
+
+    /// <summary>
+    /// The identifier on a read result and the identifier the thread call reports must agree,
+    /// otherwise a caller cannot get from "this message" to "its thread".
+    /// </summary>
+    [SkippableFact]
+    public void Read_ExposesTheSameConversationIdentifiersAsGetConversation()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? originalId = null;
+
+        try
+        {
+            originalId = CreateDraft(commands, $"OutlookMcp ids {Guid.NewGuid():N}");
+
+            var read = commands.Read(entryId: originalId, useActiveMail: false);
+            Assert.True(read.Success, read.ErrorMessage);
+            Assert.False(string.IsNullOrWhiteSpace(read.ConversationId));
+
+            var thread = commands.GetConversation(entryId: originalId, useActiveMail: false);
+            Assert.True(thread.Success, thread.ErrorMessage);
+
+            Assert.Equal(read.ConversationId, thread.ConversationId);
+            Assert.Equal(read.ConversationTopic, thread.ConversationTopic);
+        }
+        finally
+        {
+            DeleteQuietly(commands, originalId);
+        }
+    }
+
+    /// <summary>
+    /// A listing has to carry the conversation id too, otherwise reaching a thread costs an extra
+    /// read per message - which for an agent scanning a folder is the difference between one call
+    /// and twenty-five.
+    /// </summary>
+    [SkippableFact]
+    public void MailList_CarriesConversationIdentifiers()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? originalId = null;
+
+        try
+        {
+            originalId = CreateDraft(commands, $"OutlookMcp list {Guid.NewGuid():N}");
+
+            var listed = commands.List(folder: "drafts", maxCount: 25);
+            Assert.True(listed.Success, listed.ErrorMessage);
+
+            var mine = listed.Messages.FirstOrDefault(m => m.EntryId == originalId);
+            Assert.NotNull(mine);
+            Assert.False(string.IsNullOrWhiteSpace(mine!.ConversationId));
+        }
+        finally
+        {
+            DeleteQuietly(commands, originalId);
+        }
+    }
+
+    /// <summary>
+    /// An unresolvable id must fail loudly. An empty thread reported as success is the
+    /// "confidently wrong answer" failure this project keeps finding.
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_WithAnUnknownEntryId_FailsExplicitly()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var thread = commands.GetConversation(entryId: "00000000DEADBEEF", useActiveMail: false);
+
+        Assert.False(thread.Success);
+        Assert.False(string.IsNullOrWhiteSpace(thread.ErrorMessage));
+        Assert.Empty(thread.Messages);
+    }
+
+    /// <summary>
+    /// maxCount must bound the thread and say so, rather than silently returning a partial thread a
+    /// caller would read as the whole conversation.
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_HonoursMaxCountAndReportsTruncation()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? replyId = null;
+
+        try
+        {
+            string originalId = FindReceivedMessage(commands);
+            replyId = CreateReply(commands, originalId);
+
+            var full = ReadThreadContaining(commands, originalId, replyId);
+            Assert.True(full.Success, full.ErrorMessage);
+            Skip.If(full.ReturnedCount < 2, "The reply draft did not join the original's conversation.");
+
+            var capped = commands.GetConversation(entryId: originalId, useActiveMail: false, maxCount: 1);
+            Assert.True(capped.Success, capped.ErrorMessage);
+
+            Assert.Single(capped.Messages);
+            Assert.True(capped.Truncated);
+            Assert.True(capped.TotalItemCount >= 2);
+        }
+        finally
+        {
+            DeleteQuietly(commands, replyId);
+        }
+    }
+
+    /// <summary>
+    /// Finds a real received message to thread from. Skips when the Inbox is empty: nothing to test
+    /// is not the same as the behaviour being wrong.
+    /// </summary>
+    private static string FindReceivedMessage(MailCommands commands)
+    {
+        var listed = commands.List(folder: "inbox", maxCount: 25);
+        Assert.True(listed.Success, listed.ErrorMessage);
+
+        var candidate = listed.Messages.FirstOrDefault(m => !m.IsDraft && !string.IsNullOrWhiteSpace(m.EntryId));
+        Skip.If(candidate == null, "The Inbox holds no received message to build a thread from.");
+
+        return candidate!.EntryId!;
+    }
+
+    private static string CreateDraft(MailCommands commands, string marker)
+    {
+        var draft = commands.CreateMailDraft(subject: marker, body: $"{marker}\r\nCreated by an OutlookMcp integration test.");
+        Assert.True(draft.Success, draft.ErrorMessage);
+        Assert.False(string.IsNullOrWhiteSpace(draft.EntryId));
+        return draft.EntryId!;
+    }
+
+    private static string CreateReply(MailCommands commands, string entryId)
+    {
+        var reply = commands.Reply(entryId: entryId, useActiveMail: false, body: "Reply created by an OutlookMcp integration test.");
+        Assert.True(reply.Success, reply.ErrorMessage);
+        Assert.False(string.IsNullOrWhiteSpace(reply.EntryId));
+        return reply.EntryId!;
+    }
+
+    /// <summary>
+    /// Reads the thread, waiting for a newly created item to appear in it.
+    ///
+    /// <para>
+    /// Outlook's conversation index is eventually consistent: a reply draft saved a moment ago is
+    /// already part of the conversation, but <c>Conversation.GetTable()</c> may not list it yet.
+    /// Asserting immediately passes or fails depending on how busy the machine is - it passed when
+    /// this test ran alone and failed when it ran after fifty others.
+    /// </para>
+    ///
+    /// <para>
+    /// The wait is bounded and the failure is loud. "Eventually" is the real behaviour; "never" is
+    /// still a bug, and this must not degrade into waiting until the assertion happens to hold.
+    /// </para>
+    /// </summary>
+    private static MailConversationResult ReadThreadContaining(MailCommands commands, string entryId, string expectedEntryId)
+    {
+        MailConversationResult thread = null!;
+
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            thread = commands.GetConversation(entryId: entryId, useActiveMail: false);
+            Assert.True(thread.Success, thread.ErrorMessage);
+
+            if (thread.Messages.Any(m => m.EntryId == expectedEntryId))
+            {
+                return thread;
+            }
+
+            Thread.Sleep(500);
+        }
+
+        return thread;
+    }
+
+    private static void DeleteQuietly(MailCommands commands, string? entryId)
+    {
+        if (!string.IsNullOrWhiteSpace(entryId))
+        {
+            _ = commands.Delete(entryId: entryId, useActiveMail: false);
+        }
+    }
+
+    private void EnsureOutlookAvailable()
+    {
+        if (!OutlookInteropRunner.TryGetRunningApplication(out OutlookInterop.Application? application))
+        {
+            output.WriteLine("Skipping Outlook conversation test: no running classic Outlook desktop instance is available.");
+            throw new SkipException("No running classic Outlook desktop instance is available.");
+        }
+
+        OutlookInterop.NameSpace? session = null;
+
+        try
+        {
+            session = application.GetNamespace("MAPI");
+            _ = session.Folders.Count;
+        }
+        catch (Exception ex)
+        {
+            output.WriteLine($"Skipping Outlook conversation test: {ex.Message}");
+            throw new SkipException($"Outlook MAPI session is not usable: {ex.Message}", ex);
+        }
+        finally
+        {
+            if (session != null && Marshal.IsComObject(session))
+            {
+                _ = Marshal.FinalReleaseComObject(session);
+            }
+
+            if (Marshal.IsComObject(application))
+            {
+                _ = Marshal.ReleaseComObject(application);
+            }
+        }
+    }
+}

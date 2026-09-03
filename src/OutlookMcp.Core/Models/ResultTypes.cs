@@ -415,6 +415,21 @@ public class ActiveMailResult : ResultBase
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CurrentFolderPath { get; set; }
 
+    /// <summary>
+    /// Identifier of the thread this message belongs to. Pass it - or simply this message's entry id -
+    /// to <c>mail.get-conversation</c> to retrieve the whole thread. Null on stores that do not
+    /// support conversation view. See #39.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConversationId { get; set; }
+
+    /// <summary>
+    /// The thread's topic: the original subject with reply and forward prefixes stripped, which is
+    /// why it is reported separately from <see cref="Subject"/>. See #39.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConversationTopic { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? BodyPreview { get; set; }
 
@@ -526,6 +541,57 @@ public class MailListResult : ResultBase
     public List<MailSummaryInfo> Messages { get; set; } = [];
 }
 
+/// <summary>
+/// One mail thread: every message in the conversation, across folders, in reading order (#39).
+/// </summary>
+public class MailConversationResult : ResultBase
+{
+    /// <summary>Identifier of the thread, matching <c>conversationId</c> on read and list results.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConversationId { get; set; }
+
+    /// <summary>The thread's topic: the original subject with reply/forward prefixes stripped.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConversationTopic { get; set; }
+
+    /// <summary>
+    /// False when the store cannot provide a conversation view at all (some PST and third-party
+    /// stores). Reported explicitly, alongside <c>success: false</c>, rather than returned as an
+    /// empty-but-successful thread: "this message has no replies" and "this store cannot tell you
+    /// whether it has replies" are different answers and must not look alike.
+    /// </summary>
+    public bool ConversationSupported { get; set; } = true;
+
+    /// <summary>Number of messages in the whole thread, before <c>maxCount</c> is applied.</summary>
+    public int TotalItemCount { get; set; }
+
+    /// <summary>Number of messages actually returned in <see cref="Messages"/>.</summary>
+    public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Number of thread entries that were not mail items - a meeting request or a delivery report
+    /// filed into the same conversation - and so were counted but not returned. Reported rather than
+    /// silently dropped, so a caller can see why the counts differ.
+    /// </summary>
+    public int SkippedItemCount { get; set; }
+
+    /// <summary>
+    /// True when <c>maxCount</c> cut the thread short. A caller MUST NOT read a truncated thread as
+    /// the whole conversation.
+    /// </summary>
+    public bool Truncated { get; set; }
+
+    /// <summary>The property items are ordered by: <c>receivedTime</c>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SortedBy { get; set; }
+
+    /// <summary>Direction of <see cref="SortedBy"/>: <c>ascending</c> - oldest first, reading order.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SortDirection { get; set; }
+
+    public List<MailSummaryInfo> Messages { get; set; } = [];
+}
+
 public class MailSummaryInfo
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -548,6 +614,25 @@ public class MailSummaryInfo
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Cc { get; set; }
+
+    /// <summary>
+    /// Identifier of the thread this message belongs to, so a caller can group a listing into
+    /// threads, or fetch one, without a separate read per message. See #39.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConversationId { get; set; }
+
+    /// <summary>The thread's topic: the subject with reply/forward prefixes stripped. See #39.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConversationTopic { get; set; }
+
+    /// <summary>
+    /// Folder this message lives in. Populated for thread results, where items genuinely span
+    /// folders (a reply sits in Sent Items while the original sits in the Inbox), and omitted for a
+    /// folder listing, where the folder is already on the envelope. See #39.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? BodyPreview { get; set; }

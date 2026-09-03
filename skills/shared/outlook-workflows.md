@@ -78,6 +78,33 @@ messages that share a received time; a hand-rolled date window silently drops th
 Use `reply-all` only when the user asked for it. Defaulting to reply-all is a common and expensive
 mistake.
 
+You cannot reply to or forward an unsent draft - there is nobody to reply to. To change a draft, use
+`mail.set-subject`, `mail.set-body` or `mail.set-recipients` on the draft itself.
+
+## Read a whole thread before answering
+
+```
+1. mail.search(query: ...) or mail.read-active     → find one message in the thread
+2. mail.get-conversation(entryId: ...)             → the whole thread, oldest first
+3. mail.read(entryId: ...)                         → full body of any item that matters
+```
+
+Do this before replying to anything that looks like part of an exchange. Answering from a single
+message means answering without knowing what was already said - and the last message in a thread is
+frequently the least informative one.
+
+The thread spans folders: replies live in Sent Items, the original in the Inbox. Each item reports
+its `folderPath`. `conversationId` also comes back on `mail.read`, `mail.list` and `mail.search`, so
+you do not need an extra read to reach a thread.
+
+If a store has conversation view disabled the call fails with `conversationSupported: false`. That
+means *unknown*, not *no replies* - say so rather than implying the message stands alone.
+
+A message you have only just created may not be listed in its thread yet: Outlook's conversation
+index catches up a moment later. If you reply and immediately read the thread back to confirm, a
+missing reply means "not indexed yet", not "the reply was lost". Check the draft with `mail.read`
+before telling a user something went wrong.
+
 ## Compose a new message
 
 ```

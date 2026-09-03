@@ -9,6 +9,13 @@ namespace OutlookMcp.Core.Commands.Mail;
 
 public class MailCommands : IMailCommands
 {
+    /// <summary>
+    /// Upper bound on how many entries of one conversation are enumerated. A safety net for a
+    /// pathological thread, not a paging cap - <see cref="MailConversationResult.TotalItemCount"/>
+    /// reports what was found so hitting it is never silent.
+    /// </summary>
+    private const int ThreadSafetyLimit = 500;
+
     private static readonly Dictionary<string, Outlook.OlDefaultFolders> FolderAliases = new(StringComparer.OrdinalIgnoreCase)
     {
         ["inbox"] = Outlook.OlDefaultFolders.olFolderInbox,
@@ -156,6 +163,240 @@ public class MailCommands : IMailCommands
             receivedBefore,
             hasAttachment,
             cursor);
+    }
+
+    /// <summary>
+    /// Returns every message in one mail thread, oldest first, across folders (#39).
+    ///
+    /// <para>
+    /// The thread is enumerated from Outlook's own conversation view (<c>Conversation.GetTable</c>)
+    /// rather than by matching subjects, which is what makes it correct across folders: a reply
+    /// filed in Sent Items and the original in the Inbox are one conversation to Outlook and no
+    /// folder-scoped listing can ever assemble them.
+    /// </para>
+    ///
+    /// <para>
+    /// Each entry is then opened to read its sender, timestamp and folder. That is one item open per
+    /// thread message - threads are small, and the alternative (projecting columns off the table) is
+    /// unreliable for drafts and non-mail entries, which carry different properties. The scan is
+    /// bounded by <see cref="ThreadSafetyLimit"/> regardless.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailConversationResult GetConversation(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        int maxCount = 50,
+        bool includeBodyPreview = false)
+    {
+        int boundedMaxCount = Math.Clamp(maxCount, 1, 100);
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailGetConversation",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+                Outlook.Conversation? conversation = null;
+                Outlook.Table? table = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return new MailConversationResult
+                        {
+                            Success = false,
+                            ErrorMessage = string.IsNullOrWhiteSpace(entryId)
+                                ? "No active Outlook mail item is available to read a conversation from."
+                                : "The requested Outlook mail item could not be resolved, so its conversation cannot be read."
+                        };
+                    }
+
+                    string? conversationId = SafeGet(() => mail.ConversationID);
+                    string? conversationTopic = SafeGet(() => mail.ConversationTopic);
+                    string? itemStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
+
+                    conversation = SafeGetConversation(mail);
+                    if (conversation == null)
+                    {
+                        // Deliberately a failure, not an empty success. "This message has no replies"
+                        // and "this store cannot tell you whether it has replies" are different
+                        // answers, and reporting the second as the first is exactly the confidently
+                        // wrong answer this surface must never give.
+                        return new MailConversationResult
+                        {
+                            Success = false,
+                            ConversationSupported = false,
+                            ConversationId = conversationId,
+                            ConversationTopic = conversationTopic,
+                            ErrorMessage = "This message's store does not provide a conversation view, so its thread cannot be assembled. "
+                                + "Fall back to mail.search on the conversation topic, and treat the result as a guess rather than the thread."
+                        };
+                    }
+
+                    table = conversation.GetTable();
+                    List<string> threadEntryIds = ReadThreadEntryIds(table);
+
+                    var messages = new List<MailSummaryInfo>(threadEntryIds.Count);
+                    int skipped = 0;
+
+                    foreach (string threadEntryId in threadEntryIds)
+                    {
+                        object? item = null;
+                        Outlook.MailItem? threadMail = null;
+                        Outlook.MAPIFolder? parent = null;
+
+                        try
+                        {
+                            item = session.GetItemFromID(
+                                threadEntryId,
+                                string.IsNullOrWhiteSpace(itemStoreId) ? Type.Missing : itemStoreId);
+                            threadMail = item as Outlook.MailItem;
+
+                            if (threadMail == null)
+                            {
+                                // A meeting request or delivery report filed into the same
+                                // conversation. Counted rather than dropped silently, so a caller
+                                // can see why the totals differ.
+                                skipped++;
+                                continue;
+                            }
+
+                            MailSummaryInfo summary = CreateMailSummary(threadMail, includeBodyPreview);
+                            parent = threadMail.Parent as Outlook.MAPIFolder;
+                            summary.FolderPath = OutlookInteropRunner.GetFolderPath(parent);
+                            messages.Add(summary);
+                        }
+                        catch (COMException)
+                        {
+                            // An entry the conversation still lists but the store can no longer
+                            // return - deleted mid-read, or in a store this profile cannot open.
+                            skipped++;
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref parent);
+                            OutlookInteropRunner.ReleaseComObject(ref threadMail);
+                            OutlookInteropRunner.ReleaseComObject(ref item);
+                        }
+                    }
+
+                    // Reading order. A thread returned newest-first, or in store order, is not a
+                    // thread a caller can read. Items with no timestamp at all sort last rather than
+                    // vanishing.
+                    List<MailSummaryInfo> ordered = [.. messages
+                        .OrderBy(m => m.ReceivedTime ?? m.SentOn ?? DateTimeOffset.MaxValue)];
+
+                    bool truncated = ordered.Count > boundedMaxCount;
+                    List<MailSummaryInfo> page = truncated
+                        ? [.. ordered.Take(boundedMaxCount)]
+                        : ordered;
+
+                    return new MailConversationResult
+                    {
+                        Success = true,
+                        ConversationSupported = true,
+                        ConversationId = conversationId,
+                        ConversationTopic = conversationTopic,
+                        TotalItemCount = threadEntryIds.Count,
+                        ReturnedCount = page.Count,
+                        SkippedItemCount = skipped,
+                        Truncated = truncated,
+                        SortedBy = "receivedTime",
+                        SortDirection = "ascending",
+                        Messages = page
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref table);
+                    OutlookInteropRunner.ReleaseComObject(ref conversation);
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailConversationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to read the Outlook conversation: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Pulls the entry ids out of a conversation table. Only <c>EntryID</c> is requested: the
+    /// remaining default columns are read for every row and never used, and their meaning varies by
+    /// item type.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static List<string> ReadThreadEntryIds(Outlook.Table table)
+    {
+        var entryIds = new List<string>();
+
+        table.Columns.RemoveAll();
+        table.Columns.Add("EntryID");
+
+        while (!table.EndOfTable && entryIds.Count < ThreadSafetyLimit)
+        {
+            Outlook.Row? row = null;
+
+            try
+            {
+                row = table.GetNextRow();
+                if (row?["EntryID"] is string value && !string.IsNullOrWhiteSpace(value))
+                {
+                    entryIds.Add(value);
+                }
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref row);
+            }
+        }
+
+        return entryIds;
+    }
+
+    /// <summary>
+    /// <c>MailItem.GetConversation</c> returns null on stores without conversation view, and throws
+    /// on some of them instead. Both mean the same thing to a caller, so both are normalised to null
+    /// here and reported explicitly by the caller rather than surfacing as an opaque COM failure.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Conversation? SafeGetConversation(Outlook.MailItem mail)
+    {
+        try
+        {
+            return mail.GetConversation();
+        }
+        catch (COMException)
+        {
+            return null;
+        }
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -1193,6 +1434,8 @@ public class MailCommands : IMailCommands
                 SenderName = SafeGet(() => mail.SenderName),
                 SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress, nameof(ActiveMailResult.SenderEmailAddress), accessDenied),
                 CurrentFolderPath = OutlookInteropRunner.GetFolderPath(parentFolder),
+                ConversationId = SafeGet(() => mail.ConversationID),
+                ConversationTopic = SafeGet(() => mail.ConversationTopic),
                 BodyPreview = OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body)),
                 Categories = ParseCategories(SafeGet(() => mail.Categories)),
                 AccessDenied = accessDenied.Count > 0 ? accessDenied : null,
@@ -1796,6 +2039,8 @@ public class MailCommands : IMailCommands
             SenderEmailAddress = SafeGet(() => mail.SenderEmailAddress, nameof(MailSummaryInfo.SenderEmailAddress), accessDenied),
             To = SafeGet(() => mail.To, nameof(MailSummaryInfo.To), accessDenied),
             Cc = SafeGet(() => mail.CC, nameof(MailSummaryInfo.Cc), accessDenied),
+            ConversationId = SafeGet(() => mail.ConversationID),
+            ConversationTopic = SafeGet(() => mail.ConversationTopic),
             BodyPreview = includeBodyPreview
                 ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body))
                 : null,

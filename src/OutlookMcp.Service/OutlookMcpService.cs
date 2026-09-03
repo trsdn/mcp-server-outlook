@@ -3,6 +3,7 @@ using System.Text.Json;
 using OutlookMcp.Core.Commands.Attachment;
 using OutlookMcp.Core.Commands.Application;
 using OutlookMcp.Core.Commands.Calendar;
+using OutlookMcp.Core.Commands.Contact;
 using OutlookMcp.Core.Commands.Folder;
 using OutlookMcp.Core.Commands.Mail;
 using OutlookMcp.Service.Rpc;
@@ -32,6 +33,7 @@ public sealed class OutlookMcpService : IDisposable
     private readonly AttachmentCommands _attachmentCommands = new();
     private readonly MailCommands _mailCommands = new();
     private readonly CalendarCommands _calendarCommands = new();
+    private readonly ContactCommands _contactCommands = new();
 
     public OutlookMcpService()
     {
@@ -178,6 +180,7 @@ public sealed class OutlookMcpService : IDisposable
                 "application" => DispatchApplicationSessionless(action, request),
                 "attachment" => DispatchAttachmentSessionless(action, request),
                 "calendar" => DispatchCalendarSessionless(action, request),
+                "contact" => DispatchContactSessionless(action, request),
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
                 _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown command category: {category}" }
@@ -355,6 +358,14 @@ public sealed class OutlookMcpService : IDisposable
             return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
 
         return WrapResult(ServiceRegistry.Calendar.DispatchToCore(_calendarCommands, action, request.Args));
+    }
+
+    private ServiceResponse DispatchContactSessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Contact.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Contact.DispatchToCore(_contactCommands, action, request.Args));
     }
 
     private ServiceResponse DispatchFolderSessionless(string actionString, ServiceRequest request)

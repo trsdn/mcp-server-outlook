@@ -522,8 +522,37 @@ Not covered: emptying a folder in place. Delete the items with `mail.delete`, or
 ## What this surface does not do
 
 There is no window, visibility, or "watch me work" control. Outlook stays as the user left it.
-Contacts, tasks, and rules are not exposed. If a user asks for one of these, say so plainly rather
-than approximating it with mail operations.
+Tasks are not exposed. If a user asks for one, say so plainly rather than approximating it with
+mail operations.
+
+## A Contacts folder is not all contacts
+
+`contact.list` returns two lists, and a Contacts folder holds distribution lists as well as people.
+
+`contacts` holds the people. `distributionLists` holds the groups, each with its `memberCount`.
+*Who is in the team list?* is answered entirely by `distributionLists`, so a count built from
+`contacts` alone will be confidently short. On a real address book of 83 items, 82 were people and
+one was a distribution list of 13 members.
+
+`contacts.length + distributionLists.length + skippedItemCount` always equals `scannedItemCount`.
+If it does not, something was dropped and the result is not trustworthy - say so.
+
+Two further traps:
+
+- `totalItemCount` is the size of the folder; `scannedItemCount` is how many items were examined.
+  When `truncated` is true they differ, and the listing is a first page, not the address book.
+- **Some contacts have no name.** Real address books contain entries whose first name, last name,
+  company and email are all blank; those come back as `(contact with no name)`. Names are not unique
+  either. `entryId` is the only reliable handle - use it for `read`, `update` and `delete` rather
+  than matching on a display name.
+
+`update` writes only the fields you pass. Omitting a field leaves it alone; passing an empty string
+clears it. To blank a phone number, pass `""`, not `null`.
+
+**Outlook rewrites what you store.** A phone number written as `+1 555 0100` reads back as
+`+1 (555) 0100`, because Outlook canonicalises it on save. Do not report a write as failed because
+the value you read back differs from the value you sent, and do not compare contacts by string
+equality on a phone number.
 
 ## A thread is not all mail
 

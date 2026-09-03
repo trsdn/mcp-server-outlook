@@ -104,7 +104,8 @@ public class MailCommands : IMailCommands
         string? subjectContains = null,
         string? receivedAfter = null,
         string? receivedBefore = null,
-        bool? hasAttachment = null)
+        bool? hasAttachment = null,
+        string? cursor = null)
         => ExecuteMailList(
             "OutlookMailList",
             folder,
@@ -116,7 +117,8 @@ public class MailCommands : IMailCommands
             subjectContains,
             receivedAfter,
             receivedBefore,
-            hasAttachment);
+            hasAttachment,
+            cursor);
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailListResult Search(
@@ -129,7 +131,8 @@ public class MailCommands : IMailCommands
         string? subjectContains = null,
         string? receivedAfter = null,
         string? receivedBefore = null,
-        bool? hasAttachment = null)
+        bool? hasAttachment = null,
+        string? cursor = null)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -151,7 +154,8 @@ public class MailCommands : IMailCommands
             subjectContains,
             receivedAfter,
             receivedBefore,
-            hasAttachment);
+            hasAttachment,
+            cursor);
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -1217,7 +1221,8 @@ public class MailCommands : IMailCommands
         string? subjectContains = null,
         string? receivedAfter = null,
         string? receivedBefore = null,
-        bool? hasAttachment = null)
+        bool? hasAttachment = null,
+        string? cursor = null)
     {
         int boundedMaxCount = Math.Clamp(maxCount, 1, 100);
         // Safety net only (not a "found" cutoff): protects against pathologically slow scans of
@@ -1251,6 +1256,41 @@ public class MailCommands : IMailCommands
             parsedAfter,
             parsedBefore,
             hasAttachment);
+
+        // A cursor is bound to the exact query that minted it (#43). maxCount is deliberately not
+        // part of the fingerprint: changing page size part-way through a walk is legitimate.
+        string fingerprint = MailPageCursor.BuildFingerprint(
+            folder, query, unreadOnly, fromAddress, subjectContains,
+            receivedAfter, receivedBefore, hasAttachment);
+
+        MailPageCursor? page = null;
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            if (!MailPageCursor.TryDecode(cursor, fingerprint, out page, out string? cursorError))
+            {
+                // Deliberately a hard failure rather than a silent restart. Quietly returning page
+                // one would make a caller looping on hasMore never terminate, and a caller checking
+                // for anything past the first page conclude there was nothing there.
+                return new MailListResult { Success = false, ErrorMessage = cursorError };
+            }
+
+            // Narrow the server-side filter to the cursor boundary as well, so continuing a walk
+            // does not re-scan every page already visited. The DASL literal has minute resolution
+            // and carries slack in the widening direction, so this bound is over-inclusive by
+            // design -- the exact comparison happens client-side below, where being wrong is
+            // recoverable.
+            DateTimeOffset boundary = page!.LastReceived;
+            DateTimeOffset effectiveBefore =
+                parsedBefore.HasValue && parsedBefore.Value < boundary ? parsedBefore.Value : boundary;
+
+            restrictFilter = MailRestrictFilter.Build(
+                unreadOnly,
+                fromAddress,
+                subjectContains,
+                parsedAfter,
+                effectiveBefore,
+                hasAttachment);
+        }
 
         return OutlookInteropRunner.Execute(
             operationName,
@@ -1310,10 +1350,21 @@ public class MailCommands : IMailCommands
                         FolderName = SafeGet(() => resolvedFolder.Name),
                         FolderPath = OutlookInteropRunner.GetFolderPath(resolvedFolder),
                         Query = query,
-                        TotalItemCount = totalItemCount
+                        TotalItemCount = totalItemCount,
+                        SortedBy = "receivedTime",
+                        SortDirection = "descending"
                     };
 
                     int scanned = 0;
+
+                    // Rolling record of the tied band at the frontier of the scan: the received time
+                    // of the last item examined, and every entry id examined at that exact instant.
+                    // Received times are not unique, so a cursor pointing only at a timestamp would
+                    // either repeat that band or skip the rest of it. Carrying the ids makes the
+                    // boundary exact without assuming Outlook orders ties identically twice.
+                    DateTimeOffset? boundaryTime = null;
+                    var boundaryIds = new List<string>();
+
                     for (int index = 1;
                          index <= scanCount && scanned < ScanSafetyLimit && result.Messages.Count < boundedMaxCount;
                          index++)
@@ -1329,6 +1380,30 @@ public class MailCommands : IMailCommands
                             if (mail == null)
                             {
                                 continue;
+                            }
+
+                            DateTimeOffset? received = SafeGetDateTimeOffset(() => mail.ReceivedTime);
+                            string? entryId = SafeGet(() => mail.EntryID);
+
+                            if (received.HasValue)
+                            {
+                                DateTimeOffset receivedUtc = received.Value.ToUniversalTime();
+
+                                if (page != null && !page.Includes(receivedUtc, entryId))
+                                {
+                                    continue;
+                                }
+
+                                if (boundaryTime != receivedUtc)
+                                {
+                                    boundaryTime = receivedUtc;
+                                    boundaryIds.Clear();
+                                }
+
+                                if (entryId != null)
+                                {
+                                    boundaryIds.Add(entryId);
+                                }
                             }
 
                             // Applied even when Restrict succeeded. The DASL filter is deliberately
@@ -1361,6 +1436,16 @@ public class MailCommands : IMailCommands
                     // because the result cap (maxCount) was hit first or the safety limit was --
                     // either way, "no more results" must not be inferred from this response alone.
                     result.Truncated = scanned < scanCount;
+
+                    // A continuation is only offered when this call actually advanced the frontier.
+                    // Handing back a cursor that re-scans the same band would let a caller loop
+                    // forever believing it was making progress.
+                    if (result.Truncated && boundaryTime.HasValue)
+                    {
+                        result.NextCursor = MailPageCursor.Encode(fingerprint, boundaryTime.Value, boundaryIds);
+                        result.HasMore = true;
+                    }
+
                     return result;
                 }
                 finally

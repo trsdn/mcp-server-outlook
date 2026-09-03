@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`mail.list` and `mail.search` can be paged past the first result page** (#43). Both accept a
+  `cursor` and return `nextCursor`, `hasMore`, `sortedBy` and `sortDirection`.
+
+  Previously a response could only report `truncated: true`. That tells a caller there is more mail
+  but gives them no way to reach it: re-issuing the same call returns the same first page forever,
+  and there was no offset to advance. The honest reading of a truncated response was "some matches
+  exist and you cannot see the rest".
+
+  The cursor is a keyset token, not an offset. It records the received time of the last item
+  examined, so a page boundary is a position in the ordering rather than a position in a list, and
+  mail arriving mid-walk does not shift every subsequent page by one - which is how an offset
+  produces a duplicate and a silent miss at the same time. Because received times are not unique, it
+  also carries the entry ids seen at exactly that instant and re-scans that band, so tied timestamps
+  neither repeat nor disappear.
+
+  A cursor is bound to the query that minted it and is rejected if replayed against a different
+  folder, query or filter. `maxCount` is deliberately excluded from that binding, so page size may
+  change part-way through a walk. An unreadable or stale cursor is a clean failure rather than a
+  silent restart: quietly returning page one would make a caller looping on `hasMore` never
+  terminate.
+
+  This is a live keyset walk, not a snapshot. Within the range walked nothing is returned twice and
+  nothing is silently skipped; mail deleted mid-walk will not appear, and mail arriving above the
+  boundary is not retro-fitted into a page already passed.
+
 ### Fixed
 
 - **`mail.search` no longer silently misses terms buried in long message bodies** (#42). The

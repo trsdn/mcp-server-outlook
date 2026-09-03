@@ -58,6 +58,10 @@ message.
 folder and by count. Read full bodies with `mail.read` only for the items you actually need, rather
 than pulling bodies for an entire folder.
 
+A single call returns one page. If the response says `hasMore: true`, do not report the result as
+complete - either page through with `cursor` until `hasMore` is false, or say plainly that you only
+looked at part of the folder. "I found no such mail" is wrong when there was more you did not read.
+
 ## Rule 7: Report what you did, in the user's terms
 
 Never leave a tool call as the entire response.

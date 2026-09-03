@@ -475,6 +475,33 @@ public class MailListResult : ResultBase
     /// </summary>
     public bool Truncated { get; set; }
 
+    /// <summary>
+    /// Opaque continuation token for the next page, or <see langword="null"/> when this response
+    /// reached the end of the result set. Pass it back unchanged as <c>cursor</c> on an otherwise
+    /// identical call. See <see cref="HasMore"/> for the condition to loop on, and #43.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NextCursor { get; set; }
+
+    /// <summary>
+    /// True when a further page can be retrieved with <see cref="NextCursor"/>. This is the flag to
+    /// drive a paging loop with; <see cref="Truncated"/> only reports that this call stopped early
+    /// and says nothing about whether continuing is possible.
+    /// </summary>
+    public bool HasMore { get; set; }
+
+    /// <summary>
+    /// The property results are ordered by. Paging is a keyset walk over this ordering rather than a
+    /// numeric offset, so it is stated explicitly instead of left as an implementation detail a
+    /// caller has to infer (#43).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SortedBy { get; set; }
+
+    /// <summary>Direction of <see cref="SortedBy"/>: <c>descending</c> (newest first).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SortDirection { get; set; }
+
     public List<MailSummaryInfo> Messages { get; set; } = [];
 }
 

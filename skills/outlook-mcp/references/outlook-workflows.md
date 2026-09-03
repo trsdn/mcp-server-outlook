@@ -39,6 +39,32 @@ can rather than relying on it alone in a large folder: the structured filters de
 have to be opened.
 
 
+## Read past the first page
+
+A single `mail.list` or `mail.search` call returns at most one page. When the response has
+`hasMore: true` there is more to see, and the only correct way to reach it is to pass `nextCursor`
+straight back:
+
+```
+1. mail.list(folder: <inbox>, subjectContains: "invoice")   → hasMore: true, nextCursor: "..."
+2. mail.list(folder: <inbox>, subjectContains: "invoice", cursor: <nextCursor>)
+3. repeat until hasMore is false
+```
+
+Two rules make this safe:
+
+- **Never conclude "there is no such mail" while `hasMore` is true.** A short or empty page means
+  this call stopped early, not that the folder holds nothing further. Keep paging, or tell the user
+  the search was incomplete.
+- **A cursor only continues the query that produced it.** Keep `folder`, `query` and every filter
+  identical across the walk; changing any of them is rejected, and you must restart without a
+  cursor. `maxCount` is the exception - you may change page size mid-walk.
+
+Do not try to build your own paging out of `receivedBefore`. Results are ordered by `receivedTime`
+descending (`sortedBy` and `sortDirection` say so explicitly), and the cursor already handles
+messages that share a received time; a hand-rolled date window silently drops them.
+
+
 ## Reply to the message the user is looking at
 
 ```

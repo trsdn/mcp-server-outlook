@@ -45,6 +45,17 @@ internal static class MailRestrictFilter
     private const string DisplayCcProperty = "urn:schemas:httpmail:displaycc";
 
     /// <summary>
+    /// <c>PR_FLAG_STATUS</c>. There is no <c>urn:schemas:httpmail:</c> equivalent that carries the
+    /// follow-up state, so this is addressed by MAPI property tag: <c>0x1090</c> with type
+    /// <c>PT_LONG</c> (<c>0003</c>). Verified against a live mailbox rather than inferred - a
+    /// mis-named property makes <c>Restrict</c> match nothing and reports it as "no such mail".
+    /// </summary>
+    private const string FlagStatusProperty = "http://schemas.microsoft.com/mapi/proptag/0x10900003";
+
+    /// <summary><c>olFlagMarked</c> - a follow-up that is still outstanding.</summary>
+    private const int FlagMarked = 2;
+
+    /// <summary>
     /// The fields a full-text query is asked against, in the order they are emitted.
     ///
     /// <para>
@@ -75,6 +86,7 @@ internal static class MailRestrictFilter
         DateTimeOffset? receivedAfter = null,
         DateTimeOffset? receivedBefore = null,
         bool? hasAttachment = null,
+        bool flaggedOnly = false,
         string? fullTextQuery = null)
     {
         var clauses = new List<string>();
@@ -82,6 +94,13 @@ internal static class MailRestrictFilter
         if (unreadOnly)
         {
             clauses.Add($"{Quote(ReadProperty)} = 0");
+        }
+
+        // Deliberately "= 2" and not "<> 0". A completed flag is finished work, and returning it
+        // under "flagged" would put items the user has already dealt with back on their list.
+        if (flaggedOnly)
+        {
+            clauses.Add($"{Quote(FlagStatusProperty)} = {FlagMarked}");
         }
 
         if (TryBuildContains(SubjectProperty, subjectContains, out string? subjectClause))

@@ -27,6 +27,41 @@ public class MailRestrictFilterTests
         Assert.Null(filter);
     }
 
+    /// <summary>
+    /// "Flagged" must mean the flag is still outstanding, not merely that a flag was ever raised.
+    /// Matching completed items too would answer "what still needs follow-up?" with work the user
+    /// has already finished - the one answer that makes the filter worse than not having it.
+    /// </summary>
+    [Fact]
+    public void Build_FlaggedOnly_MatchesOutstandingFlagsAndNotCompletedOnes()
+    {
+        string? filter = MailRestrictFilter.Build(flaggedOnly: true);
+
+        Assert.Equal(
+            "@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x10900003\" = 2",
+            filter);
+    }
+
+    [Fact]
+    public void Build_FlaggedOnlyFalse_AddsNoClause()
+    {
+        // Not asking for flagged mail is not the same as asking for unflagged mail.
+        string? filter = MailRestrictFilter.Build(flaggedOnly: false);
+
+        Assert.Null(filter);
+    }
+
+    [Fact]
+    public void Build_FlaggedOnlyWithOtherPredicates_CombinesWithAnd()
+    {
+        string? filter = MailRestrictFilter.Build(unreadOnly: true, flaggedOnly: true);
+
+        Assert.NotNull(filter);
+        Assert.Contains(" AND ", filter, StringComparison.Ordinal);
+        Assert.Contains("0x10900003\" = 2", filter, StringComparison.Ordinal);
+        Assert.Contains("\"urn:schemas:httpmail:read\" = 0", filter, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Build_UnreadOnly_UsesDaslReadFlag()
     {

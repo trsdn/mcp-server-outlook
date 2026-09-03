@@ -46,6 +46,9 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "so completing a draft is refused with an explanation. read, list and search all report flagStatus, "
     + "always - an unflagged message reports 'none' rather than omitting the field - plus flagRequest and "
     + "flagDueDate when set, so 'what still needs follow-up' costs no extra call per message. "
+    + "list and search also accept flaggedOnly, which Outlook evaluates over the folder rather than the "
+    + "server scanning it, so 'show me my outstanding follow-ups' is one cheap call. It returns only "
+    + "outstanding flags: a completed flag is finished work and is excluded. "
     + "create-draft, reply, reply-all, forward and set-body all accept bodyFormat, which is 'plain' (the default) "
     + "or 'html'. Pass 'html' when the body argument is markup you want rendered - lists, links, emphasis, tables. "
     + "Leave it as 'plain' for ordinary text: plain text is escaped rather than interpreted, so a body containing "
@@ -82,6 +85,7 @@ public interface IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
+        bool flaggedOnly = false,
         string? cursor = null);
 
     [ServiceAction("search", Destructive = false)]
@@ -96,6 +100,7 @@ public interface IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
+        bool flaggedOnly = false,
         string? cursor = null,
         string? searchMode = null);
 
@@ -224,3 +229,4 @@ public interface IMailCommands
         string? storeId = null,
         bool useActiveMail = true);
 }
+

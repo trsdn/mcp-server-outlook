@@ -294,12 +294,18 @@ about flags" - the two would otherwise look identical and only one of them means
 do. `flagRequest` (the label) and `flagDueDate` appear when they are set.
 
 That means "what still needs following up?" is answerable from a single `mail.list` call. Do not read
-each message in turn to find out.
+each message in turn to find out, and do not list everything and filter client-side either - pass
+`flaggedOnly: true` and Outlook does the work over the folder before anything is handed back.
 
 ```
-1. mail.list(folder: "inbox", maxCount: 100)   → filter for flagStatus == "flagged"
+1. mail.list(folder: "inbox", maxCount: 100, flaggedOnly: true)
 2. mail.set-flag(entryId: ..., flagStatus: "complete")
 ```
+
+`flaggedOnly` returns **outstanding** flags only. A completed flag is finished work, so it is
+excluded - otherwise every item the user has already dealt with would come straight back onto their
+to-do list. It combines with the other filters, so `flaggedOnly` plus `fromAddress` answers "what am
+I still on the hook for from this person".
 
 `complete` and `none` are not interchangeable. `complete` says the work was done; `none` says it was
 never raised. Clearing a flag the user has finished with throws away the record that they finished

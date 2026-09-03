@@ -112,6 +112,7 @@ public class MailCommands : IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
+        bool flaggedOnly = false,
         string? cursor = null)
         => ExecuteMailList(
             "OutlookMailList",
@@ -125,6 +126,7 @@ public class MailCommands : IMailCommands
             receivedAfter,
             receivedBefore,
             hasAttachment,
+            flaggedOnly,
             cursor);
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -139,6 +141,7 @@ public class MailCommands : IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
+        bool flaggedOnly = false,
         string? cursor = null,
         string? searchMode = null)
     {
@@ -163,6 +166,7 @@ public class MailCommands : IMailCommands
             receivedAfter,
             receivedBefore,
             hasAttachment,
+            flaggedOnly,
             cursor,
             searchMode);
     }
@@ -1925,6 +1929,7 @@ public class MailCommands : IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
+        bool flaggedOnly = false,
         string? cursor = null,
         string? searchMode = null)
     {
@@ -1972,13 +1977,14 @@ public class MailCommands : IMailCommands
             parsedAfter,
             parsedBefore,
             hasAttachment,
+            flaggedOnly,
             pushedDownQuery);
 
         // A cursor is bound to the exact query that minted it (#43). maxCount is deliberately not
         // part of the fingerprint: changing page size part-way through a walk is legitimate.
         string fingerprint = MailPageCursor.BuildFingerprint(
             folder, query, unreadOnly, fromAddress, subjectContains,
-            receivedAfter, receivedBefore, hasAttachment, searchMode);
+            receivedAfter, receivedBefore, hasAttachment, flaggedOnly, searchMode);
 
         MailPageCursor? page = null;
         if (!string.IsNullOrWhiteSpace(cursor))
@@ -2007,6 +2013,7 @@ public class MailCommands : IMailCommands
                 parsedAfter,
                 effectiveBefore,
                 hasAttachment,
+                flaggedOnly,
                 pushedDownQuery);
         }
 
@@ -2172,11 +2179,11 @@ public class MailCommands : IMailCommands
                             bool matches = mail != null
                                 ? MatchesStructuredFilters(
                                       mail, unreadOnly, fromAddress, subjectContains,
-                                      parsedAfter, parsedBefore, hasAttachment)
+                                      parsedAfter, parsedBefore, hasAttachment, flaggedOnly)
                                   && MatchesQuery(mail, clientSideQuery)
                                 : MatchesStructuredFilters(
                                       meeting!, unreadOnly, fromAddress, subjectContains,
-                                      parsedAfter, parsedBefore, hasAttachment)
+                                      parsedAfter, parsedBefore, hasAttachment, flaggedOnly)
                                   && MatchesQuery(meeting!, clientSideQuery);
 
                             if (!matches)
@@ -2585,9 +2592,18 @@ public class MailCommands : IMailCommands
         string? subjectContains,
         DateTimeOffset? receivedAfter,
         DateTimeOffset? receivedBefore,
-        bool? hasAttachment)
+        bool? hasAttachment,
+        bool flaggedOnly)
     {
         if (unreadOnly && !SafeGetBool(() => mail.UnRead))
+        {
+            return false;
+        }
+
+        // Restrict already excludes these, but the DASL filter is allowed to be over-inclusive by
+        // design and a caller can reach this path with no filter pushed down at all. Checking here
+        // means "flagged" always means outstanding, never merely "was flagged once".
+        if (flaggedOnly && MapFlagStatus(SafeGetInt(() => (int)mail.FlagStatus)) != "flagged")
         {
             return false;
         }
@@ -2849,6 +2865,8 @@ public class MailCommands : IMailCommands
                 ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => meeting.Body))
                 : null,
             Categories = ParseCategories(SafeGet(() => meeting.Categories)),
+            FlagStatus = MapFlagStatus(SafeGetInt(() => (int)meeting.FlagStatus)),
+            FlagRequest = NullIfBlank(SafeGet(() => meeting.FlagRequest)),
             Unread = SafeGetBool(() => meeting.UnRead),
             IsDraft = false,
             Importance = SafeGetInt(() => (int)meeting.Importance),
@@ -2901,9 +2919,17 @@ public class MailCommands : IMailCommands
         string? subjectContains,
         DateTimeOffset? receivedAfter,
         DateTimeOffset? receivedBefore,
-        bool? hasAttachment)
+        bool? hasAttachment,
+        bool flaggedOnly)
     {
         if (unreadOnly && !SafeGetBool(() => meeting.UnRead))
+        {
+            return false;
+        }
+
+        // A meeting request carries the same follow-up flag as a message, so it is filtered the same
+        // way rather than being dropped from flagged results for being a different item type.
+        if (flaggedOnly && MapFlagStatus(SafeGetInt(() => (int)meeting.FlagStatus)) != "flagged")
         {
             return false;
         }
@@ -3012,5 +3038,7 @@ public class MailCommands : IMailCommands
         return names.Count > 0 ? string.Join("; ", names) : null;
     }
 }
+
+
 
 

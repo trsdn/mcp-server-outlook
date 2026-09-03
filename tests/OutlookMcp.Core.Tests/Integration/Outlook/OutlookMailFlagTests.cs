@@ -363,6 +363,85 @@ public class OutlookMailFlagTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// The filter must find flagged mail, and must not quietly hide it. An under-inclusive Restrict
+    /// is the worst failure this surface can have: Outlook drops the item before the client sees it,
+    /// so the caller is told the mail does not exist.
+    /// </summary>
+    [SkippableFact]
+    public void List_FlaggedOnly_ReturnsFlaggedMailAndExcludesUnflagged()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? flaggedId = null;
+        string? plainId = null;
+
+        try
+        {
+            flaggedId = CreateDraft(commands);
+            plainId = CreateDraft(commands);
+
+            var set = commands.SetFlag(entryId: flaggedId, useActiveMail: false, flagRequest: "Follow up");
+            Assert.True(set.Success, set.ErrorMessage);
+
+            var listed = commands.List(folder: "drafts", maxCount: 200, flaggedOnly: true);
+
+            Assert.True(listed.Success, listed.ErrorMessage);
+            Assert.Contains(listed.Messages, m => m.EntryId == flaggedId);
+            Assert.DoesNotContain(listed.Messages, m => m.EntryId == plainId);
+
+            // Everything it returns must actually be flagged, not merely "was flagged once".
+            Assert.All(listed.Messages, m => Assert.Equal("flagged", m.FlagStatus));
+        }
+        finally
+        {
+            DeleteQuietly(commands, flaggedId);
+            DeleteQuietly(commands, plainId);
+        }
+    }
+
+    /// <summary>
+    /// The filter must be pushed into Outlook rather than applied after hydrating the folder. If it
+    /// were client-side, scannedCount would climb to the folder total and the whole point - not
+    /// touching every item - would be lost while the results still looked correct.
+    /// </summary>
+    [SkippableFact]
+    public void List_FlaggedOnly_IsEvaluatedByOutlookRatherThanAfterScanningTheFolder()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        string? flaggedId = null;
+
+        try
+        {
+            flaggedId = CreateDraft(commands);
+            _ = commands.SetFlag(entryId: flaggedId, useActiveMail: false);
+
+            var all = commands.List(folder: "drafts", maxCount: 200);
+            var filtered = commands.List(folder: "drafts", maxCount: 200, flaggedOnly: true);
+
+            Assert.True(all.Success, all.ErrorMessage);
+            Assert.True(filtered.Success, filtered.ErrorMessage);
+
+            output.WriteLine($"unfiltered scanned={all.ScannedCount} filtered scanned={filtered.ScannedCount}");
+
+            Skip.If(
+                all.ScannedCount <= 1,
+                "Drafts holds too few items for the scan count to distinguish push-down from a client-side filter.");
+
+            Assert.True(
+                filtered.ScannedCount < all.ScannedCount,
+                $"Expected the flag filter to be pushed into Outlook, but it scanned {filtered.ScannedCount} " +
+                $"of {all.ScannedCount} items - the same work as no filter at all.");
+        }
+        finally
+        {
+            DeleteQuietly(commands, flaggedId);
+        }
+    }
+
     private static int ReadFlagStatus(string? entryId)
         => WithMail(entryId, mail => (int)mail.FlagStatus);
 

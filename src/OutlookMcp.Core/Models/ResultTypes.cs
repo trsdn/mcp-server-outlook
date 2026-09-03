@@ -520,6 +520,20 @@ public class ActiveMailResult : ResultBase
     public List<string> Categories { get; set; } = [];
 
     /// <summary>
+    /// Follow-up flag state: <c>none</c>, <c>flagged</c> or <c>complete</c>. Always populated so
+    /// "not flagged" is distinguishable from "flags not reported here". See #15.
+    /// </summary>
+    public string FlagStatus { get; set; } = "none";
+
+    /// <summary>The flag's label, e.g. "Follow up". Absent when nothing is flagged.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FlagRequest { get; set; }
+
+    /// <summary>When the follow-up is due, or absent when it has no date.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? FlagDueDate { get; set; }
+
+    /// <summary>
     /// Names of properties whose read was blocked by the Outlook Object Model Guard rather than
     /// the property simply being absent. See <see cref="MailSummaryInfo.AccessDenied"/>. #30.
     /// </summary>
@@ -779,6 +793,24 @@ public class MailSummaryInfo
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ItemType { get; set; }
+
+    /// <summary>
+    /// Follow-up flag state: <c>none</c>, <c>flagged</c> or <c>complete</c>. Always populated, never
+    /// omitted, so a caller can tell "this message is not flagged" from "this listing does not report
+    /// flags" - the two mean very different things when deciding what still needs attention. See #15.
+    /// </summary>
+    public string FlagStatus { get; set; } = "none";
+
+    /// <summary>The flag's label, e.g. "Follow up" or "Review". Absent when nothing is flagged.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FlagRequest { get; set; }
+
+    /// <summary>
+    /// When the follow-up is due. Absent when the message is unflagged or was flagged without a date;
+    /// Outlook's far-future sentinel for "no date" is reported as absent rather than as a real date.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? FlagDueDate { get; set; }
 
     public bool Unread { get; set; }
     public bool IsDraft { get; set; }

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.Mail;
 using OutlookMcp.Core.Commands.OutlookInterop;
@@ -139,6 +140,116 @@ public class OutlookSelfSendLifecycleTests(ITestOutputHelper output)
             var afterDelete = commands.List(folder: "drafts", maxCount: 50, subjectContains: token);
             Assert.True(afterDelete.Success, afterDelete.ErrorMessage);
             Assert.Empty(afterDelete.Messages);
+        }
+        finally
+        {
+            if (!sent && !string.IsNullOrWhiteSpace(draft.EntryId))
+            {
+                TryDeleteItem(draft.EntryId!, draft.StoreId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(deliveredEntryId))
+            {
+                TryDeleteItem(deliveredEntryId!, deliveredStoreId);
+            }
+
+            PurgeStragglers(token, sent);
+        }
+    }
+
+    /// <summary>
+    /// The follow-up flag lifecycle on a genuinely received message (#15).
+    ///
+    /// <para>
+    /// Outlook refuses <c>MarkAsTask</c> and refuses to complete a flag on a draft, so the draft-based
+    /// flag tests cannot reach either path. Only a message that has actually been sent and received
+    /// can, which is why this lives here with the self-addressing safeguards rather than in the
+    /// ordinary suite.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void FlagOnReceivedMail_CanBeRaised_Completed_AndCleared()
+    {
+        string ownAddress = ResolveOwnSmtpAddress();
+        string token = Guid.NewGuid().ToString("N");
+
+        var commands = new MailCommands();
+        var draft = CreateSelfAddressedDraft(commands, ownAddress, token);
+
+        string? deliveredEntryId = null;
+        string? deliveredStoreId = null;
+        bool sent = false;
+
+        try
+        {
+            var sendResult = commands.Send(
+                entryId: draft.EntryId,
+                storeId: draft.StoreId,
+                useActiveMail: false,
+                confirm: true);
+
+            sent = sendResult.Sent || sendResult.Indeterminate;
+            Skip.If(
+                sendResult.Indeterminate,
+                "Send reported an indeterminate outcome, most likely an Object Model Guard prompt.");
+
+            Assert.True(sendResult.Success, sendResult.ErrorMessage);
+
+            var delivered = WaitForDelivery(commands, token);
+            Skip.If(
+                delivered is null,
+                $"Self-addressed message did not arrive within {DeliveryTimeout.TotalMinutes} minutes. " +
+                "That is a mail-flow delay, not a defect in this server.");
+
+            deliveredEntryId = delivered!.EntryId;
+            deliveredStoreId = delivered.StoreId;
+
+            // A received message starts unflagged, and says so rather than omitting the field.
+            Assert.Equal("none", delivered.FlagStatus);
+
+            var due = DateTime.Today.AddDays(3);
+
+            var flagged = commands.SetFlag(
+                entryId: deliveredEntryId,
+                storeId: deliveredStoreId,
+                useActiveMail: false,
+                dueDate: due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                flagRequest: "Review");
+
+            Assert.True(flagged.Success, flagged.ErrorMessage);
+
+            var afterFlag = commands.Read(entryId: deliveredEntryId, storeId: deliveredStoreId, useActiveMail: false);
+            Assert.True(afterFlag.Success, afterFlag.ErrorMessage);
+            Assert.Equal("flagged", afterFlag.FlagStatus);
+            Assert.Equal("Review", afterFlag.FlagRequest);
+            Assert.Equal(due, afterFlag.FlagDueDate!.Value.Date);
+
+            // Completing is the path a draft cannot reach at all.
+            var completed = commands.SetFlag(
+                entryId: deliveredEntryId,
+                storeId: deliveredStoreId,
+                useActiveMail: false,
+                flagStatus: "complete");
+
+            Assert.True(completed.Success, completed.ErrorMessage);
+
+            var afterComplete = commands.Read(entryId: deliveredEntryId, storeId: deliveredStoreId, useActiveMail: false);
+
+            // Completed is not unflagged. Collapsing the two would report handled work as work that
+            // was never raised.
+            Assert.Equal("complete", afterComplete.FlagStatus);
+
+            var cleared = commands.SetFlag(
+                entryId: deliveredEntryId,
+                storeId: deliveredStoreId,
+                useActiveMail: false,
+                flagStatus: "none");
+
+            Assert.True(cleared.Success, cleared.ErrorMessage);
+
+            var afterClear = commands.Read(entryId: deliveredEntryId, storeId: deliveredStoreId, useActiveMail: false);
+            Assert.Equal("none", afterClear.FlagStatus);
+            Assert.Null(afterClear.FlagDueDate);
         }
         finally
         {

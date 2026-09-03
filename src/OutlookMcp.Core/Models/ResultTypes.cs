@@ -841,6 +841,48 @@ public class CalendarItemResult : ResultBase
     public bool AllDay { get; set; }
     public bool ReminderSet { get; set; }
     public int BusyStatus { get; set; }
+
+    /// <summary>
+    /// True when the item is a meeting - it has attendees and an organiser - rather than a private
+    /// appointment. The two afford different actions, so a caller must be able to tell them apart.
+    /// </summary>
+    public bool IsMeeting { get; set; }
+
+    /// <summary>
+    /// Everybody invited, with the response each has given so far. Empty for a plain appointment.
+    /// </summary>
+    public List<MeetingAttendeeInfo> Attendees { get; set; } = [];
+}
+
+/// <summary>
+/// One invitee on a meeting.
+/// </summary>
+public class MeetingAttendeeInfo
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Address { get; set; }
+
+    /// <summary>
+    /// <c>required</c>, <c>optional</c>, <c>resource</c> or <c>organizer</c>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Type { get; set; }
+
+    /// <summary>
+    /// <c>none</c>, <c>organizer</c>, <c>tentative</c>, <c>accepted</c>, <c>declined</c> or
+    /// <c>notResponded</c>. <c>none</c> means the item is not a meeting, not that they declined.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ResponseStatus { get; set; }
+
+    /// <summary>
+    /// Whether Outlook could resolve the name against an address book or as a valid SMTP address.
+    /// An unresolved attendee will never receive the invitation.
+    /// </summary>
+    public bool Resolved { get; set; }
 }
 
 public class CalendarAppointmentResult : ResultBase
@@ -869,6 +911,29 @@ public class CalendarAppointmentResult : ResultBase
     public bool Saved { get; set; }
     public bool Displayed { get; set; }
     public bool AllDay { get; set; }
+
+    /// <summary>
+    /// True when attendees were named, so Outlook stored a meeting rather than a private appointment.
+    /// </summary>
+    public bool IsMeeting { get; set; }
+
+    /// <summary>
+    /// Whether an invitation was actually sent. Creating a meeting saves it to the caller's own
+    /// calendar and tells nobody; only <c>sendInvitation</c> mails the attendees.
+    /// </summary>
+    public bool InvitationSent { get; set; }
+
+    /// <summary>
+    /// Attendees as Outlook resolved them.
+    /// </summary>
+    public List<MeetingAttendeeInfo> Attendees { get; set; } = [];
+
+    /// <summary>
+    /// Attendees Outlook could not resolve. Non-empty means the meeting was not created: an
+    /// unresolvable attendee never receives the invitation, so saving anyway would report success
+    /// for a meeting that cannot reach the person the caller named.
+    /// </summary>
+    public List<string> UnresolvedAttendees { get; set; } = [];
 }
 
 public class CalendarMutationResult : ResultBase

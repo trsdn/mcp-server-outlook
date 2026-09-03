@@ -21,7 +21,7 @@ What is true right now:
 - the copied architecture is mature and reusable: `Core`, `Service`, `ComInterop`, generators, CLI, MCP server, VS Code extension, skills, and tests
 - the semantic surface is Outlook-only: 5 tools, 30 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
 - there is no session or batch concept: every COM call is marshalled onto a single STA thread owned by `OutlookDispatcher` (see [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md))
-- **no Outlook behaviour is verified by CI.** Integration tests need a self-hosted Windows runner with classic Outlook installed, which does not exist yet, so correctness claims rest on local runs only
+- **no Outlook behaviour is verified by CI, and none ever will be.** There is no self-hosted Windows runner with classic Outlook and there is no plan to provide one (#31, closed as not planned), so every correctness claim about Outlook rests on a local run against a real profile
 - this repo should be treated as an Outlook rebuild on top of reusable plumbing, not as a large search-and-replace exercise
 
 ## Implemented Outlook surface
@@ -48,7 +48,9 @@ The seed has since been extended to attachments and calendar. The remaining gaps
 - contacts
 - follow-up / task workflows if needed
 
-The single most important gap is not a feature: it is verification. See #31.
+The single most important gap is not a feature: it is verification, and it is a permanent one.
+Nothing enforces that Outlook behaviour was checked before a merge, because no CI job can check it.
+Run the integration tests locally against a real profile, and say plainly when you have not.
 
 ## Architecture direction
 
@@ -108,7 +110,7 @@ where they explain why decisions were made.
 1. ~~Define the Outlook-first command taxonomy.~~ Done.
 2. ~~Rebuild COM and service abstractions around Outlook objects.~~ Done (#20, ADR-002).
 3. ~~Generate Outlook CLI and MCP surfaces from that taxonomy.~~ Done (#23, #26).
-4. **Stand up CI that can actually run Outlook (#31).** Nothing else is trustworthy until this exists.
+4. ~~Stand up CI that can actually run Outlook (#31).~~ Not planned. Outlook is verified locally against a real profile, or not at all.
 5. Rewire skills and extension UX to those surfaces.
 6. Perform the final coordinated rename of inherited `OutlookMcp` internals.
 

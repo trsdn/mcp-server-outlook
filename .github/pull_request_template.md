@@ -18,9 +18,11 @@ Relates to #[issue number]
 
 ## Testing Performed
 
-> **Read this before ticking anything.** No Outlook behaviour is verified by CI (#31): there is no
-> self-hosted Windows runner with classic Outlook. Any Outlook claim below rests on a **local** run.
-> Say so explicitly rather than implying CI covered it.
+> **Read this before ticking anything.** No CI job verifies Outlook behaviour, and none ever will:
+> there is no self-hosted Windows runner with classic Outlook, and the repository owner has decided
+> there will not be one (#31, closed as not planned). Every Outlook claim below therefore rests on a
+> **local** run against a real profile. Say so explicitly rather than implying CI covered it, and if
+> you did not run it locally, say that instead of ticking the box.
 
 - [ ] Build produces zero warnings and zero errors
 - [ ] Ran the targeted test filter for the area I changed (not the full suite)

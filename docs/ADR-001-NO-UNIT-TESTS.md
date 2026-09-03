@@ -368,7 +368,7 @@ public void Mail_CreateDraft_SetSubject_Read_VerifiesMailboxState()
 - Local Outlook integration testing requires classic Outlook for Windows, already running and signed in
 - Run the test process at the same elevation level as Outlook; `GetActiveObject` cannot cross integrity levels
 - Treat tests that touch Outlook as real mailbox automation
-- Track real CI execution behind issue #31, `ENABLE_OUTLOOK_INTEGRATION_CI`, and a self-hosted runner labelled `outlook`
+- There is no CI execution of Outlook tests and none is planned (#31, closed as not planned): local runs are the only verification
 
 ---
 
@@ -445,7 +445,10 @@ Two entries deserve their caveats stated rather than buried:
 - **`OutlookDispatcherTests`** is the weakest entry here. It proves the dispatcher serializes work
   onto one STA thread, which is real and worth guarding, but it cannot prove that Outlook COM calls
   made *through* that thread behave correctly. It is a placeholder for the real regression test that
-  #20 asked for, which stays blocked until CI has an Outlook-capable runner (#31).
+  #20 asked for. That real regression test is no longer blocked on CI - #31 was closed as not
+  planned, and the Outlook-backed regression test now exists and runs locally
+  (`Execute_AfterPriorCall_SharedApplicationRemainsUsable`). What remains missing is *enforcement*,
+  not coverage: nothing makes a contributor run it.
 - **`OleMessageFilterTests`** is *not* in the table. It tests COM plumbing without COM, so it does
   not qualify - but it is currently failing on `master`, and deleting a failing test is how real
   defects get lost. Resolution is deferred to #59.
@@ -535,8 +538,8 @@ dotnet test tests\OutlookMcp.McpServer.Tests\OutlookMcp.McpServer.Tests.csproj -
 
 - **GitHub-hosted runners**: build verification and CI-safe tests only; they do not verify Outlook COM behavior.
 - **`.github\workflows\integration-tests.yml`**: wired but disabled. It reports `integration-runner-disabled` while `ENABLE_OUTLOOK_INTEGRATION_CI` is not `true`.
-- **Self-hosted Outlook runner**: required before CI can run Outlook integration tests. It must be a Windows runner labelled `outlook` with classic Outlook installed, running, and signed in. This is tracked by issue #31.
-- **Merge posture**: do not claim automated Outlook runtime verification until that runner exists and the gate is enabled.
+- **Self-hosted Outlook runner**: would be required before CI could run Outlook integration tests - a Windows runner labelled `outlook` with classic Outlook installed, running, and signed in. **There is no plan to provide one** (#31, closed as not planned).
+- **Merge posture**: never claim automated Outlook runtime verification. It does not exist and is not coming. Outlook claims rest on a local run against a real profile, or they are unverified and should be labelled as such.
 
 ---
 

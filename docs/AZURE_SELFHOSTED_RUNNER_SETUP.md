@@ -1,5 +1,11 @@
 # Azure Self-Hosted Runner Setup
 
+> **This is not planned.** The repository owner has decided there will be no self-hosted Outlook CI
+> runner ([#31](https://github.com/trsdn/mcp-server-outlook/issues/31), closed as not planned).
+> Outlook behaviour is verified by running the tests locally against a real profile, or it is not
+> verified at all. This document is kept because the workflow scaffolding is kept: if the decision is
+> ever revisited, everything needed is written down here.
+
 This document describes the minimum setup needed to activate `.github/workflows/integration-tests.yml`.
 
 ## Why a Self-Hosted Runner Is Required

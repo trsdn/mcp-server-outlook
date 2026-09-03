@@ -129,7 +129,7 @@ These same checks run in CI/CD pipelines:
 - `CoreCommandsCoverageTests` (dotnet test) runs **after every build** in:
   - `build-mcp-server.yml` - MCP Server builds
   - `build-cli.yml` - CLI builds  
-  - `integration-tests.yml` - Outlook integration runs when `ENABLE_OUTLOOK_INTEGRATION_CI=true`. It is currently **off**; no Outlook behaviour is verified by CI (#31).
+  - `integration-tests.yml` - Outlook integration would run when `ENABLE_OUTLOOK_INTEGRATION_CI=true`. It is **off and staying off**: no Outlook behaviour is verified by CI and none is planned (#31, closed as not planned).
 
 **Pipeline enforcement ensures:**
 - Pre-commit hook provides **instant local feedback**

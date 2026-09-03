@@ -443,6 +443,25 @@ internal static class OutlookInteropRunner
         return normalized[..maxLength].TrimEnd() + "...";
     }
 
+    /// <summary>
+    /// Returns a folder's path, or <see langword="null"/> when it does not have a usable one.
+    ///
+    /// <para>
+    /// The null case is not merely defensive. <c>Store.GetDefaultFolder</c> hands back a folder
+    /// object for a role the store does not actually have - an online archive with no Inbox still
+    /// answers for <c>olFolderInbox</c> - and that object is not parented in the store's tree. Its
+    /// <c>FolderPath</c> then degenerates to the folder's entry id: a long hex string that looks
+    /// like a value but cannot be passed back as a <c>folder</c> argument, because folder resolution
+    /// searches the tree by name. Verified against a real Exchange archive, where nine of ten
+    /// default roles behaved this way and only the one folder that genuinely exists returned a path.
+    /// </para>
+    ///
+    /// <para>
+    /// Returning that hex string would be the project's characteristic failure: a confident-looking
+    /// answer the caller cannot use and has no way to recognise as wrong. A real Outlook folder path
+    /// always begins with <c>\\</c>, so anything that does not is reported as absent instead. See #38.
+    /// </para>
+    /// </summary>
     internal static string? GetFolderPath(Outlook.MAPIFolder? folder)
     {
         if (folder == null)
@@ -452,7 +471,8 @@ internal static class OutlookInteropRunner
 
         try
         {
-            return folder.FolderPath;
+            string? path = folder.FolderPath;
+            return path != null && path.StartsWith(@"\\", StringComparison.Ordinal) ? path : null;
         }
         catch (COMException)
         {

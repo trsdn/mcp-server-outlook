@@ -37,58 +37,146 @@ public class FolderCommands : IFolderCommands
         ("junk", Outlook.OlDefaultFolders.olFolderJunk)
     ];
 
+    /// <summary>
+    /// Enumerates the default folder roles, optionally from a specific store (#38).
+    ///
+    /// <para>
+    /// <c>NameSpace.GetDefaultFolder</c> always reads the default delivery store, so without
+    /// <paramref name="storeId"/> this reports one mailbox's folders and says nothing about the
+    /// others existing. <c>Store.GetDefaultFolder</c> is the per-store equivalent. Note that the two
+    /// take different enums - <c>OlDefaultFolders</c> against the session, <c>OlDefaultFolders</c>
+    /// against the store as well, but a store may legitimately refuse a role it does not have (a PST
+    /// has no Outbox, an archive has no Junk), which is reported as <c>available: false</c> rather
+    /// than as a failure.
+    /// </para>
+    /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public OutlookFolderListResult ListDefault(bool includeItemCounts = false)
+    public OutlookFolderListResult ListDefault(bool includeItemCounts = false, string? storeId = null)
     {
         return OutlookInteropRunner.Execute(
             "OutlookFolderListDefault",
             (application, session) =>
             {
-                var result = new OutlookFolderListResult
-                {
-                    Success = true
-                };
+                Outlook.Store? targetStore = null;
 
-                foreach (var entry in DefaultFolders)
+                try
                 {
-                    Outlook.MAPIFolder? folder = null;
-                    Outlook.Items? items = null;
-
-                    try
+                    if (!string.IsNullOrWhiteSpace(storeId))
                     {
-                        folder = session.GetDefaultFolder(entry.Folder);
-                        int? itemCount = null;
-                        if (includeItemCounts)
+                        targetStore = FindStore(session, storeId!);
+
+                        // A store id that does not resolve must fail. Falling back to the default
+                        // store would hand back real folders with real item counts from a mailbox
+                        // the caller did not ask for, under success: true.
+                        if (targetStore == null)
                         {
-                            items = folder.Items;
-                            itemCount = items.Count;
+                            return new OutlookFolderListResult
+                            {
+                                Success = false,
+                                ErrorMessage =
+                                    $"No store in this Outlook profile has the id '{storeId}'. "
+                                    + "Use folder list-stores to discover the available store ids."
+                            };
                         }
+                    }
 
-                        result.Folders.Add(new OutlookFolderInfo
-                        {
-                            Role = entry.Role,
-                            Available = true,
-                            Name = folder.Name,
-                            FolderPath = OutlookInteropRunner.GetFolderPath(folder),
-                            ItemCount = itemCount
-                        });
-                    }
-                    catch
+                    var result = new OutlookFolderListResult
                     {
-                        result.Folders.Add(new OutlookFolderInfo
-                        {
-                            Role = entry.Role,
-                            Available = false
-                        });
-                    }
-                    finally
+                        Success = true
+                    };
+
+                    string? targetStoreId = targetStore != null ? SafeGet(() => targetStore.StoreID) : null;
+                    string? targetStoreName = targetStore != null ? SafeGet(() => targetStore.DisplayName) : null;
+
+                    foreach (var entry in DefaultFolders)
                     {
-                        OutlookInteropRunner.ReleaseComObject(ref items);
-                        OutlookInteropRunner.ReleaseComObject(ref folder);
+                        Outlook.MAPIFolder? folder = null;
+                        Outlook.Items? items = null;
+                        Outlook.Store? owningStore = null;
+
+                        try
+                        {
+                            folder = targetStore != null
+                                ? targetStore.GetDefaultFolder(entry.Folder)
+                                : session.GetDefaultFolder(entry.Folder);
+
+                            int? itemCount = null;
+                            if (includeItemCounts)
+                            {
+                                items = folder.Items;
+                                itemCount = items.Count;
+                            }
+
+                            string? folderStoreId = targetStoreId;
+                            string? folderStoreName = targetStoreName;
+
+                            if (folderStoreId == null)
+                            {
+                                owningStore = SafeGetStore(folder);
+                                folderStoreId = owningStore != null ? SafeGet(() => owningStore.StoreID) : null;
+                                folderStoreName = owningStore != null ? SafeGet(() => owningStore.DisplayName) : null;
+                            }
+
+                            string? folderPath = OutlookInteropRunner.GetFolderPath(folder);
+
+                            // A store answers for every default role whether or not it has one. An
+                            // online archive with no Inbox still returns a folder object for
+                            // olFolderInbox - but that object is not in the store's tree and has no
+                            // path, so nothing in this surface can address it. Reporting it as
+                            // available would be a confident answer to a question the store never
+                            // actually answered. See #38.
+                            if (folderPath == null)
+                            {
+                                result.Folders.Add(new OutlookFolderInfo
+                                {
+                                    Role = entry.Role,
+                                    Available = false,
+                                    StoreId = folderStoreId,
+                                    StoreName = folderStoreName,
+                                    Note =
+                                        "This store does not have a folder in this role. Outlook returns a "
+                                        + "placeholder that is not in the store's folder tree and cannot be "
+                                        + "addressed. Use folder list-children on the store's root folder to see "
+                                        + "what it does contain."
+                                });
+                                continue;
+                            }
+
+                            result.Folders.Add(new OutlookFolderInfo
+                            {
+                                Role = entry.Role,
+                                Available = true,
+                                Name = folder.Name,
+                                FolderPath = folderPath,
+                                StoreId = folderStoreId,
+                                StoreName = folderStoreName,
+                                ItemCount = itemCount
+                            });
+                        }
+                        catch
+                        {
+                            result.Folders.Add(new OutlookFolderInfo
+                            {
+                                Role = entry.Role,
+                                Available = false,
+                                StoreId = targetStoreId,
+                                StoreName = targetStoreName
+                            });
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref owningStore);
+                            OutlookInteropRunner.ReleaseComObject(ref items);
+                            OutlookInteropRunner.ReleaseComObject(ref folder);
+                        }
                     }
+
+                    return result;
                 }
-
-                return result;
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref targetStore);
+                }
             },
             ex => new OutlookFolderListResult
             {
@@ -96,6 +184,277 @@ public class FolderCommands : IFolderCommands
                 ErrorMessage = $"Failed to read Outlook default folders: {ex.Message}"
             });
     }
+
+    /// <summary>
+    /// Enumerates every store in the profile, so a caller can discover mailboxes other than the
+    /// default delivery store (#38).
+    ///
+    /// <para>
+    /// Accounts are read alongside the stores rather than exposed separately. An account is only
+    /// interesting here for the address it delivers to, and matching it onto its store here means a
+    /// caller never has to correlate two lists by id to answer "which mailbox is this?". Stores with
+    /// no delivering account - archives, imported data files - are still listed, with the account
+    /// fields absent rather than invented.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public OutlookStoreListResult ListStores()
+    {
+        return OutlookInteropRunner.Execute(
+            "OutlookFolderListStores",
+            (application, session) =>
+            {
+                Outlook.Stores? stores = null;
+                Outlook.Store? defaultStore = null;
+
+                try
+                {
+                    var result = new OutlookStoreListResult { Success = true };
+
+                    Dictionary<string, (string? Smtp, string? Name)> accountsByStoreId = ReadAccounts(session);
+
+                    defaultStore = SafeGetDefaultStore(session);
+                    string? defaultStoreId = defaultStore != null ? SafeGet(() => defaultStore.StoreID) : null;
+
+                    stores = session.Stores;
+                    int count = stores.Count;
+
+                    for (int index = 1; index <= count; index++)
+                    {
+                        Outlook.Store? store = null;
+                        Outlook.MAPIFolder? root = null;
+
+                        try
+                        {
+                            store = stores[index];
+                            string? id = SafeGet(() => store.StoreID);
+
+                            // A store with no id cannot be addressed, so listing it would advertise
+                            // something unreachable.
+                            if (string.IsNullOrWhiteSpace(id))
+                            {
+                                continue;
+                            }
+
+                            root = SafeGetRootFolder(store);
+
+                            accountsByStoreId.TryGetValue(id!, out var account);
+
+                            result.Stores.Add(new OutlookStoreInfo
+                            {
+                                StoreId = id!,
+                                DisplayName = SafeGet(() => store.DisplayName) ?? "(unnamed store)",
+                                IsDefaultStore = defaultStoreId != null
+                                    && string.Equals(id, defaultStoreId, StringComparison.Ordinal),
+                                IsDataFileStore = SafeGetBool(() => store.IsDataFileStore),
+                                ExchangeStoreType = DescribeExchangeStoreType(store),
+                                FilePath = SafeGet(() => store.FilePath),
+                                AccountSmtpAddress = account.Smtp,
+                                AccountDisplayName = account.Name,
+                                RootFolderPath = root != null ? OutlookInteropRunner.GetFolderPath(root) : null
+                            });
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref root);
+                            OutlookInteropRunner.ReleaseComObject(ref store);
+                        }
+                    }
+
+                    return result;
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref defaultStore);
+                    OutlookInteropRunner.ReleaseComObject(ref stores);
+                }
+            },
+            ex => new OutlookStoreListResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to read Outlook stores: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Maps store id to the account that delivers there. Comparison is ordinal: a store id is an
+    /// opaque hex string, so case-insensitive matching would risk conflating two distinct stores.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Dictionary<string, (string? Smtp, string? Name)> ReadAccounts(Outlook.NameSpace session)
+    {
+        var map = new Dictionary<string, (string? Smtp, string? Name)>(StringComparer.Ordinal);
+        Outlook.Accounts? accounts = null;
+
+        try
+        {
+            accounts = session.Accounts;
+            int count = accounts.Count;
+
+            for (int index = 1; index <= count; index++)
+            {
+                Outlook.Account? account = null;
+                Outlook.Store? deliveryStore = null;
+
+                try
+                {
+                    account = accounts[index];
+                    deliveryStore = SafeGetDeliveryStore(account);
+                    string? id = deliveryStore != null ? SafeGet(() => deliveryStore.StoreID) : null;
+
+                    if (!string.IsNullOrWhiteSpace(id))
+                    {
+                        map[id!] = (SafeGet(() => account.SmtpAddress), SafeGet(() => account.DisplayName));
+                    }
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref deliveryStore);
+                    OutlookInteropRunner.ReleaseComObject(ref account);
+                }
+            }
+        }
+        catch (COMException)
+        {
+            // A profile that will not enumerate accounts still has stores worth listing. The account
+            // fields are simply absent, which is honest; inventing them would not be.
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref accounts);
+        }
+
+        return map;
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Store? FindStore(Outlook.NameSpace session, string storeId)
+    {
+        Outlook.Stores? stores = null;
+
+        try
+        {
+            stores = session.Stores;
+            int count = stores.Count;
+
+            for (int index = 1; index <= count; index++)
+            {
+                Outlook.Store? store = null;
+                bool keep = false;
+
+                try
+                {
+                    store = stores[index];
+                    keep = string.Equals(SafeGet(() => store.StoreID), storeId, StringComparison.Ordinal);
+
+                    if (keep)
+                    {
+                        return store;
+                    }
+                }
+                finally
+                {
+                    if (!keep)
+                    {
+                        OutlookInteropRunner.ReleaseComObject(ref store);
+                    }
+                }
+            }
+
+            return null;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref stores);
+        }
+    }
+
+    /// <summary>
+    /// Renders <c>OlExchangeStoreType</c> as a stable camelCase name. The raw integer would be a
+    /// number a caller has to look up, and the enum name itself carries a Hungarian prefix.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? DescribeExchangeStoreType(Outlook.Store store)
+    {
+        try
+        {
+            return store.ExchangeStoreType switch
+            {
+                Outlook.OlExchangeStoreType.olPrimaryExchangeMailbox => "primaryExchangeMailbox",
+                Outlook.OlExchangeStoreType.olExchangeMailbox => "exchangeMailbox",
+                Outlook.OlExchangeStoreType.olExchangePublicFolder => "exchangePublicFolder",
+                Outlook.OlExchangeStoreType.olAdditionalExchangeMailbox => "additionalExchangeMailbox",
+                Outlook.OlExchangeStoreType.olNotExchange => "notExchange",
+                _ => null
+            };
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Store? SafeGetDefaultStore(Outlook.NameSpace session)
+    {
+        Outlook.MAPIFolder? inbox = null;
+
+        try
+        {
+            // There is no NameSpace.DefaultStore. The default delivery store is by definition the one
+            // holding the default Inbox, which is exactly what GetDefaultFolder returns.
+            inbox = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderInbox);
+            return SafeGetStore(inbox);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref inbox);
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Store? SafeGetStore(Outlook.MAPIFolder folder)
+    {
+        try
+        {
+            return folder.Store;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.MAPIFolder? SafeGetRootFolder(Outlook.Store store)
+    {
+        try
+        {
+            return store.GetRootFolder();
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Store? SafeGetDeliveryStore(Outlook.Account account)
+    {
+        try
+        {
+            return account.DeliveryStore;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public OutlookFolderListResult ListChildren(

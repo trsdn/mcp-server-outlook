@@ -311,8 +311,84 @@ public class OutlookFolderInfo
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FolderPath { get; set; }
 
+    /// <summary>
+    /// The store this folder was read from. Every store in a profile has its own Inbox, so a folder
+    /// listing that does not name its store is ambiguous on any profile with more than one - and the
+    /// caller has no way to notice. See #38.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreName { get; set; }
+
+    /// <summary>
+    /// Why a role is not available, when that needs explaining. Set when a store answers for a
+    /// default role it does not actually have - Outlook returns a folder object that is not in the
+    /// store's tree and so cannot be addressed. See #38.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Note { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ItemCount { get; set; }
+}
+
+/// <summary>
+/// The stores in the current Outlook profile - the Exchange mailbox, any archives, any PST data
+/// files, and any additional accounts. See #38.
+/// </summary>
+public class OutlookStoreListResult : ResultBase
+{
+    public List<OutlookStoreInfo> Stores { get; set; } = [];
+}
+
+public class OutlookStoreInfo
+{
+    /// <summary>
+    /// The id to pass as <c>storeId</c>. Display names are not unique - two accounts can both be
+    /// called "Archive" - so this, not the name, is what addresses a store.
+    /// </summary>
+    public string StoreId { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True for the default delivery store: the mailbox an unqualified request lands in.
+    /// </summary>
+    public bool IsDefaultStore { get; set; }
+
+    /// <summary>
+    /// True for a local data file (PST/OST opened as a data file) rather than a server mailbox.
+    /// </summary>
+    public bool IsDataFileStore { get; set; }
+
+    /// <summary>
+    /// Outlook's own classification: <c>primaryExchangeMailbox</c>, <c>deltaSyncMailbox</c>,
+    /// <c>publicFolders</c>, <c>notExchange</c>, and so on. Null when the store declines to say.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ExchangeStoreType { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FilePath { get; set; }
+
+    /// <summary>
+    /// The address of the account that delivers to this store, when one does. Null for a store no
+    /// account delivers to - an archive or an imported data file.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AccountSmtpAddress { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AccountDisplayName { get; set; }
+
+    /// <summary>
+    /// The store's root folder path, which is what a <c>folder</c> argument must start with to
+    /// address anything inside this store by path.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RootFolderPath { get; set; }
 }
 
 public class OutlookFolderItemListResult : ResultBase

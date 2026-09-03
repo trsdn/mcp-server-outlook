@@ -300,6 +300,42 @@ is absent from a truncated listing. Check `sortedBy`: if it is null the folder h
 timestamp and the order is arbitrary, so a truncated result there tells you nothing about what is
 missing.
 
+## More than one mailbox
+
+A profile usually holds several stores: the main mailbox, an online archive, sometimes a second
+account or an imported data file. **Every store has its own Inbox, Sent Items and Calendar.** An
+unqualified request only ever reaches the *default delivery store*, so `folder.list-default` on its
+own tells you about one mailbox and says nothing about the others existing.
+
+```
+1. folder.list-stores                                   → what mailboxes exist
+2. folder.list-default(storeId: "<id from step 1>")     → that mailbox's well-known folders
+3. mail.list(folder: "<folderPath from step 2>")         → read it
+```
+
+Address a store by `storeId`, never by `displayName` - two stores can share a name. A `storeId` that
+does not resolve is refused rather than falling back to the default mailbox, because reading the
+wrong account and reporting success is worse than failing.
+
+Once you have a folder path from step 2 you can pass it straight to `mail.list`, `mail.search` and
+`folder.list-children`: folder paths are absolute and already carry the store, so they reach any
+store without further qualification.
+
+Folder results name the store they came from (`storeId`, `storeName`). **If a user asks about mail
+you cannot find, check whether you are looking at the right store before concluding it does not
+exist** - an archived message is in a different store, not missing.
+
+`list-stores` also reports `isDefaultStore`, `isDataFileStore`, `exchangeStoreType` and, where an
+account delivers to the store, `accountSmtpAddress`. A store with no account is normally an archive
+or an imported data file.
+
+**A store does not necessarily have all the well-known folders.** An online archive typically has no
+Inbox, Drafts or Calendar at all. `list-default` reports those roles as `available: false` with a
+`note`; use `folder.list-children` on the store's `rootFolderPath` to see what it really contains.
+
+Not covered: another person's mailbox by delegate access. Shared and delegate mailboxes that are not
+already open in the profile are still unreachable.
+
 ## What this surface does not do
 
 There is no window, visibility, or "watch me work" control. Outlook stays as the user left it.

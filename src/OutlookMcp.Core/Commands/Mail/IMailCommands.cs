@@ -46,6 +46,11 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "so completing a draft is refused with an explanation. read, list and search all report flagStatus, "
     + "always - an unflagged message reports 'none' rather than omitting the field - plus flagRequest and "
     + "flagDueDate when set, so 'what still needs follow-up' costs no extra call per message. "
+    + "Use set-categories to apply Outlook categories, and list-categories to discover which ones exist "
+    + "before writing any. Outlook does not validate the string set-categories writes: a name that is not "
+    + "in the mailbox's list is accepted and reported as a success, then turns out to be uncolourable and "
+    + "unfilterable, so discover names rather than guessing them. Colours come back as names such as "
+    + "'yellow', never as raw enum numbers. "
     + "list and search also accept flaggedOnly, which Outlook evaluates over the folder rather than the "
     + "server scanning it, so 'show me my outstanding follow-ups' is one cheap call. It returns only "
     + "outstanding flags: a completed flag is finished work and is excluded. "
@@ -204,6 +209,9 @@ public interface IMailCommands
         string? entryId = null,
         string? storeId = null,
         bool useActiveMail = true);
+
+    [ServiceAction("list-categories")]
+    MailCategoryListResult ListCategories();
 
     [ServiceAction("set-subject")]
     MailMutationResult SetSubject(

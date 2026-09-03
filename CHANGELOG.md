@@ -26,6 +26,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   An unrecognised `flagStatus` is refused before the item is touched, so nothing is half-applied.
 
+- **`mail list-categories`** (#15). Enumerates the mailbox's master category list, so a caller can
+  discover which categories exist before writing one.
+
+  This closes a real hole in the already-shipped `set-categories`. Outlook does not validate the
+  string it writes: a name that is not in the list is accepted, reported as `success: true`, and only
+  later turns out to be a label that cannot be filtered or coloured by. A typo did not fail, it
+  quietly created dead data — the project's characteristic failure mode again.
+
+  Colours come back as names (`yellow`, `darkTeal`, or `none`), never as the raw `OlCategoryColor`
+  ordinal, because a number is not something a model can show a user or reason about. The mapping is
+  derived from the enum rather than a hand-written table of 26 entries, which would report confidently
+  wrong colours as soon as it drifted. A category with no name is skipped rather than listed, since it
+  could not be passed back to `set-categories` anyway.
+
 - **`flaggedOnly` filter on `mail list` / `mail search`** (#15, #27). Returns only messages with an
   outstanding follow-up flag. Pushed into Outlook as a DASL `Restrict` clause on
   `PR_FLAG_STATUS` — which has no `urn:schemas:httpmail:` equivalent and so is addressed by MAPI

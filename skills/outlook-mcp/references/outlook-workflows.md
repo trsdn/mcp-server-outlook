@@ -319,6 +319,28 @@ Two limits Outlook imposes, not this server:
 
 An unrecognised `flagStatus` is refused rather than guessed at, and nothing is applied.
 
+## Categories: discover before you write
+
+Outlook does **not** validate what `mail.set-categories` writes. Assigning a name that is not in the
+mailbox's list succeeds, returns `success: true`, and produces a category the user cannot filter or
+colour by. So a typo does not fail - it quietly creates a dead label.
+
+Read the list first and use a name from it:
+
+```
+1. mail.list-categories              → { name: "compliance", color: "darkPeach" }, ...
+2. mail.set-categories(entryId: ..., categories: "compliance")
+```
+
+Colours come back as names (`yellow`, `darkTeal`, or `none` for a category created without one),
+never as raw enum numbers, so you can repeat them back to the user as they appear in Outlook.
+
+If the user names a category that is not in the list, say so and offer the closest matches rather
+than writing it anyway. Creating categories is not exposed here - that is a mailbox-wide setting.
+
+`set-categories` replaces the whole set on the message, so include the existing categories from
+`mail.read` if the intent is to add one rather than to replace them all.
+
 ## Save attachments
 
 ```

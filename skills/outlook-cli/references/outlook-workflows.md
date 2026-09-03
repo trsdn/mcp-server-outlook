@@ -341,6 +341,34 @@ than writing it anyway. Creating categories is not exposed here - that is a mail
 `set-categories` replaces the whole set on the message, so include the existing categories from
 `mail.read` if the intent is to add one rather than to replace them all.
 
+## Reminders are mostly overdue
+
+`mail.list-reminders` returns what Outlook intends to remind the user about - appointments, tasks and
+flagged mail together - earliest first.
+
+The thing to know before reporting anything from it: on a long-lived mailbox **most reminders are
+overdue**, often by years. On the mailbox this was built against, 416 of 605 had already passed, the
+oldest by five years. So they are excluded by default, and the result tells you how many were held
+back:
+
+```
+mail.list-reminders()   → { reminders: [...],           // upcoming, earliest first
+                            totalCount: 605,
+                            upcomingCount: 189,
+                            overdueCount: 416 }
+```
+
+Report `overdueCount` when it is non-zero. A user shown fifty upcoming reminders and not told that
+four hundred have already lapsed has been given a tidy and misleading picture. Pass
+`upcomingOnly: false` to see them, and `maxCount` to widen the page - the counts always describe the
+whole set, not the page.
+
+`isOverdue` is derived from the due time. Do not look for a "pending" flag on the item: Outlook's
+`IsVisible` means *the reminder dialog is on screen right now*, which is false for essentially every
+reminder, and reading it as pending-ness would report a mailbox stacked with reminders as having none.
+
+Read-only. Dismissing and snoozing are not exposed.
+
 ## Rules explain missing mail
 
 Before telling a user that a folder is empty or that nothing arrived from someone, check whether a

@@ -8,6 +8,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Recurring appointments** (#33). `calendar.list` now expands a recurring series into its
+  individual occurrences, and `calendar.create-appointment` can create one.
+
+  This closes a hole that was worse than a missing feature. Outlook stores a series as a single
+  master item dated at its first occurrence, so a listing that does not ask for expansion returns
+  *nothing* for a weekly stand-up when you ask about next Tuesday - and returns it as a confident
+  empty list. An agent asked "am I free Tuesday at 10?" would have said yes.
+
+  Expansion needs both `start` and `endTime`, because a series with no end date has infinitely many
+  occurrences. The result reports `recurringExpanded` so a caller can tell whether the list is
+  complete, and says plainly when it is not. Every listed item now carries `recurrenceState`
+  (`notRecurring`, `master`, `occurrence`, `exception`), and `calendar.read` reports the stored
+  pattern including how many occurrences deviate from it.
+
+  Series creation takes `recurrenceType` (`daily`, `weekly`, `monthly`, `yearly`),
+  `recurrenceInterval`, `recurrenceDaysOfWeek`, and either `recurrenceCount` or `recurrenceEndDate`.
+  An unusable pattern is refused before anything is written, rather than quietly producing a single
+  appointment and reporting success.
+
+  Verified live: a five-day daily series created and listed back as five occurrences on five distinct
+  dates.
+
+  One trap worth recording, found only by running against a real mailbox. Outlook's Jet restriction
+  syntax (`[Start] <= '...'`) parses its date literal using the **machine's regional settings**, not
+  a fixed format. A US-formatted literal on an en-DE machine had its day and month swapped and
+  matched 2 appointments where the correctly formatted one matched 12. It fails asymmetrically -
+  a whole-day window still works, because midnight survives a mangled time - so it only breaks the
+  intraday questions where a wrong answer matters most. Note this is the *opposite* of the DASL
+  `@SQL=` filters used for mail, which take a culture-independent UTC literal.
+
 - **Answering meeting invitations** (#32). `mail.respond-to-meeting` accepts, declines or tentatively
   accepts an invitation. Previously the only thing an agent could do with one was reply to it, which
   is just mail back to the organiser and leaves the invitation unanswered - a confidently wrong

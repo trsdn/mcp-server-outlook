@@ -773,6 +773,18 @@ public class CalendarListResult : ResultBase
 
     public int TotalItemCount { get; set; }
     public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Whether occurrences of recurring series were expanded into the list. Expansion needs a bounded
+    /// range, since a series with no end date has infinitely many occurrences. When this is false the
+    /// list contains series masters only, and a recurring meeting will be missing from every date but
+    /// its first.
+    /// </summary>
+    public bool RecurringExpanded { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
+
     public List<CalendarSummaryInfo> Appointments { get; set; } = [];
 }
 
@@ -805,6 +817,64 @@ public class CalendarSummaryInfo
     public bool AllDay { get; set; }
     public bool ReminderSet { get; set; }
     public int BusyStatus { get; set; }
+
+    public bool IsRecurring { get; set; }
+
+    /// <summary>
+    /// <c>notRecurring</c>, <c>master</c>, <c>occurrence</c> or <c>exception</c>. An
+    /// <c>occurrence</c> is one instance of a series and carries the master's entry id, so editing it
+    /// by entry id edits the whole series.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecurrenceState { get; set; }
+}
+
+/// <summary>
+/// A recurrence pattern, as Outlook stores it.
+/// </summary>
+public class RecurrencePatternInfo
+{
+    /// <summary>
+    /// <c>daily</c>, <c>weekly</c>, <c>monthly</c>, <c>monthNth</c>, <c>yearly</c> or
+    /// <c>yearNth</c>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecurrenceType { get; set; }
+
+    /// <summary>How many units between occurrences - every 2 weeks, every 3 days.</summary>
+    public int Interval { get; set; }
+
+    /// <summary>Lower-case day names, for weekly patterns.</summary>
+    public List<string> DaysOfWeek { get; set; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DayOfMonth { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MonthOfYear { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? PatternStartDate { get; set; }
+
+    /// <summary>Meaningless when <c>NoEndDate</c> is true - Outlook still stores a sentinel there.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? PatternEndDate { get; set; }
+
+    public bool NoEndDate { get; set; }
+
+    /// <summary>How many occurrences the series has, when it is bounded by a count.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Occurrences { get; set; }
+
+    /// <summary>Length of a single occurrence, in minutes.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DurationMinutes { get; set; }
+
+    /// <summary>
+    /// How many occurrences differ from the pattern - moved, shortened or cancelled. Non-zero means
+    /// the pattern alone does not describe the series.
+    /// </summary>
+    public int ExceptionCount { get; set; }
 }
 
 public class CalendarItemResult : ResultBase
@@ -852,6 +922,21 @@ public class CalendarItemResult : ResultBase
     /// Everybody invited, with the response each has given so far. Empty for a plain appointment.
     /// </summary>
     public List<MeetingAttendeeInfo> Attendees { get; set; } = [];
+
+    public bool IsRecurring { get; set; }
+
+    /// <summary>
+    /// <c>notRecurring</c>, <c>master</c>, <c>occurrence</c> or <c>exception</c>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecurrenceState { get; set; }
+
+    /// <summary>
+    /// The series pattern. Null for a non-recurring item - absence means "not a series", not
+    /// "a series whose pattern could not be read", which would be reported as a failure instead.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RecurrencePatternInfo? Recurrence { get; set; }
 }
 
 /// <summary>
@@ -934,6 +1019,18 @@ public class CalendarAppointmentResult : ResultBase
     /// for a meeting that cannot reach the person the caller named.
     /// </summary>
     public List<string> UnresolvedAttendees { get; set; } = [];
+
+    /// <summary>
+    /// True when a recurrence pattern was applied, so the item is a series master rather than a
+    /// single appointment.
+    /// </summary>
+    public bool IsRecurring { get; set; }
+
+    /// <summary>
+    /// The pattern as Outlook stored it, read back after saving rather than echoed from the request.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RecurrencePatternInfo? Recurrence { get; set; }
 }
 
 /// <summary>

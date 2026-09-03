@@ -11,7 +11,13 @@ namespace OutlookMcp.Core.Commands.Calendar;
     + "Use create-appointment, update-appointment, and delete-appointment to create, modify, and permanently delete Outlook calendar items — delete-appointment and update-appointment are destructive and cannot be undone. "
     + "Naming requiredAttendees or optionalAttendees (semicolon-separated) turns a new item into a meeting; it is saved to your own calendar and nobody is told until sendInvitation is true. "
     + "Attendees Outlook cannot resolve are reported and the meeting is not created, because an unresolved attendee never receives the invitation. "
-    + "Use get-free-busy to ask when one or more people are available before proposing a time; it returns both Outlook's raw slot string and the busy periods decoded from it.")]
+    + "Use get-free-busy to ask when one or more people are available before proposing a time; it returns both Outlook's raw slot string and the busy periods decoded from it. "
+    + "Recurring series: pass recurrenceType (daily, weekly, monthly or yearly) to create-appointment to make a series, "
+    + "with recurrenceInterval, recurrenceDaysOfWeek (semicolon-separated day names, weekly only) and either "
+    + "recurrenceCount or recurrenceEndDate to bound it. list only expands a series into its individual occurrences "
+    + "when both start and endTime are given, because a series with no end date has infinitely many; it reports "
+    + "recurringExpanded so a caller can tell. Never conclude somebody is free from a listing whose recurringExpanded "
+    + "is false - it contains series masters only, so a weekly meeting is missing from every date but its first.")]
 public interface ICalendarCommands
 {
     [ServiceAction("list", Destructive = false)]
@@ -39,7 +45,12 @@ public interface ICalendarCommands
         bool display = false,
         string? requiredAttendees = null,
         string? optionalAttendees = null,
-        bool sendInvitation = false);
+        bool sendInvitation = false,
+        string? recurrenceType = null,
+        int recurrenceInterval = 1,
+        string? recurrenceDaysOfWeek = null,
+        int? recurrenceCount = null,
+        string? recurrenceEndDate = null);
 
     [ServiceAction("update-appointment", Destructive = true)]
     CalendarMutationResult UpdateAppointment(

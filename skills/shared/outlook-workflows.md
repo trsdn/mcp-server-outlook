@@ -78,6 +78,43 @@ Every entry in a listing carries `itemType`:
 `skippedItemCount` counts items that could not be summarised at all. If it is non-zero, the listing
 is not the whole folder - do not describe it as such.
 
+## Recurring series
+
+Outlook stores a recurring series as a single master item dated at its **first** occurrence. So a
+calendar listing that has not expanded the series shows a weekly stand-up on the week it started and
+on no other week. Answering "are you free Tuesday?" from such a listing produces a confident yes for
+a slot that is booked.
+
+`calendar.list` expands a series into its individual occurrences **only when both `start` and
+`endTime` are given** - a series with no end date has infinitely many occurrences, so an open-ended
+range cannot be expanded. The result says which happened in `recurringExpanded`.
+
+**Never conclude somebody is free from a listing whose `recurringExpanded` is false.** Re-list with
+both bounds instead.
+
+Each listed item carries `recurrenceState`:
+
+- `notRecurring` - a one-off appointment
+- `master` - the series itself, not a particular date
+- `occurrence` - one instance of a series
+- `exception` - an instance that was moved, shortened or otherwise changed
+
+An occurrence carries the **master's** entry id, so editing or deleting it by entry id affects the
+whole series, not just that date.
+
+To create a series, pass `recurrenceType` (`daily`, `weekly`, `monthly` or `yearly`) to
+`calendar.create-appointment`, with:
+
+- `recurrenceInterval` - every N days/weeks/months/years, default 1
+- `recurrenceDaysOfWeek` - semicolon-separated day names, weekly patterns only. Omitted, a weekly
+  series repeats on the start day.
+- `recurrenceCount` **or** `recurrenceEndDate` to bound it - not both, since Outlook keeps only one.
+  Neither means it never ends.
+
+`calendar.read` reports the stored pattern under `recurrence`, including `exceptionCount`. A non-zero
+`exceptionCount` means the pattern alone does not describe the series - some occurrences differ - so
+do not describe the schedule from the pattern without saying so.
+
 ## Answering an invitation
 
 `mail.respond-to-meeting` accepts, declines or tentatively accepts an invitation. Point it at the

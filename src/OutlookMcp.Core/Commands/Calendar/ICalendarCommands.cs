@@ -10,7 +10,8 @@ namespace OutlookMcp.Core.Commands.Calendar;
     + "Use read to inspect an explicit appointment by entry id/store id or fall back to the active appointment inspector. "
     + "Use create-appointment, update-appointment, and delete-appointment to create, modify, and permanently delete Outlook calendar items — delete-appointment and update-appointment are destructive and cannot be undone. "
     + "Naming requiredAttendees or optionalAttendees (semicolon-separated) turns a new item into a meeting; it is saved to your own calendar and nobody is told until sendInvitation is true. "
-    + "Attendees Outlook cannot resolve are reported and the meeting is not created, because an unresolved attendee never receives the invitation.")]
+    + "Attendees Outlook cannot resolve are reported and the meeting is not created, because an unresolved attendee never receives the invitation. "
+    + "Use get-free-busy to ask when one or more people are available before proposing a time; it returns both Outlook's raw slot string and the busy periods decoded from it.")]
 public interface ICalendarCommands
 {
     [ServiceAction("list", Destructive = false)]
@@ -57,4 +58,11 @@ public interface ICalendarCommands
         string? entryId = null,
         string? storeId = null,
         bool useActiveAppointment = false);
+
+    [ServiceAction("get-free-busy", Destructive = false)]
+    CalendarFreeBusyResult GetFreeBusy(
+        string attendees,
+        string? start = null,
+        int days = 7,
+        int intervalMinutes = 30);
 }

@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Full-text search via Outlook's content index** (#42). `mail.search` takes `searchMode`, and every
+  search response now reports `searchEngine`.
+
+  The default free-text path opens each candidate message and does a substring check. That is exact,
+  but it is bounded by a scan limit, so in a folder larger than that limit a genuine match further
+  back is never reached and the caller is told - with `success: true` - that no such mail exists.
+  `searchMode: "fullText"` pushes the query down to Outlook's content index instead: nothing is
+  opened client-side and there is no scan horizon.
+
+  The two engines are **not** fast and slow versions of the same question. The index matches whole
+  words; the scan matches substrings, so it finds `foo` inside `foobar` and the index does not. That
+  is why the mode is opt-in and why `searchEngine` (`clientScan` or `contentIndex`) is on every
+  response: an empty result means different things depending on which engine produced it, and a
+  caller cannot tell them apart otherwise. If the index was asked for and the store could not serve
+  it, `searchEngine` says `clientScan` and `message` explains why, rather than quietly handing back
+  substring semantics under the label that was requested.
+
+  The pushed-down clause spans body, subject, sender name, sender address, To and Cc - the same
+  fields the client-side check reads. Pushing only the body down would be under-inclusive in the
+  worst way: Outlook would discard a subject match before the client ever saw the item.
+
+  A page cursor is bound to the engine as well as the query, so one minted by the scan cannot be
+  replayed against the index.
+
+  Verified against classic Outlook: the pushdown is evidenced by direct comparison - for a term
+  nothing matches, the client scan examined every item in the folder and the index examined none.
+
 - **Single-occurrence changes and cancellations** (#33). `calendar.update-appointment` and
   `calendar.delete-appointment` take an optional `occurrenceDate` that limits the change to one
   instance of a recurring series.

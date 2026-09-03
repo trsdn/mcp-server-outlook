@@ -14,9 +14,14 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "listing a folder and filtering client-side, because they reach matches a plain listing would never scan as far as. "
     + "Dates are ISO 8601 ('2024-03-07' or '2024-03-07T14:30'); a bare date means local midnight. "
     + "search's query is a free-text match over subject, sender and the full message body, applied after the structured "
-    + "filters. It is exhaustive rather than indexed, so it will not miss a term buried deep in a long message, but "
-    + "reaching the body means opening every candidate item; Outlook cannot filter on body text server-side, so pair "
-    + "query with structured filters in large folders to cut how many items must be opened. "
+    + "filters. By default it is exhaustive rather than indexed, so it will not miss a term buried deep in a long "
+    + "message, but reaching the body means opening every candidate item and the scan stops at a safety limit. "
+    + "Set searchMode to 'fullText' to have Outlook's content index answer the query instead: it examines nothing "
+    + "client-side, has no scan limit, and so finds matches arbitrarily far back in a large folder - but it matches "
+    + "whole words, not substrings, so it finds 'foo' in 'a foo arrived' and not inside 'foobar'. The default is "
+    + "'clientScan'. Every search response reports searchEngine ('clientScan' or 'contentIndex'), because an empty "
+    + "result means different things depending on which engine produced it; if the index was asked for and the store "
+    + "could not serve it, searchEngine says clientScan and message explains why. "
     + "list and search page with an opaque cursor: when a response has hasMore true, pass its nextCursor back as "
     + "cursor on an otherwise identical call to get the next page, and keep going until hasMore is false. Never treat "
     + "a truncated or empty page as proof that no such mail exists while hasMore is true. A cursor only continues the "
@@ -77,7 +82,8 @@ public interface IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
-        string? cursor = null);
+        string? cursor = null,
+        string? searchMode = null);
 
     [ServiceAction("get-conversation", Destructive = false)]
     MailConversationResult GetConversation(

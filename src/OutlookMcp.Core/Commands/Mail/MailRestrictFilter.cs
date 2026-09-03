@@ -22,6 +22,15 @@ namespace OutlookMcp.Core.Commands.Mail;
 /// match - it yields a syntactically invalid filter that <c>Restrict</c> rejects outright.
 /// See <see href="https://learn.microsoft.com/office/vba/outlook/how-to/search-and-filter/filtering-items-using-a-string-comparison"/>.
 /// </para>
+///
+/// <para>
+/// <b>The full-text clause is the one exception to that rule, and it is why it is opt-in (#42).</b>
+/// <c>ci_phrasematch</c> asks the content index, which matches whole words: it finds <c>foo</c> in
+/// "a foo arrived" but not inside "foobar", where the client-side substring check would. So it is
+/// not a drop-in speed-up for the free-text scan - it answers a slightly different question, faster
+/// and without the scan's horizon. A caller must ask for it, and the response names which engine
+/// answered, because an empty result means different things depending on which one did.
+/// </para>
 /// </summary>
 internal static class MailRestrictFilter
 {
@@ -31,6 +40,28 @@ internal static class MailRestrictFilter
     private const string FromNameProperty = "urn:schemas:httpmail:fromname";
     private const string DateReceivedProperty = "urn:schemas:httpmail:datereceived";
     private const string HasAttachmentProperty = "urn:schemas:httpmail:hasattachment";
+    private const string BodyProperty = "urn:schemas:httpmail:textdescription";
+    private const string DisplayToProperty = "urn:schemas:httpmail:displayto";
+    private const string DisplayCcProperty = "urn:schemas:httpmail:displaycc";
+
+    /// <summary>
+    /// The fields a full-text query is asked against, in the order they are emitted.
+    ///
+    /// <para>
+    /// This list mirrors the client-side free-text check exactly. Pushing only the body down would be
+    /// under-inclusive in the worst way: Outlook would discard a subject or sender match before the
+    /// client ever saw the item, and the caller would be told the mail does not exist.
+    /// </para>
+    /// </summary>
+    private static readonly string[] FullTextProperties =
+    [
+        BodyProperty,
+        SubjectProperty,
+        FromNameProperty,
+        FromEmailProperty,
+        DisplayToProperty,
+        DisplayCcProperty
+    ];
 
     /// <summary>
     /// Builds an <c>@SQL=</c> DASL filter for the supplied predicates, or <see langword="null"/>
@@ -43,7 +74,8 @@ internal static class MailRestrictFilter
         string? subjectContains = null,
         DateTimeOffset? receivedAfter = null,
         DateTimeOffset? receivedBefore = null,
-        bool? hasAttachment = null)
+        bool? hasAttachment = null,
+        string? fullTextQuery = null)
     {
         var clauses = new List<string>();
 
@@ -80,6 +112,19 @@ internal static class MailRestrictFilter
         if (hasAttachment.HasValue)
         {
             clauses.Add($"{Quote(HasAttachmentProperty)} = {(hasAttachment.Value ? 1 : 0)}");
+        }
+
+        // Content-index full-text (#42). Deliberately last so the cheap structured predicates are
+        // written first; Outlook is free to reorder, but the emitted string reads the way a human
+        // would debug it.
+        if (!string.IsNullOrWhiteSpace(fullTextQuery))
+        {
+            string escaped = EscapeLiteral(fullTextQuery.Trim());
+            clauses.Add(
+                "(" + string.Join(
+                    " OR ",
+                    FullTextProperties.Select(property => $"{Quote(property)} ci_phrasematch '{escaped}'"))
+                + ")");
         }
 
         return clauses.Count == 0

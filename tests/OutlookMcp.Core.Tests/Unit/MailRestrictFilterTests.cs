@@ -202,4 +202,62 @@ public class MailRestrictFilterTests
 
         Assert.Equal("@SQL=\"urn:schemas:httpmail:subject\" LIKE '%x'' OR ''1''=''1%'", filter);
     }
+
+    // ---- Content-index full-text pushdown (#42) ----
+
+    [Fact]
+    public void Build_WithFullTextQuery_AsksTheContentIndexAcrossBodyAndHeaders()
+    {
+        // The client-side check this replaces matches subject, sender name, sender address, To, Cc
+        // *or* body. Pushing only the body down would be under-inclusive - Outlook would drop a
+        // subject match before the client ever saw it, and the caller would be told the mail does
+        // not exist. So the pushed-down clause has to span the same fields.
+        string? filter = MailRestrictFilter.Build(fullTextQuery: "invoice");
+
+        Assert.Equal(
+            "@SQL=(\"urn:schemas:httpmail:textdescription\" ci_phrasematch 'invoice' "
+            + "OR \"urn:schemas:httpmail:subject\" ci_phrasematch 'invoice' "
+            + "OR \"urn:schemas:httpmail:fromname\" ci_phrasematch 'invoice' "
+            + "OR \"urn:schemas:httpmail:fromemail\" ci_phrasematch 'invoice' "
+            + "OR \"urn:schemas:httpmail:displayto\" ci_phrasematch 'invoice' "
+            + "OR \"urn:schemas:httpmail:displaycc\" ci_phrasematch 'invoice')",
+            filter);
+    }
+
+    [Fact]
+    public void Build_WithFullTextQuery_EscapesAnEmbeddedQuote()
+    {
+        string? filter = MailRestrictFilter.Build(fullTextQuery: "o'brien");
+
+        Assert.NotNull(filter);
+        Assert.Contains("ci_phrasematch 'o''brien'", filter!, StringComparison.Ordinal);
+        Assert.DoesNotContain("ci_phrasematch 'o'brien'", filter!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_WithFullTextQuery_AndStructuredPredicates_CombinesThemWithAnd()
+    {
+        string? filter = MailRestrictFilter.Build(unreadOnly: true, fullTextQuery: "invoice");
+
+        Assert.NotNull(filter);
+        Assert.StartsWith("@SQL=\"urn:schemas:httpmail:read\" = 0 AND (", filter!, StringComparison.Ordinal);
+        Assert.Contains("ci_phrasematch 'invoice'", filter!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_WithBlankFullTextQuery_EmitsNoContentIndexClause()
+    {
+        string? filter = MailRestrictFilter.Build(fullTextQuery: "   ");
+
+        Assert.Null(filter);
+    }
+
+    [Fact]
+    public void Build_WithFullTextQuery_IsNotVulnerableToFilterInjection()
+    {
+        string? filter = MailRestrictFilter.Build(fullTextQuery: "x' OR '1'='1");
+
+        Assert.NotNull(filter);
+        Assert.Contains("ci_phrasematch 'x'' OR ''1''=''1'", filter!, StringComparison.Ordinal);
+    }
 }

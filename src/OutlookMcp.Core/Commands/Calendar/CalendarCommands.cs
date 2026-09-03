@@ -551,7 +551,8 @@ public class CalendarCommands : ICalendarCommands
         string? location = null,
         string? body = null,
         bool? allDay = null,
-        bool useActiveAppointment = false)
+        bool useActiveAppointment = false,
+        string? occurrenceDate = null)
     {
         if (!TryParseRange(start, endTime, out DateTimeOffset? parsedStart, out DateTimeOffset? parsedEnd, out string? parseError))
         {
@@ -586,6 +587,7 @@ public class CalendarCommands : ICalendarCommands
                 object? currentItem = null;
                 object? selectedItem = null;
                 object? resolvedItem = null;
+                Outlook.AppointmentItem? occurrence = null;
 
                 try
                 {
@@ -613,46 +615,74 @@ public class CalendarCommands : ICalendarCommands
                         };
                     }
 
+                    // The target is the series unless the caller named an instance. Resolving the
+                    // occurrence first means a bad occurrenceDate cannot leave a half-applied edit
+                    // on the series behind it.
+                    Outlook.AppointmentItem target = appointment;
+                    string scope = "series";
+
+                    if (!string.IsNullOrWhiteSpace(occurrenceDate))
+                    {
+                        if (!TryResolveOccurrence(appointment, occurrenceDate!, out occurrence, out string? occurrenceError)
+                            || occurrence == null)
+                        {
+                            return new CalendarMutationResult
+                            {
+                                Success = false,
+                                Updated = false,
+                                Deleted = false,
+                                ErrorMessage = occurrenceError
+                            };
+                        }
+
+                        target = occurrence;
+                        scope = "occurrence";
+                    }
+
                     if (subject != null)
                     {
-                        appointment.Subject = subject;
+                        target.Subject = subject;
                     }
 
                     if (parsedStart.HasValue)
                     {
-                        appointment.Start = parsedStart.Value.LocalDateTime;
+                        target.Start = parsedStart.Value.LocalDateTime;
                     }
 
                     if (parsedEnd.HasValue)
                     {
-                        appointment.End = parsedEnd.Value.LocalDateTime;
+                        target.End = parsedEnd.Value.LocalDateTime;
                     }
 
                     if (location != null)
                     {
-                        appointment.Location = location;
+                        target.Location = location;
                     }
 
                     if (body != null)
                     {
-                        appointment.Body = body;
+                        target.Body = body;
                     }
 
                     if (allDay.HasValue)
                     {
-                        appointment.AllDayEvent = allDay.Value;
+                        target.AllDayEvent = allDay.Value;
                     }
 
-                    appointment.Save();
+                    target.Save();
 
                     return CreateCalendarMutationResult(
-                        appointment,
+                        target,
                         updated: true,
                         deleted: false,
-                        "Updated Outlook appointment.");
+                        scope == "occurrence"
+                            ? "Updated one occurrence of the Outlook series; the rest of the series is unchanged."
+                            : "Updated Outlook appointment.",
+                        scope);
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref occurrence);
                     OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
                     OutlookInteropRunner.ReleaseComObject(ref selectedItem);
                     OutlookInteropRunner.ReleaseComObject(ref currentItem);
@@ -675,7 +705,8 @@ public class CalendarCommands : ICalendarCommands
     public CalendarMutationResult DeleteAppointment(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveAppointment = false)
+        bool useActiveAppointment = false,
+        string? occurrenceDate = null)
     {
         return OutlookInteropRunner.Execute(
             "OutlookCalendarDeleteAppointment",
@@ -688,6 +719,7 @@ public class CalendarCommands : ICalendarCommands
                 object? currentItem = null;
                 object? selectedItem = null;
                 object? resolvedItem = null;
+                Outlook.AppointmentItem? occurrence = null;
 
                 try
                 {
@@ -715,17 +747,42 @@ public class CalendarCommands : ICalendarCommands
                         };
                     }
 
+                    Outlook.AppointmentItem target = appointment;
+                    string scope = "series";
+
+                    if (!string.IsNullOrWhiteSpace(occurrenceDate))
+                    {
+                        if (!TryResolveOccurrence(appointment, occurrenceDate!, out occurrence, out string? occurrenceError)
+                            || occurrence == null)
+                        {
+                            return new CalendarMutationResult
+                            {
+                                Success = false,
+                                Updated = false,
+                                Deleted = false,
+                                ErrorMessage = occurrenceError
+                            };
+                        }
+
+                        target = occurrence;
+                        scope = "occurrence";
+                    }
+
                     var result = CreateCalendarMutationResult(
-                        appointment,
+                        target,
                         updated: false,
                         deleted: true,
-                        "Deleted Outlook appointment.");
+                        scope == "occurrence"
+                            ? "Cancelled one occurrence of the Outlook series; the rest of the series is intact."
+                            : "Deleted Outlook appointment.",
+                        scope);
 
-                    appointment.Delete();
+                    target.Delete();
                     return result;
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref occurrence);
                     OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
                     OutlookInteropRunner.ReleaseComObject(ref selectedItem);
                     OutlookInteropRunner.ReleaseComObject(ref currentItem);
@@ -1295,7 +1352,8 @@ public class CalendarCommands : ICalendarCommands
         Outlook.AppointmentItem appointment,
         bool updated,
         bool deleted,
-        string message)
+        string message,
+        string scope = "series")
     {
         return new CalendarMutationResult
         {
@@ -1309,8 +1367,97 @@ public class CalendarCommands : ICalendarCommands
             AllDay = SafeGetBool(() => appointment.AllDayEvent),
             Updated = updated,
             Deleted = deleted,
+            Scope = scope,
             Message = message
         };
+    }
+
+    /// <summary>
+    /// Resolves the single occurrence of a recurring series that falls on <paramref name="rawOccurrenceDate"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two Outlook behaviours make this worth a dedicated method rather than an inline call.
+    /// </para>
+    /// <para>
+    /// First, <c>RecurrencePattern.GetOccurrence</c> matches on the occurrence's exact start, to the
+    /// minute, and throws if it is off by one. A caller asking to cancel "Thursday's stand-up" should
+    /// not have to know that the stand-up starts at 09:17, so a value with no time of day takes its
+    /// time from the series master. A value that does carry a time is used as given, because a caller
+    /// who names one is answering a different question and may be targeting an instance that has
+    /// already been moved.
+    /// </para>
+    /// <para>
+    /// Second, the item this returns is <em>not</em> the master. Saving it turns that instance into an
+    /// exception; deleting it removes only that instance. That is the whole point: an occurrence
+    /// carries the master's entry id, so without this the caller's "move one meeting" moved all of
+    /// them and reported success.
+    /// </para>
+    /// <para>
+    /// The <c>RecurrencePattern</c> is released here rather than handed back, per Microsoft's guidance
+    /// not to hold one across other calls.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool TryResolveOccurrence(
+        Outlook.AppointmentItem master,
+        string rawOccurrenceDate,
+        out Outlook.AppointmentItem? occurrence,
+        out string? errorMessage)
+    {
+        occurrence = null;
+        errorMessage = null;
+
+        if (!DateTimeOffset.TryParse(rawOccurrenceDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out DateTimeOffset parsed))
+        {
+            errorMessage = "occurrenceDate must be a valid ISO date or date/time value.";
+            return false;
+        }
+
+        if (!SafeGetBool(() => master.IsRecurring))
+        {
+            errorMessage =
+                "occurrenceDate was given but this appointment is not a recurring series, so it has no occurrences. "
+                + "Omit occurrenceDate to change the appointment itself.";
+            return false;
+        }
+
+        DateTime target = parsed.LocalDateTime;
+
+        // A bare date carries no time, so take the series' own time of day rather than midnight -
+        // GetOccurrence would otherwise reject every such request.
+        bool callerNamedATime = rawOccurrenceDate.Contains(':', StringComparison.Ordinal);
+        if (!callerNamedATime)
+        {
+            DateTimeOffset? masterStart = SafeGetDateTimeOffset(() => master.Start);
+            if (masterStart.HasValue)
+            {
+                target = target.Date + masterStart.Value.LocalDateTime.TimeOfDay;
+            }
+        }
+
+        Outlook.RecurrencePattern? pattern = null;
+        try
+        {
+            pattern = master.GetRecurrencePattern();
+            occurrence = pattern.GetOccurrence(target);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Outlook throws for a date the series does not fall on, and for an instance that has
+            // already been cancelled. Both are the caller's question being answered "no", not a
+            // failure of the tool - but neither may be turned into a series-wide edit.
+            errorMessage =
+                $"No occurrence of this series starts at {target:yyyy-MM-dd HH:mm}. "
+                + "Check the date against a listing of the series, and note that a cancelled instance no longer exists. "
+                + $"Outlook reported: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref pattern);
+        }
     }
 
     /// <summary>

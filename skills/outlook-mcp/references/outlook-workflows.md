@@ -335,6 +335,7 @@ Inbox, Drafts or Calendar at all. `list-default` reports those roles as `availab
 
 ### Someone else's mailbox
 
+
 The stores above are the ones already in the profile. A shared or delegate mailbox that is *not* in
 the profile is reached by address instead:
 
@@ -355,6 +356,32 @@ fails and names the mailbox.
 A failure here means either no such mailbox or no access granted; **Outlook cannot distinguish
 those**, so the error says both. If a user expects access they do not have, the fix is on the
 Exchange side, not here.
+
+## Changing the folder tree
+
+`folder.create` takes a parent and a name; `rename`, `move` and `delete` take the folder itself.
+Paths returned by any of them are ordinary folder paths and work with `mail.list`, `mail.move` and
+the rest.
+
+```
+1. folder.create(parentFolder: "inbox", name: "Archive 2024")   → folderPath
+2. mail.move(entryId: "...", destinationFolder: "<folderPath>")
+```
+
+**`delete` takes the folder's contents with it.** Everything filed in it, and every subfolder, goes
+too. There is no undo beyond whatever Deleted Items happens to retain. Say what will be deleted
+before deleting it.
+
+**Default folders and store roots are refused** for `rename`, `move` and `delete` - Inbox, Sent
+Items, Drafts, Deleted Items, Calendar, Contacts, Tasks, Notes, Junk, Outbox, in *every* store, not
+just the default one. Outlook itself permits deleting the Inbox: no prompt, no error, and the mail
+goes with it. If a user asks for that, tell them it is refused and why rather than looking for a way
+round it.
+
+A folder merely *named* "Inbox" that is not the default Inbox is an ordinary folder and can be
+deleted normally - the check compares identity, not names.
+
+Not covered: emptying a folder in place. Delete the items with `mail.delete`, or delete the folder.
 
 ## What this surface does not do
 

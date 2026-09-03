@@ -13,7 +13,11 @@ namespace OutlookMcp.Core.Commands.Folder;
     + "and every one of them has its own Inbox, so an unqualified request only ever reaches the default delivery store. "
     + "Pass a storeId from list-stores to list-default to read a specific mailbox; folder results name the store they came from. "
     + "Use open-shared to reach another person's Inbox or Calendar when they have granted access, without adding their mailbox to the profile; "
-    + "it returns a folder path usable with the mail and calendar tools.")]
+    + "it returns a folder path usable with the mail and calendar tools. "
+    + "Use create, rename, move and delete to change the folder tree - create takes a parent folder and a name, "
+    + "and delete removes the folder together with everything filed in it. "
+    + "Default folders such as Inbox, Sent Items and Calendar, and store roots, are refused for rename, move and delete: "
+    + "Outlook itself allows those and they are not recoverable.")]
 public interface IFolderCommands
 {
     [ServiceAction("list-default")]
@@ -24,6 +28,18 @@ public interface IFolderCommands
 
     [ServiceAction("open-shared")]
     OutlookFolderResolveResult OpenShared(string? address = null, string? role = null);
+
+    [ServiceAction("create", Destructive = true)]
+    OutlookFolderResolveResult Create(string? parentFolder = null, string? name = null);
+
+    [ServiceAction("rename", Destructive = true)]
+    OutlookFolderResolveResult Rename(string? folder = null, string? name = null);
+
+    [ServiceAction("move", Destructive = true)]
+    OutlookFolderResolveResult Move(string? folder = null, string? destinationFolder = null);
+
+    [ServiceAction("delete", Destructive = true)]
+    OutlookFolderResolveResult Delete(string? folder = null);
 
     [ServiceAction("list-children")]
     OutlookFolderListResult ListChildren(

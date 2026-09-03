@@ -893,6 +893,51 @@ public class MailConversationResult : ResultBase
     public string? SortDirection { get; set; }
 
     public List<MailSummaryInfo> Messages { get; set; } = [];
+
+    /// <summary>
+    /// Members of the thread that are not mail: meeting invitations, the calendar appointments they
+    /// create, and acceptances or declines. These used to be reduced to a number, which on a real
+    /// thread hid most of it - a seven-item conversation reported three messages and the digit 4.
+    /// The invitation and the acceptance are often the substance of a thread, so they are named
+    /// here rather than counted. See #111.
+    /// </summary>
+    public List<MailThreadItemInfo> OtherItems { get; set; } = [];
+}
+
+/// <summary>
+/// A non-mail member of a conversation. Deliberately thinner than <see cref="MailSummaryInfo"/>:
+/// these items have no sender or recipients in the mail sense, and presenting empty fields for them
+/// would suggest the data was missing rather than inapplicable.
+/// </summary>
+public class MailThreadItemInfo
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    /// <summary>
+    /// What this is, as a name a caller can act on: <c>appointment</c>, <c>meetingRequest</c>,
+    /// <c>meetingResponse</c>, <c>task</c>, <c>contact</c>, or <c>unknown</c>. Never a raw class
+    /// ordinal - a number here would be exactly the opacity this field exists to remove.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ItemType { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject { get; set; }
+
+    /// <summary>Which folder it lives in - a thread spans folders, including Calendar.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
+
+    /// <summary>
+    /// When it happened, used for the same ordering as the messages. For an appointment this is its
+    /// start; for a meeting request or response it is when it was sent or received.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? Timestamp { get; set; }
 }
 
 public class MailSummaryInfo

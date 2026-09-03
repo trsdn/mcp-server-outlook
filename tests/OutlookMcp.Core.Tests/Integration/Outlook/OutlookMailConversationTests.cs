@@ -137,6 +137,112 @@ public class OutlookMailConversationTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// A conversation is not all mail. On the mailbox this was written against, an ordinary thread
+    /// held seven items of which only three were messages: the rest were a meeting invitation, the
+    /// calendar appointment it created, and the acceptance. The invitation and the acceptance are
+    /// frequently the substance of the thread - when did we agree to meet, and did they say yes.
+    ///
+    /// <para>
+    /// Those items used to be reduced to a number, so an agent asked to summarise that conversation
+    /// saw three replies and the digit 4. They must come back identified.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_ReturnsNonMailThreadItemsRatherThanOnlyCountingThem()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var thread = FindThreadWithNonMailItems(commands);
+
+        Skip.If(thread is null, "No conversation in this inbox contains a non-mail item.");
+
+        Assert.NotEmpty(thread!.OtherItems);
+
+        foreach (var item in thread.OtherItems)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(item.ItemType), "A thread item arrived with no type.");
+            Assert.False(
+                int.TryParse(item.ItemType, out _),
+                $"Thread item type '{item.ItemType}' is a raw class ordinal rather than a name.");
+            Assert.False(
+                string.IsNullOrWhiteSpace(item.FolderPath),
+                $"Thread item '{item.Subject}' did not say which folder it lives in.");
+        }
+
+        // Everything the thread holds is now either a message or an identified item. The skipped
+        // counter is for entries that genuinely could not be read, which is a different failure.
+        Assert.Equal(
+            thread.TotalItemCount,
+            thread.Messages.Count + thread.OtherItems.Count + thread.SkippedItemCount);
+
+        output.WriteLine(
+            $"'{thread.ConversationTopic}': {thread.Messages.Count} message(s), "
+            + $"other: {string.Join(", ", thread.OtherItems.Select(i => i.ItemType))}");
+    }
+
+    /// <summary>
+    /// <c>skippedItemCount</c> must mean "this could not be read" and nothing else. While it also
+    /// counted every meeting item, the two were indistinguishable: a thread that was read perfectly
+    /// and a thread with unreachable entries produced the same non-zero number, so neither was
+    /// actionable.
+    /// </summary>
+    [SkippableFact]
+    public void GetConversation_DoesNotCountReadableNonMailItemsAsSkipped()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new MailCommands();
+        var thread = FindThreadWithNonMailItems(commands);
+
+        Skip.If(thread is null, "No conversation in this inbox contains a non-mail item.");
+
+        Assert.Equal(0, thread!.SkippedItemCount);
+    }
+
+    /// <summary>
+    /// Walks the inbox for a conversation that contains something other than mail. Written not to
+    /// assume any particular message, because a test that only passes on one mailbox stops testing
+    /// anything on every other one.
+    ///
+    /// <para>
+    /// The selection criterion is deliberately <em>not</em> "has other items" - that is the thing
+    /// under test, so searching by it makes the test skip rather than fail when the behaviour is
+    /// removed, and a skipped test is a green test. It selects on a thread holding more entries than
+    /// it returned messages, which is true whether or not those entries are reported.
+    /// </para>
+    /// </summary>
+    private static MailConversationResult? FindThreadWithNonMailItems(MailCommands commands)
+    {
+        var listing = commands.List(folder: "Inbox", maxCount: 25);
+        if (!listing.Success)
+        {
+            return null;
+        }
+
+        foreach (var message in listing.Messages)
+        {
+            if (string.IsNullOrWhiteSpace(message.EntryId))
+            {
+                continue;
+            }
+
+            var thread = commands.GetConversation(
+                entryId: message.EntryId,
+                storeId: message.StoreId,
+                useActiveMail: false,
+                maxCount: 500);
+
+            if (thread.Success && !thread.Truncated && thread.TotalItemCount > thread.Messages.Count)
+            {
+                return thread;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The identifier on a read result and the identifier the thread call reports must agree,
     /// otherwise a caller cannot get from "this message" to "its thread".
     /// </summary>

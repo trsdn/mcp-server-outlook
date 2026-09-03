@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`mail get-conversation` now names the non-mail members of a thread** (#111). Meeting
+  invitations, the calendar appointments they create, and acceptances or declines are returned in a
+  new `otherItems` array with a named type, subject, folder and timestamp, instead of being reduced
+  to a number. On the thread this was measured against, four of seven items were previously
+  invisible - including the invitation and the acceptance, which are usually the substance of the
+  conversation. `messages` is unchanged and still mail-only, so nothing that reads it today breaks.
+- **`skippedItemCount` now means only "could not be read"** (#111). It previously also counted every
+  meeting item, so a thread read perfectly and a thread with unreachable entries reported the same
+  non-zero number and neither was actionable.
 - **`mail list-reminders`** (#15). Lists what Outlook intends to remind the user about - appointments,
   tasks and flagged mail together - earliest first, with counts for the whole set.
 

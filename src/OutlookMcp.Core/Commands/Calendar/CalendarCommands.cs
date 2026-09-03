@@ -57,9 +57,10 @@ public class CalendarCommands : ICalendarCommands
                     items = calendarFolder.Items;
                     TrySortItemsByStart(items);
                     int totalItemCount = SafeGetInt(() => items.Count);
-                    int scanLimit = rangeStart.HasValue || rangeEnd.HasValue
-                        ? totalItemCount
-                        : Math.Clamp(boundedMaxCount * 10, 25, 500);
+
+                    // Expansion needs both bounds. Outlook enumerates a series occurrence by
+                    // occurrence, so an endless series over an open-ended range never terminates.
+                    bool canExpand = rangeStart.HasValue && rangeEnd.HasValue;
 
                     var result = new CalendarListResult
                     {
@@ -68,8 +69,54 @@ public class CalendarCommands : ICalendarCommands
                         FolderPath = OutlookInteropRunner.GetFolderPath(calendarFolder),
                         Start = rangeStart,
                         End = rangeEnd,
-                        TotalItemCount = totalItemCount
+                        TotalItemCount = totalItemCount,
+                        RecurringExpanded = false
                     };
+
+                    if (canExpand)
+                    {
+                        Outlook.Items? expanded = null;
+
+                        try
+                        {
+                            expanded = TryExpandRecurrences(items, rangeStart!.Value, rangeEnd!.Value);
+
+                            if (expanded != null)
+                            {
+                                result.RecurringExpanded = true;
+                                result.Message = "Recurring series were expanded into their individual occurrences.";
+                                CollectExpandedAppointments(
+                                    expanded,
+                                    rangeStart,
+                                    rangeEnd,
+                                    boundedMaxCount,
+                                    includeBodyPreview,
+                                    result);
+                                result.ReturnedCount = result.Appointments.Count;
+                                return result;
+                            }
+
+                            // Outlook refused the expansion. Saying so is the point: a caller that
+                            // believes a listing is complete will report somebody as free when they
+                            // are not.
+                            result.Message = "Outlook would not expand recurring series for this folder, so occurrences "
+                                + "of a recurring meeting are missing from every date but its first.";
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref expanded);
+                        }
+                    }
+                    else
+                    {
+                        result.Message = "Recurring series were not expanded - that needs both start and endTime, "
+                            + "because a series with no end date has infinitely many occurrences. This list contains "
+                            + "series masters only, so a recurring meeting is missing from every date but its first.";
+                    }
+
+                    int scanLimit = rangeStart.HasValue || rangeEnd.HasValue
+                        ? totalItemCount
+                        : Math.Clamp(boundedMaxCount * 10, 25, 500);
 
                     for (int index = 1, scanned = 0;
                          index <= totalItemCount && scanned < scanLimit && result.Appointments.Count < boundedMaxCount;
@@ -190,7 +237,12 @@ public class CalendarCommands : ICalendarCommands
         bool display = false,
         string? requiredAttendees = null,
         string? optionalAttendees = null,
-        bool sendInvitation = false)
+        bool sendInvitation = false,
+        string? recurrenceType = null,
+        int recurrenceInterval = 1,
+        string? recurrenceDaysOfWeek = null,
+        int? recurrenceCount = null,
+        string? recurrenceEndDate = null)
     {
         if (string.IsNullOrWhiteSpace(subject))
         {
@@ -226,6 +278,85 @@ public class CalendarCommands : ICalendarCommands
                 ErrorMessage = "sendInvitation was requested but no attendees were named, so there is nobody to invite. "
                     + "Pass requiredAttendees or optionalAttendees."
             };
+        }
+
+        bool wantsRecurrence = !string.IsNullOrWhiteSpace(recurrenceType);
+        Outlook.OlRecurrenceType parsedRecurrence = Outlook.OlRecurrenceType.olRecursDaily;
+
+        // Validated before anything is written. Creating a plain appointment because the pattern was
+        // unusable, and reporting success, would leave the caller believing they had made a series.
+        if (wantsRecurrence && !TryParseRecurrenceType(recurrenceType, out parsedRecurrence))
+
+        {
+            return new CalendarAppointmentResult
+            {
+                Success = false,
+                Saved = false,
+                Displayed = false,
+                ErrorMessage = $"'{recurrenceType}' is not a recurrence type calendar.create-appointment understands. "
+                    + "Use daily, weekly, monthly or yearly."
+            };
+        }
+
+        if (wantsRecurrence && recurrenceInterval < 1)
+        {
+            return new CalendarAppointmentResult
+            {
+                Success = false,
+                Saved = false,
+                Displayed = false,
+                ErrorMessage = $"recurrenceInterval must be at least 1, got {recurrenceInterval}."
+            };
+        }
+
+        if (wantsRecurrence && recurrenceCount.HasValue && !string.IsNullOrWhiteSpace(recurrenceEndDate))
+        {
+            return new CalendarAppointmentResult
+            {
+                Success = false,
+                Saved = false,
+                Displayed = false,
+                ErrorMessage = "recurrenceCount and recurrenceEndDate both bound the series, and Outlook keeps only "
+                    + "one of them. Pass whichever you actually mean, not both."
+            };
+        }
+
+        DateTimeOffset? parsedRecurrenceEnd = null;
+
+        if (wantsRecurrence && !string.IsNullOrWhiteSpace(recurrenceEndDate))
+        {
+            if (!TryParseRange(recurrenceEndDate, null, out parsedRecurrenceEnd, out _, out string? endParseError))
+            {
+                return new CalendarAppointmentResult
+                {
+                    Success = false,
+                    Saved = false,
+                    Displayed = false,
+                    ErrorMessage = $"recurrenceEndDate could not be read: {endParseError}"
+                };
+            }
+        }
+
+        var parsedDays = new List<DayOfWeek>();
+
+        if (wantsRecurrence && !string.IsNullOrWhiteSpace(recurrenceDaysOfWeek))
+        {
+            foreach (string token in recurrenceDaysOfWeek.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!TryParseDayOfWeek(token, out DayOfWeek day))
+                {
+                    return new CalendarAppointmentResult
+                    {
+                        Success = false,
+                        Saved = false,
+                        Displayed = false,
+                        ErrorMessage = $"'{token}' is not a day name recurrenceDaysOfWeek understands. "
+                            + "Use full English day names such as monday;thursday."
+                    };
+                }
+
+                parsedDays.Add(day);
+            }
         }
 
         return OutlookInteropRunner.Execute(
@@ -310,6 +441,54 @@ public class CalendarCommands : ICalendarCommands
 
                     appointment.Save();
 
+                    RecurrencePatternInfo? recurrenceInfo = null;
+
+                    if (wantsRecurrence)
+                    {
+                        Outlook.RecurrencePattern? pattern = null;
+
+                        try
+                        {
+                            pattern = appointment.GetRecurrencePattern();
+                            pattern.RecurrenceType = parsedRecurrence;
+                            pattern.Interval = recurrenceInterval;
+
+                            if (parsedRecurrence == Outlook.OlRecurrenceType.olRecursWeekly)
+                            {
+                                // A weekly pattern with no day named repeats on the start day. Guessing
+                                // any other day would put the series somewhere the caller never asked for.
+                                List<DayOfWeek> days = parsedDays.Count > 0
+                                    ? parsedDays
+                                    : [parsedStart!.Value.LocalDateTime.DayOfWeek];
+
+                                pattern.DayOfWeekMask = ToDayOfWeekMask(days);
+                            }
+
+                            pattern.PatternStartDate = parsedStart!.Value.LocalDateTime.Date;
+
+                            if (recurrenceCount.HasValue)
+                            {
+                                pattern.Occurrences = recurrenceCount.Value;
+                            }
+                            else if (parsedRecurrenceEnd.HasValue)
+                            {
+                                pattern.PatternEndDate = parsedRecurrenceEnd.Value.LocalDateTime.Date;
+                            }
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref pattern);
+                        }
+
+                        appointment.Save();
+
+                        // Microsoft's documented guidance: release the pattern and re-fetch before
+                        // reading it back. A pattern held across a Save is a known source of
+                        // corruption, and reading through a stale one is how a series quietly loses
+                        // its exceptions.
+                        recurrenceInfo = ReadRecurrence(appointment);
+                    }
+
                     bool invitationSent = false;
 
                     if (sendInvitation)
@@ -338,6 +517,8 @@ public class CalendarCommands : ICalendarCommands
                         Start = SafeGetDateTimeOffset(() => appointment.Start),
                         End = SafeGetDateTimeOffset(() => appointment.End),
                         AllDay = SafeGetBool(() => appointment.AllDayEvent),
+                        IsRecurring = recurrenceInfo != null,
+                        Recurrence = recurrenceInfo,
                         Message = wantsMeeting
                             ? invitationSent
                                 ? "Created Outlook meeting and sent the invitation."
@@ -985,7 +1166,10 @@ public class CalendarCommands : ICalendarCommands
                 ReminderSet = SafeGetBool(() => appointment.ReminderSet),
                 BusyStatus = SafeGetInt(() => (int)appointment.BusyStatus),
                 IsMeeting = SafeGetBool(() => appointment.MeetingStatus != Outlook.OlMeetingStatus.olNonMeeting),
-                Attendees = ReadAttendees(appointment, resolveFirst: false)
+                Attendees = ReadAttendees(appointment, resolveFirst: false),
+                IsRecurring = SafeGetBool(() => appointment.IsRecurring),
+                RecurrenceState = DescribeRecurrenceStateOf(appointment),
+                Recurrence = ReadRecurrence(appointment)
             };
         }
         finally
@@ -1100,7 +1284,9 @@ public class CalendarCommands : ICalendarCommands
             End = SafeGetDateTimeOffset(() => appointment.End),
             AllDay = SafeGetBool(() => appointment.AllDayEvent),
             ReminderSet = SafeGetBool(() => appointment.ReminderSet),
-            BusyStatus = SafeGetInt(() => (int)appointment.BusyStatus)
+            BusyStatus = SafeGetInt(() => (int)appointment.BusyStatus),
+            IsRecurring = SafeGetBool(() => appointment.IsRecurring),
+            RecurrenceState = DescribeRecurrenceStateOf(appointment)
         };
     }
 
@@ -1125,6 +1311,313 @@ public class CalendarCommands : ICalendarCommands
             Deleted = deleted,
             Message = message
         };
+    }
+
+    /// <summary>
+    /// Asks Outlook for a view of the folder in which each occurrence of a recurring series is a
+    /// separate item, restricted to the requested window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The order matters and is Outlook's, not ours: sort by <c>[Start]</c>, then set
+    /// <c>IncludeRecurrences</c>, then <c>Restrict</c>. Setting <c>IncludeRecurrences</c> on an
+    /// unsorted collection silently returns masters only, which is the bug this method exists to fix
+    /// wearing a disguise.
+    /// </para>
+    /// <para>
+    /// The restriction is an overlap test rather than containment, so a meeting that begins before
+    /// the window and runs into it is still returned. Over-inclusive is the only safe direction:
+    /// Restrict runs inside Outlook, so anything it wrongly drops reaches the caller as a confident
+    /// "nothing is scheduled".
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Items? TryExpandRecurrences(
+        Outlook.Items items,
+        DateTimeOffset rangeStart,
+        DateTimeOffset rangeEnd)
+    {
+        try
+        {
+            items.IncludeRecurrences = true;
+
+            string filter = string.Format(
+                CultureInfo.InvariantCulture,
+                "[Start] <= '{0}' AND [End] >= '{1}'",
+                FormatRestrictDate(rangeEnd),
+                FormatRestrictDate(rangeStart));
+
+            return items.Restrict(filter);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Formats a bound for Outlook's Jet restriction syntax.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The user's culture, not the invariant one.</b> Outlook parses a Jet date literal using the
+    /// machine's regional settings, so a US-formatted literal is not merely unidiomatic on a European
+    /// machine - it is silently misread. Verified on an en-DE machine: <c>09/03/2026 08:41 PM</c>
+    /// matched 2 appointments where the equivalent <c>03/09/2026 20:41</c> matched 12. The day and
+    /// month swap, the window lands somewhere else entirely, and ten real appointments vanish.
+    /// </para>
+    /// <para>
+    /// It fails quietly and asymmetrically, which is what makes it dangerous: a whole-day window
+    /// still works, because midnight survives a mangled time, so the bug only shows up on the
+    /// intraday questions - "am I free at 3?" - where a wrong answer matters most.
+    /// </para>
+    /// <para>
+    /// Note this is the opposite of the DASL <c>@SQL=</c> filters used for mail, which take a
+    /// culture-independent UTC literal. The two query languages are not interchangeable.
+    /// </para>
+    /// </remarks>
+    private static string FormatRestrictDate(DateTimeOffset value)
+        => value.LocalDateTime.ToString("g", CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// Walks an expanded collection with <c>GetFirst</c>/<c>GetNext</c>.
+    /// </summary>
+    /// <remarks>
+    /// Indexing is not an option here: with <c>IncludeRecurrences</c> set, <c>Count</c> is not
+    /// meaningful and an endless series has no last item. The scan cap is a guard against exactly
+    /// that, not a paging limit.
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static void CollectExpandedAppointments(
+        Outlook.Items expanded,
+        DateTimeOffset? rangeStart,
+        DateTimeOffset? rangeEnd,
+        int boundedMaxCount,
+        bool includeBodyPreview,
+        CalendarListResult result)
+    {
+        const int scanCeiling = 2000;
+
+        object? rawItem = expanded.GetFirst();
+        int scanned = 0;
+
+        while (rawItem != null && scanned < scanCeiling && result.Appointments.Count < boundedMaxCount)
+        {
+            Outlook.AppointmentItem? appointment = null;
+
+            try
+            {
+                scanned++;
+                appointment = rawItem as Outlook.AppointmentItem;
+
+                if (appointment != null && MatchesRange(appointment, rangeStart, rangeEnd))
+                {
+                    result.Appointments.Add(CreateCalendarSummary(appointment, includeBodyPreview));
+                }
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref appointment);
+                OutlookInteropRunner.ReleaseComObject(ref rawItem);
+            }
+
+            rawItem = expanded.GetNext();
+        }
+
+        if (rawItem != null)
+        {
+            OutlookInteropRunner.ReleaseComObject(ref rawItem);
+        }
+    }
+
+    private static bool TryParseRecurrenceType(
+        string? recurrenceType,
+        out Outlook.OlRecurrenceType parsed)
+    {
+        switch (recurrenceType?.Trim().ToLowerInvariant())
+        {
+            case "daily":
+                parsed = Outlook.OlRecurrenceType.olRecursDaily;
+                return true;
+            case "weekly":
+                parsed = Outlook.OlRecurrenceType.olRecursWeekly;
+                return true;
+            case "monthly":
+                parsed = Outlook.OlRecurrenceType.olRecursMonthly;
+                return true;
+            case "yearly":
+                parsed = Outlook.OlRecurrenceType.olRecursYearly;
+                return true;
+            default:
+                parsed = Outlook.OlRecurrenceType.olRecursDaily;
+                return false;
+        }
+    }
+
+    private static bool TryParseDayOfWeek(string token, out DayOfWeek day)
+        => Enum.TryParse(token.Trim(), ignoreCase: true, out day);
+
+    private static Outlook.OlDaysOfWeek ToDayOfWeekMask(IEnumerable<DayOfWeek> days)
+    {
+        Outlook.OlDaysOfWeek mask = 0;
+
+        foreach (DayOfWeek day in days)
+        {
+            mask |= day switch
+            {
+                DayOfWeek.Sunday => Outlook.OlDaysOfWeek.olSunday,
+                DayOfWeek.Monday => Outlook.OlDaysOfWeek.olMonday,
+                DayOfWeek.Tuesday => Outlook.OlDaysOfWeek.olTuesday,
+                DayOfWeek.Wednesday => Outlook.OlDaysOfWeek.olWednesday,
+                DayOfWeek.Thursday => Outlook.OlDaysOfWeek.olThursday,
+                DayOfWeek.Friday => Outlook.OlDaysOfWeek.olFriday,
+                _ => Outlook.OlDaysOfWeek.olSaturday
+            };
+        }
+
+        return mask;
+    }
+
+    private static List<string> FromDayOfWeekMask(Outlook.OlDaysOfWeek mask)
+    {
+        var days = new List<string>();
+
+        // Monday first: a weekly pattern read back is nearly always described to a person, and
+        // "monday, thursday" reads as a working week where "thursday, monday" does not.
+        (Outlook.OlDaysOfWeek Flag, string Name)[] order =
+        [
+            (Outlook.OlDaysOfWeek.olMonday, "monday"),
+            (Outlook.OlDaysOfWeek.olTuesday, "tuesday"),
+            (Outlook.OlDaysOfWeek.olWednesday, "wednesday"),
+            (Outlook.OlDaysOfWeek.olThursday, "thursday"),
+            (Outlook.OlDaysOfWeek.olFriday, "friday"),
+            (Outlook.OlDaysOfWeek.olSaturday, "saturday"),
+            (Outlook.OlDaysOfWeek.olSunday, "sunday")
+        ];
+
+        foreach ((Outlook.OlDaysOfWeek flag, string name) in order)
+        {
+            if ((mask & flag) == flag)
+            {
+                days.Add(name);
+            }
+        }
+
+        return days;
+    }
+
+    private static string DescribeRecurrenceType(Outlook.OlRecurrenceType type) => type switch
+    {
+        Outlook.OlRecurrenceType.olRecursDaily => "daily",
+        Outlook.OlRecurrenceType.olRecursWeekly => "weekly",
+        Outlook.OlRecurrenceType.olRecursMonthly => "monthly",
+        Outlook.OlRecurrenceType.olRecursMonthNth => "monthNth",
+        Outlook.OlRecurrenceType.olRecursYearly => "yearly",
+        Outlook.OlRecurrenceType.olRecursYearNth => "yearNth",
+        _ => "unknown"
+    };
+
+    private static string DescribeRecurrenceState(Outlook.OlRecurrenceState state) => state switch
+    {
+        Outlook.OlRecurrenceState.olApptNotRecurring => "notRecurring",
+        Outlook.OlRecurrenceState.olApptMaster => "master",
+        Outlook.OlRecurrenceState.olApptOccurrence => "occurrence",
+        Outlook.OlRecurrenceState.olApptException => "exception",
+        _ => "unknown"
+    };
+
+    /// <summary>
+    /// Reads the recurrence pattern off an appointment, or null when it is not a series.
+    /// </summary>
+    /// <remarks>
+    /// The pattern is fetched here and released before returning, per Microsoft's documented guidance
+    /// for <c>GetRecurrencePattern</c>: a pattern reference held across other work on the parent item
+    /// is a known source of corruption. Nothing outside this method ever sees the COM object.
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static RecurrencePatternInfo? ReadRecurrence(Outlook.AppointmentItem appointment)
+    {
+        if (!SafeGetBool(() => appointment.IsRecurring))
+        {
+            return null;
+        }
+
+        Outlook.RecurrencePattern? pattern = null;
+        Outlook.Exceptions? exceptions = null;
+
+        try
+        {
+            pattern = appointment.GetRecurrencePattern();
+
+            if (pattern == null)
+            {
+                return null;
+            }
+
+            bool noEndDate = SafeGetBool(() => pattern.NoEndDate);
+            int occurrences = SafeGetInt(() => pattern.Occurrences);
+            Outlook.OlRecurrenceType type = pattern.RecurrenceType;
+
+            exceptions = SafeGetExceptions(pattern);
+
+            return new RecurrencePatternInfo
+            {
+                RecurrenceType = DescribeRecurrenceType(type),
+                Interval = SafeGetInt(() => pattern.Interval),
+                DaysOfWeek = type is Outlook.OlRecurrenceType.olRecursWeekly
+                    or Outlook.OlRecurrenceType.olRecursMonthNth
+                    or Outlook.OlRecurrenceType.olRecursYearNth
+                    ? FromDayOfWeekMask(pattern.DayOfWeekMask)
+                    : [],
+                DayOfMonth = type is Outlook.OlRecurrenceType.olRecursMonthly
+                    or Outlook.OlRecurrenceType.olRecursYearly
+                    ? SafeGetInt(() => pattern.DayOfMonth)
+                    : null,
+                MonthOfYear = type is Outlook.OlRecurrenceType.olRecursYearly
+                    or Outlook.OlRecurrenceType.olRecursYearNth
+                    ? SafeGetInt(() => pattern.MonthOfYear)
+                    : null,
+                PatternStartDate = SafeGetDateTimeOffset(() => pattern.PatternStartDate),
+                // Outlook stores a sentinel end date on an endless series. Reporting it would read as
+                // a real end date to anybody who did not also check NoEndDate.
+                PatternEndDate = noEndDate ? null : SafeGetDateTimeOffset(() => pattern.PatternEndDate),
+                NoEndDate = noEndDate,
+                Occurrences = noEndDate ? null : occurrences,
+                DurationMinutes = SafeGetInt(() => pattern.Duration),
+                ExceptionCount = exceptions == null ? 0 : SafeGetInt(() => exceptions.Count)
+            };
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref exceptions);
+            OutlookInteropRunner.ReleaseComObject(ref pattern);
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Exceptions? SafeGetExceptions(Outlook.RecurrencePattern pattern)
+    {
+        try
+        {
+            return pattern.Exceptions;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string DescribeRecurrenceStateOf(Outlook.AppointmentItem appointment)
+    {
+        try
+        {
+            return DescribeRecurrenceState(appointment.RecurrenceState);
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]

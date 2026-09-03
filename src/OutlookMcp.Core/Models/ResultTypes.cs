@@ -325,6 +325,27 @@ public class OutlookFolderItemListResult : ResultBase
 
     public int TotalItemCount { get; set; }
     public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// True when <c>maxCount</c> stopped this listing short of the folder. A caller MUST NOT read
+    /// the returned items as the folder's full contents when this is set. See #91.
+    /// </summary>
+    public bool Truncated { get; set; }
+
+    /// <summary>
+    /// The property items were ordered by before the cap was applied - <c>receivedTime</c> for mail
+    /// folders, <c>lastModificationTime</c> for folders whose items have no received time
+    /// (calendars, contacts). Null only when the store refused to sort at all, in which case the
+    /// order is arbitrary and a truncated listing is an arbitrary subset - which is why it is
+    /// reported rather than left for a caller to assume. See #91.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SortedBy { get; set; }
+
+    /// <summary>Direction of <see cref="SortedBy"/>: <c>descending</c> - newest first.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SortDirection { get; set; }
+
     public List<OutlookFolderItemInfo> Items { get; set; } = [];
 }
 

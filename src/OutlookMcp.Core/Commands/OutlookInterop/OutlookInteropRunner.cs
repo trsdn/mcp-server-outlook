@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using OutlookMcp.ComInterop;
@@ -44,21 +45,16 @@ internal static class OutlookInteropRunner
 
                 if (!TryGetRunningApplication(out application))
                 {
-                    // Deliberately do NOT fall back to Activator.CreateInstance(outlookType) here
-                    // (see #30). A freshly created Outlook.Application is not the user's trusted,
-                    // already-running session, so it is *more* likely to trigger the Outlook Object
-                    // Model Guard (OMG) than a session obtained via GetActiveObject, and it conflicts
-                    // with Outlook's single-instance-per-user model. Fail with actionable guidance
-                    // instead, distinguishing "not running" from "running at a different integrity
-                    // level than this (possibly elevated) process" -- GetActiveObject fails with
-                    // MK_E_UNAVAILABLE in the latter case and TryGetRunningApplication surfaces that
-                    // as a plain "not running" result, so we check elevation separately to give a
-                    // more specific message.
+                    // Reaching here means Outlook could not be resolved by either route: it is
+                    // absent from the Running Object Table *and* no OUTLOOK.EXE is running in this
+                    // session (see TryGetRunningApplication, #90). Nothing here starts Outlook - a
+                    // COM server this process spawned would put an Office window on the user's
+                    // desktop unbidden, which this server must never do.
                     bool elevated = OutlookInstallationDetector.IsCurrentProcessElevated();
                     string message = elevated
                         ? "Outlook.Application COM ProgID is registered, but no running instance could be reached. " +
                           "This process is running elevated (as Administrator); if Outlook is running unelevated, " +
-                          "COM's GetActiveObject cannot see across integrity levels. Run Outlook and this server at " +
+                          "COM cannot see across integrity levels. Run Outlook and this server at " +
                           "the same elevation level, or start classic Outlook for Windows and try again."
                         : "Classic Outlook for Windows is installed but does not appear to be running. " +
                           "Start Outlook and try again.";
@@ -107,6 +103,34 @@ internal static class OutlookInteropRunner
         }, ComInteropConstants.DefaultOperationTimeout);
     }
 
+    /// <summary>
+    /// Resolves the Outlook instance the user already has open.
+    ///
+    /// <para>
+    /// The Running Object Table is tried first, but its absence is not evidence: Outlook does not
+    /// reliably register itself there. Observed with Outlook running, mailbox loaded and fully
+    /// usable, <c>GetActiveObject</c> still returning <c>MK_E_UNAVAILABLE</c> - which the caller
+    /// then reported as "Outlook does not appear to be running" (#90). So when the ROT lookup comes
+    /// back empty we fall through to <c>CoCreateInstance</c>, which for Outlook - a single-instance
+    /// COM server - returns a reference to the <em>same</em> running instance rather than a second
+    /// one.
+    /// </para>
+    ///
+    /// <para>
+    /// That fallback is gated on an <c>OUTLOOK.EXE</c> process already existing in this session,
+    /// and the gate is the whole point: <c>CoCreateInstance</c> with Outlook closed would
+    /// <em>start</em> Outlook, and this server must never put an Office window on someone's desktop
+    /// unbidden. With the gate, the fallback can only ever attach to something already running.
+    /// </para>
+    ///
+    /// <para>
+    /// This supersedes the earlier reasoning (#30) that any fallback to <c>CreateInstance</c> risks
+    /// a "less trusted" Application and extra Object Model Guard prompts. There is no separate
+    /// object to be less trusted - it is the user's own running session either way, reached from the
+    /// same caller process, so the OMG posture is identical. Only the launch risk was real, and the
+    /// gate removes it.
+    /// </para>
+    /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     internal static bool TryGetRunningApplication([NotNullWhen(true)] out Outlook.Application? application)
     {
@@ -118,18 +142,99 @@ internal static class OutlookInteropRunner
             return false;
         }
 
-        if (GetActiveObject(ref clsid, IntPtr.Zero, out object? activeObject) != 0 || activeObject == null)
+        if (GetActiveObject(ref clsid, IntPtr.Zero, out object? activeObject) == 0 && activeObject != null)
+        {
+            application = activeObject as Outlook.Application;
+            if (application == null && Marshal.IsComObject(activeObject))
+            {
+                _ = Marshal.FinalReleaseComObject(activeObject);
+            }
+
+            if (application != null)
+            {
+                return true;
+            }
+        }
+
+        return TryAttachToRunningOutlookProcess(out application);
+    }
+
+    /// <summary>
+    /// Attaches to an Outlook that is running but absent from the Running Object Table. Returns
+    /// false without touching COM when no Outlook process exists in this session, so this can never
+    /// launch Outlook. See <see cref="TryGetRunningApplication"/> and #90.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool TryAttachToRunningOutlookProcess([NotNullWhen(true)] out Outlook.Application? application)
+    {
+        application = null;
+
+        if (!IsOutlookRunningInCurrentSession())
         {
             return false;
         }
 
-        application = activeObject as Outlook.Application;
-        if (application == null && Marshal.IsComObject(activeObject))
+        Type? outlookType = Type.GetTypeFromProgID("Outlook.Application");
+        if (outlookType == null)
         {
-            _ = Marshal.FinalReleaseComObject(activeObject);
+            return false;
         }
 
-        return application != null;
+        try
+        {
+            object? instance = Activator.CreateInstance(outlookType);
+            application = instance as Outlook.Application;
+
+            if (application == null && instance != null && Marshal.IsComObject(instance))
+            {
+                _ = Marshal.FinalReleaseComObject(instance);
+            }
+
+            return application != null;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether Outlook is running <em>in this Windows session</em>. Session-scoped deliberately: a
+    /// COM attach cannot reach another session's Outlook, so counting one would turn the launch
+    /// guard above into no guard at all.
+    /// </summary>
+    private static bool IsOutlookRunningInCurrentSession()
+    {
+        try
+        {
+            using Process current = Process.GetCurrentProcess();
+            int sessionId = current.SessionId;
+
+            foreach (Process process in Process.GetProcessesByName("OUTLOOK"))
+            {
+                try
+                {
+                    if (process.SessionId == sessionId)
+                    {
+                        return true;
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // Exited between enumeration and inspection.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]

@@ -13,7 +13,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   of them; they were inherited from the fork and survived both cleanup epics because the earlier
   sweep matched on keywords like `Slide` and `Shape` rather than checking every type by name.
 
+- **88 orphaned PowerPoint section headers** left behind in `ResultTypes.cs` by that deletion. Every
+  one was an empty banner comment - `// -- Chart --` and similar - with no type under it.
+
 ### Changed
+
+- **`FEATURES.md` and `README.md` now match the generated surface.** Both had drifted badly: they
+  claimed 5 tools and 30 operations while the registry had 6 tools and 48. `mail` was listed with 16
+  of its 22 actions and `folder` with 4 of its 10, so `get-conversation`, `respond-to-meeting`,
+  `set-flag`, `list-categories`, `list-rules`, `list-reminders`, `get-free-busy`, `list-stores`,
+  `open-shared` and the folder mutation actions were all shipped but undocumented.
 
 - **`ResultTypeInvariantTests` is now driven by reflection** over every model type instead of 24
   hand-written per-type copies. The old tests asserted the same two invariants once each, every one
@@ -24,6 +33,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   wire.
 
 ### Added
+
+- **`contact` tool: list, read, create, update and delete Outlook contacts** (#14). Recovers the
+  last unmerged slice of the orphaned `feature/outlook-parity-slices` branch. A Contacts folder
+  holds distribution lists as well as people, and the original stranded implementation cast every
+  item to `ContactItem` and skipped whatever did not cast - so on a real mailbox it silently dropped
+  a distribution list while still reporting the full folder item count. Distribution lists are now
+  returned separately in `distributionLists` with their member count, and `contacts`,
+  `distributionLists` and `skippedItemCount` together always account for every item scanned, so a
+  silent drop cannot recur. `update` writes only the fields it is passed, leaving the rest alone.
+  Implemented with typed PIA calls throughout - no `dynamic` anywhere in the surface.
 
 - **`mail get-conversation` now names the non-mail members of a thread** (#111). Meeting
   invitations, the calendar appointments they create, and acceptances or declines are returned in a
@@ -211,6 +230,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `note` saying so, rather than failing the call.
 
 ### Fixed
+
+- **The pre-commit hook silently dropped generated skill files from the commit.** Its
+  auto-staging step ran `git diff 2>&1`; git writes advisory notices such as "LF will be replaced
+  by CRLF" to stderr, and under Windows PowerShell with `$ErrorActionPreference = 'Stop'` that
+  notice became a terminating error. `git add` never ran, the `catch` printed
+  "Continuing with remaining checks...", and the script went on to report
+  "All pre-commit checks passed!" - so a commit could ship a changed tool surface with the
+  regenerated `SKILL.md` and reference docs left behind. The block now relaxes the preference
+  around the git calls, checks `$LASTEXITCODE`, re-queries to prove the files really are staged,
+  and fails the commit instead of continuing. Same shape as #82: a check reporting success without
+  having done its job, and again only visible under `powershell.exe`.
 
 - **Replying flattened the quoted thread to plain text** (#15). Passing a `body` to `reply`,
   `reply-all` or `forward` read the draft's plain-text `Body` - a lossy projection of a quoted

@@ -200,24 +200,54 @@ try {
         "skills/outlook-mcp/references/",
         "skills/outlook-cli/references/"
     )
-    $skillDiff = git diff --name-only -- @skillPaths 2>&1
-    $untrackedSkills = git ls-files --others --exclude-standard -- @skillPaths 2>&1
 
-    $allChanges = @()
-    if ($skillDiff) { $allChanges += $skillDiff }
-    if ($untrackedSkills) { $allChanges += $untrackedSkills }
+    # git writes advisory notices such as "LF will be replaced by CRLF" to stderr. With
+    # $ErrorActionPreference = 'Stop', Windows PowerShell turns those into terminating errors, so
+    # this whole block used to abort on a *warning*: git add never ran, the catch printed
+    # "Continuing", and the script still reported "All pre-commit checks passed!" while the
+    # regenerated skill files sat unstaged. Redirection alone does not help - the error record is
+    # created before it is discarded - so relax the preference around the git calls and check
+    # $LASTEXITCODE explicitly instead.
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $skillDiff = git diff --name-only -- @skillPaths 2>$null
+        $untrackedSkills = git ls-files --others --exclude-standard -- @skillPaths 2>$null
 
-    if ($allChanges.Count -gt 0) {
-        git add -- @skillPaths
-        Write-Host "Skill files were regenerated and auto-staged ($($allChanges.Count) files)" -ForegroundColor Green
-        $allChanges | ForEach-Object { Write-Host "   + $_" -ForegroundColor DarkGray }
-    } else {
-        Write-Host "Skill files are already up to date" -ForegroundColor Green
+        $allChanges = @()
+        if ($skillDiff) { $allChanges += $skillDiff }
+        if ($untrackedSkills) { $allChanges += $untrackedSkills }
+
+        if ($allChanges.Count -gt 0) {
+            git add -- @skillPaths 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                throw "git add returned exit code $LASTEXITCODE"
+            }
+
+            # Prove the staging actually happened. Reporting success here without checking is the
+            # failure this block already shipped once.
+            $stillUnstaged = git diff --name-only -- @skillPaths 2>$null
+            if ($stillUnstaged) {
+                throw "still unstaged after git add: $($stillUnstaged -join ', ')"
+            }
+
+            Write-Host "Skill files were regenerated and auto-staged ($($allChanges.Count) files)" -ForegroundColor Green
+            $allChanges | ForEach-Object { Write-Host "   + $_" -ForegroundColor DarkGray }
+        } else {
+            Write-Host "Skill files are already up to date" -ForegroundColor Green
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorAction
     }
 }
 catch {
-    Write-Host "Error auto-staging SKILL.md files: $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host "   Continuing with remaining checks..." -ForegroundColor Gray
+    # Not recoverable: committing without the regenerated skill files ships a tool surface whose
+    # documentation disagrees with it. Fail the commit rather than continue.
+    Write-Host ""
+    Write-Host "Error auto-staging SKILL.md files: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "   Generated skill files would be left out of this commit." -ForegroundColor Red
+    exit 1
 }
 
 Write-Host ""

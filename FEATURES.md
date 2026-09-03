@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**5 tools with 30 operations for Outlook automation**
+**6 tools with 48 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -13,7 +13,7 @@ bug (see Rule 24, post-change sync).
 
 ---
 
-## Mail Operations (16 operations)
+## Mail Operations (22 operations)
 
 | Action | Description |
 |---|---|
@@ -21,6 +21,8 @@ bug (see Rule 24, post-change sync).
 | `read` | Read a mail item by entry ID |
 | `list` | List mail items in a folder |
 | `search` | Search mail items |
+| `get-conversation` | Read a whole conversation thread. Non-mail items on the thread are returned in `otherItems` rather than dropped |
+| `respond-to-meeting` | Accept, tentatively accept or decline a meeting invitation |
 | `create-draft` | Create a draft message |
 | `reply` | Reply to the sender of a message |
 | `reply-all` | Reply to all recipients of a message |
@@ -29,7 +31,11 @@ bug (see Rule 24, post-change sync).
 | `move` | Move a message to another folder |
 | `delete` | Delete a message |
 | `set-read-state` | Mark a message read or unread |
+| `set-flag` | Set or clear a follow-up flag on a message |
 | `set-categories` | Set the categories on a message |
+| `list-categories` | List the categories defined in the master category list |
+| `list-rules` | List the Outlook rules defined on the store |
+| `list-reminders` | List pending reminders |
 | `set-subject` | Set the subject of a draft |
 | `set-body` | Set the body of a draft |
 | `set-recipients` | Set the recipients of a draft |
@@ -39,7 +45,7 @@ confirmation, and repeated calls carrying the same operation ID will not send tw
 
 ---
 
-## Calendar Operations (5 operations)
+## Calendar Operations (6 operations)
 
 | Action | Description |
 |---|---|
@@ -48,17 +54,41 @@ confirmation, and repeated calls carrying the same operation ID will not send tw
 | `create-appointment` | Create an appointment |
 | `update-appointment` | Update an existing appointment |
 | `delete-appointment` | Delete an appointment |
+| `get-free-busy` | Read the free/busy availability of a recipient |
 
 ---
 
-## Folder Operations (4 operations)
+## Folder Operations (10 operations)
 
 | Action | Description |
 |---|---|
 | `list-default` | List the default Outlook folders |
+| `list-stores` | List the stores (accounts and PST files) attached to the profile |
+| `open-shared` | Open a folder in another user's mailbox |
+| `create` | Create a folder |
+| `rename` | Rename a folder |
+| `move` | Move a folder under a different parent |
+| `delete` | Delete a folder |
 | `list-children` | List the child folders of a folder |
 | `resolve-path` | Resolve a folder path to a folder |
 | `list-items` | List the items in a folder |
+
+---
+
+## Contact Operations (5 operations)
+
+| Action | Description |
+|---|---|
+| `list` | List the contacts in the default Contacts folder or an explicit folder path. Distribution lists are returned separately in `distributionLists` rather than dropped |
+| `read` | Read a contact by entry ID, or the contact currently open or selected in Outlook |
+| `create` | Create a contact |
+| `update` | Update named fields on an existing contact. Fields that are not passed are left alone |
+| `delete` | Delete a contact |
+
+A Contacts folder holds distribution lists as well as people. `contacts`, `distributionLists` and
+`skippedItemCount` together always account for every item scanned, so nothing can be silently
+dropped. Names are not unique and some contacts have no name at all, so `entryId` is the only
+reliable handle.
 
 ---
 

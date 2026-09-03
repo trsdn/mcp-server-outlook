@@ -341,6 +341,35 @@ than writing it anyway. Creating categories is not exposed here - that is a mail
 `set-categories` replaces the whole set on the message, so include the existing categories from
 `mail.read` if the intent is to add one rather than to replace them all.
 
+## Rules explain missing mail
+
+Before telling a user that a folder is empty or that nothing arrived from someone, check whether a
+rule already moved it. Rules run before this tool sees anything, so "no mail from Anna" and "a rule
+files Anna's mail into Projects" look identical from a listing.
+
+```
+1. mail.list-rules(includeDetail: true)   → { name: ..., conditions: ["from"],
+                                              fromAddresses: ["anna@..."],
+                                              actions: ["moveToFolder", "stop"],
+                                              moveToFolderPath: "\\...\Inbox\Projects" }
+2. mail.list(folder: "Inbox\Projects")
+```
+
+`includeDetail` is **off by default** because it is roughly forty times the work - Outlook stores a
+fixed slot for every condition and action it supports, so detail means walking about sixty slots per
+rule. Use the plain listing when you only need names and whether they are on.
+
+Things worth reading off the result:
+
+- `enabled: false` means the rule explains nothing about where mail went.
+- `executionOrder` matters, because a `stop` action means later rules never ran.
+- `isLocalRule: true` means the rule only runs while Outlook is open, which is a common reason mail
+  is filed late or not at all.
+- `ruleType` is `receive` or `send`. A send rule does not explain missing incoming mail.
+
+Rules are read-only here. Creating or changing one alters real mail flow for every future message,
+so if the user wants that, tell them where it is in Outlook rather than implying this tool can do it.
+
 ## Save attachments
 
 ```

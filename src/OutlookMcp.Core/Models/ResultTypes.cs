@@ -352,6 +352,85 @@ public class OutlookStoreListResult : ResultBase
 }
 
 /// <summary>
+/// The mailbox's inbox rules.
+///
+/// <para>
+/// Rules move, delete and forward mail before anything else in this surface sees it. Without them a
+/// question like "why is nothing arriving from this sender?" gets a confident empty folder instead of
+/// the answer, which is that a rule filed it elsewhere.
+/// </para>
+/// </summary>
+public class MailRuleListResult : ResultBase
+{
+    public List<MailRuleInfo> Rules { get; set; } = [];
+}
+
+public class MailRuleInfo
+{
+    /// <summary>The name shown in Outlook's rule list.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// False for a rule that exists but is switched off. A disabled rule explains nothing about
+    /// where mail went, so the two must not be conflated.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// The order Outlook evaluates rules in. It matters because a rule can stop processing
+    /// altogether, so a later rule may never run however well it matches.
+    /// </summary>
+    public int ExecutionOrder { get; set; }
+
+    /// <summary>
+    /// <c>receive</c> for a rule that runs on arriving mail, <c>send</c> for one that runs on
+    /// outgoing mail. Never the raw <c>OlRuleType</c> ordinal.
+    /// </summary>
+    public string RuleType { get; set; } = "receive";
+
+    /// <summary>
+    /// True for a rule that only runs in this Outlook client, as opposed to one the server applies.
+    /// A client-only rule does nothing while Outlook is closed, which is a common reason mail is
+    /// filed late or not at all.
+    /// </summary>
+    public bool IsLocalRule { get; set; }
+
+    /// <summary>
+    /// The conditions actually in use, by name - <c>from</c>, <c>subject</c>, and so on.
+    ///
+    /// <para>
+    /// Only populated when <c>includeDetail</c> is set. Outlook's <c>Conditions</c> collection has a
+    /// fixed length covering every condition it supports, so this is the subset with
+    /// <c>Enabled</c> set; the raw count would report a one-line rule as having 31 conditions.
+    /// </para>
+    /// </summary>
+    public List<string> Conditions { get; set; } = [];
+
+    /// <summary>
+    /// The actions actually in use, by name. Same fixed-collection caveat as <c>Conditions</c>.
+    /// </summary>
+    public List<string> Actions { get; set; } = [];
+
+    /// <summary>
+    /// Where a move-to-folder rule files its mail. Null when the rule does not move anything.
+    /// This is the field that turns "your mail is being moved" into something the caller can act on.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MoveToFolderPath { get; set; }
+
+    /// <summary>
+    /// The senders a from-rule matches.
+    ///
+    /// <para>
+    /// Rule recipients are stored unresolved, so Outlook leaves <c>Recipient.Address</c> blank and
+    /// puts the address in <c>Name</c>. Reading only <c>Address</c> reports every from-rule as
+    /// matching nobody.
+    /// </para>
+    /// </summary>
+    public List<string> FromAddresses { get; set; } = [];
+}
+
+/// <summary>
 /// The mailbox's master category list. Outlook does not validate the string
 /// <c>mail set-categories</c> writes, so a category that is not in this list is accepted, reported
 /// as a success, and then cannot be filtered or coloured by. This is how a caller finds out which

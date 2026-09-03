@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`mail list-rules`** (#15). Enumerates the mailbox's inbox rules, optionally with each rule's
+  conditions, actions and move-to destination.
+
+  Rules move, delete and forward mail before anything else in this surface sees it. Until now they
+  were invisible, so "why is nothing arriving from this sender?" got a confident empty folder instead
+  of the answer. That is the project's characteristic failure mode: a truthful response to a question
+  the caller did not ask.
+
+  Two behaviours were measured against Outlook rather than assumed. `Conditions` and `Actions` are
+  **fixed-length collections** covering every clause Outlook supports — every rule on the test mailbox
+  reported 31 conditions and 28 actions regardless of content — so only the clauses with `Enabled`
+  set are reported. And rule recipients are stored **unresolved**: `Recipient.Address` is blank and
+  the address sits in `Name`, so reading only `Address` would report every from-rule as matching
+  nobody.
+
+  `includeDetail` is off by default because walking those slots costs roughly forty times as much:
+  on a mailbox with 84 rules, 264 ms became 10.6 s. Clause names and rule types are reported as names,
+  never as raw enum ordinals.
+
+  Read-only. Creating or changing a rule alters real mail flow for every future message and is
+  deliberately not exposed.
+
 - **Follow-up flags: `mail set-flag`** (#15). Raise, complete or clear a follow-up flag, with an
   optional due date and label. `read`, `list` and `search` now report `flagStatus` — always, as
   `none`, `flagged` or `complete`, never omitted — plus `flagRequest` and `flagDueDate` when set, so

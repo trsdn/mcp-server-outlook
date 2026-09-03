@@ -1006,11 +1006,41 @@ public class CalendarFreeBusyResult : ResultBase
     public List<string> UnresolvedAttendees { get; set; } = [];
 }
 
-public class CalendarMutationResult : ResultBase
-
+/// <summary>
+/// The outcome of answering a meeting invitation.
+/// </summary>
+public class MeetingResponseResult : ResultBase
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject { get; set; }
+
+    /// <summary>
+    /// <c>accept</c>, <c>decline</c> or <c>tentative</c>, as it was applied.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Response { get; set; }
+
+    /// <summary>
+    /// Whether the organiser was told. Answering updates your own calendar either way; only
+    /// <c>sendResponse</c> mails them.
+    /// </summary>
+    public bool ResponseSent { get; set; }
+}
+
+public class CalendarMutationResult : ResultBase
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
+
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? EntryId { get; set; }

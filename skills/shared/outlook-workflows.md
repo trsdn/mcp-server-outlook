@@ -78,6 +78,25 @@ Every entry in a listing carries `itemType`:
 `skippedItemCount` counts items that could not be summarised at all. If it is non-zero, the listing
 is not the whole folder - do not describe it as such.
 
+## Answering an invitation
+
+`mail.respond-to-meeting` accepts, declines or tentatively accepts an invitation. Point it at the
+invitation's `entryId` (its `itemType` is `meetingRequest`) with `response` set to `accept`,
+`decline` or `tentative`.
+
+Answering and notifying are separate steps, exactly as they are when creating a meeting:
+
+- The response is always written to the user's own calendar.
+- The organiser is told **only** when `sendResponse: true`. Add `responseText` to include a note.
+
+So report which one you did. "I've accepted it" and "I've told them you're coming" are different
+claims. Defaulting to not sending is deliberate: mail to a real organiser cannot be taken back.
+
+The action refuses, by name, anything that is not an invitation - ordinary mail, a
+`meetingCancellation` (the meeting is already off) and a `meetingResponse` (somebody else's answer to
+a meeting the user organised). Do not work around a refusal by replying to the item instead; that
+leaves the invitation unanswered.
+
 ## Inviting people is a separate step from creating the entry
 
 `calendar.create-appointment` with `requiredAttendees` or `optionalAttendees` (semicolon-separated)

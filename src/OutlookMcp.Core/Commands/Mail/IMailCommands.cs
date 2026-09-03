@@ -36,7 +36,11 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use send to send a saved draft by entry id or the current active draft explicitly. Send requires confirm=true "
     + "(it is refused otherwise) and accepts an optional operationId so a retried call with the same operationId after "
     + "a timeout or crash is answered from a cached result instead of risking a duplicate send. "
-    + "Set display=true on draft-producing actions to show the draft inspector after saving.")]
+    + "Set display=true on draft-producing actions to show the draft inspector after saving. "
+    + "Use respond-to-meeting to accept, decline or tentatively accept a meeting invitation - a listing's itemType "
+    + "says which items are invitations. Responding updates your own calendar; the organiser is told only when "
+    + "sendResponse is true, so accepting quietly and notifying them are separate choices. "
+    + "Replying to an invitation with reply or forward is not the same thing and does not answer it.")]
 public interface IMailCommands
 {
     [ServiceAction("read-active", Destructive = false)]
@@ -82,6 +86,15 @@ public interface IMailCommands
         bool useActiveMail = true,
         int maxCount = 50,
         bool includeBodyPreview = false);
+
+    [ServiceAction("respond-to-meeting", Destructive = true)]
+    MeetingResponseResult RespondToMeeting(
+        string? entryId = null,
+        string? storeId = null,
+        string response = "accept",
+        bool sendResponse = false,
+        string? responseText = null,
+        bool useActiveMail = false);
 
     [ServiceAction("create-draft")]
     MailDraftResult CreateMailDraft(

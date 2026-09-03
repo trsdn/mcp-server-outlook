@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Answering meeting invitations** (#32). `mail.respond-to-meeting` accepts, declines or tentatively
+  accepts an invitation. Previously the only thing an agent could do with one was reply to it, which
+  is just mail back to the organiser and leaves the invitation unanswered - a confidently wrong
+  answer of exactly the kind this surface exists to avoid.
+
+  Answering and notifying are separate. The response always updates the caller's own calendar; the
+  organiser is mailed only when `sendResponse` is set, which defaults to false because mail to a real
+  organiser cannot be taken back. `responseText` adds a note to that mail.
+
+  Anything that is not an invitation is refused by name rather than failing obscurely inside Outlook:
+  ordinary mail, a meeting cancellation (the meeting is already off) and somebody else's response to
+  a meeting the caller organised.
+
+  Verified live only along the refusal paths - an unknown response value, no item, ordinary mail and
+  a meeting response are each rejected against a real mailbox. **The accept path is unverified**, and
+  deliberately so: there is no way to manufacture a safe invitation, since you cannot invite yourself
+  and then answer it, and every real invitation in this mailbox belongs to a real organiser. An
+  on-demand test (`OUTLOOKMCP_RESPOND_ENTRYID`) exists so the owner can verify it against an
+  invitation they are willing to answer.
+
 - **Free/busy lookup** (#32). `calendar.get-free-busy` answers "when is this person available",
   which was previously impossible - nothing exposed `Recipient.FreeBusy`, so an agent asked to
   schedule around somebody could only guess. It returns Outlook's raw slot string and, more usefully,

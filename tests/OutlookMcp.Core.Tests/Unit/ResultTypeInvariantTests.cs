@@ -1,14 +1,150 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using OutlookMcp.Core.Models;
 using Xunit;
 
 namespace OutlookMcp.Core.Tests.Unit;
 
 /// <summary>
-/// Validates invariants on result types to prevent Rule 1 violations
-/// (Success=true with ErrorMessage set).
+/// Validates invariants that every result type has to hold, to prevent Rule 1 violations
+/// (Success=true with ErrorMessage set) and null collections reaching a caller.
+///
+/// <para>
+/// These are driven by reflection over the whole model namespace rather than written out once per
+/// type. The hand-written version asserted the same two things twenty-four times, every one of them
+/// against a PowerPoint type inherited from the fork; when those types were deleted the coverage
+/// went with them, and no Outlook result type had ever been checked at all. Reflection covers every
+/// type that exists now and every one added later, which is the only version of this test that
+/// cannot quietly stop testing anything.
+/// </para>
+///
+/// <para>
+/// This is the documented Rule 30 exception: pure reflection over plain objects, no COM, no Outlook.
+/// </para>
 /// </summary>
 public class ResultTypeInvariantTests
 {
+    /// <summary>
+    /// Every constructible public model type. Abstract types and those needing constructor arguments
+    /// are skipped - they cannot be default-constructed, so the invariants do not apply to them.
+    /// </summary>
+    public static TheoryData<Type> ResultTypes
+    {
+        get
+        {
+            var data = new TheoryData<Type>();
+            foreach (Type type in TypesUnderTest())
+            {
+                data.Add(type);
+            }
+
+            return data;
+        }
+    }
+
+    private static IEnumerable<Type> TypesUnderTest() =>
+        typeof(OperationResult).Assembly
+            .GetTypes()
+            .Where(t => t.IsClass
+                && t.IsPublic
+                && !t.IsAbstract
+                && t.Namespace == typeof(OperationResult).Namespace
+                && t.GetConstructor(Type.EmptyTypes) != null)
+            .OrderBy(t => t.Name, StringComparer.Ordinal);
+
+    /// <summary>
+    /// A result must never default to claiming success. Rule 1's invariant is that Success=true
+    /// implies no error; a type that starts out true means any path which forgets to set it reports
+    /// a success that never happened - the failure mode this project keeps finding.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ResultTypes))]
+    public void ResultType_DoesNotDefaultToSuccess(Type type)
+    {
+        PropertyInfo? success = type.GetProperty("Success", BindingFlags.Public | BindingFlags.Instance);
+
+        if (success is null || success.PropertyType != typeof(bool))
+        {
+            return;
+        }
+
+        object instance = Activator.CreateInstance(type)!;
+
+        Assert.False(
+            (bool)success.GetValue(instance)!,
+            $"{type.Name}.Success defaults to true, so a code path that never sets it reports success.");
+    }
+
+    /// <summary>
+    /// A collection property that is not declared nullable must be an empty list, never null. A
+    /// caller that has to null-check every collection will eventually not.
+    ///
+    /// <para>
+    /// Properties declared <c>List&lt;T&gt;?</c> are exempt, and the distinction is deliberate rather
+    /// than a loophole: those are tri-state on the wire. <c>MailSummaryInfo.AccessDenied</c> is null
+    /// when nothing was blocked and is then omitted entirely, because an empty list would serialise
+    /// <c>"accessDenied": []</c> onto every message in every listing. Declaring the property nullable
+    /// is how that intent is stated, so this test reads it rather than overriding it.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ResultTypes))]
+    public void ResultType_NonNullableCollectionsAreEmptyNotNull(Type type)
+    {
+        object instance = Activator.CreateInstance(type)!;
+        var nullability = new NullabilityInfoContext();
+
+        PropertyInfo[] collections = [.. type
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead
+                && p.PropertyType != typeof(string)
+                && typeof(IEnumerable).IsAssignableFrom(p.PropertyType)
+                && nullability.Create(p).ReadState != NullabilityState.Nullable)];
+
+        foreach (PropertyInfo property in collections)
+        {
+            object? value = property.GetValue(instance);
+
+            Assert.True(
+                value is not null,
+                $"{type.Name}.{property.Name} is a non-nullable collection but defaults to null. "
+                + "Initialise it to an empty collection, or declare it nullable if null is meaningful.");
+
+            Assert.False(
+                ((IEnumerable)value!).GetEnumerator().MoveNext(),
+                $"{type.Name}.{property.Name} is not empty by default.");
+        }
+    }
+
+    /// <summary>
+    /// The namespace must actually contain result types, and they must actually have collections and
+    /// Success flags to check. Without this, a reflection filter that stopped matching would leave a
+    /// suite that passes with zero assertions - which is exactly how the per-type version failed.
+    /// </summary>
+    [Fact]
+    public void TypesUnderTest_CoverTheModelSurface()
+    {
+        List<Type> types = [.. TypesUnderTest()];
+
+        Assert.True(
+            types.Count > 20,
+            $"Only {types.Count} model types were discovered; the reflection filter has stopped matching.");
+
+        Assert.True(
+            types.Count(t => t.GetProperty("Success") is not null) > 20,
+            "Almost no discovered type has a Success flag; the filter is matching the wrong things.");
+
+        Assert.True(
+            types.Any(t => t.GetProperties()
+                .Any(p => p.PropertyType != typeof(string)
+                    && typeof(IEnumerable).IsAssignableFrom(p.PropertyType)
+                    && new NullabilityInfoContext().Create(p).ReadState != NullabilityState.Nullable)),
+            "No discovered type has a non-nullable collection property, so that invariant asserts nothing.");
+    }
+
     [Fact]
     public void OperationResult_DefaultState_SuccessIsFalse()
     {
@@ -23,289 +159,5 @@ public class ResultTypeInvariantTests
         var result = new OperationResult { Success = true };
         Assert.True(result.Success);
         Assert.Null(result.ErrorMessage);
-    }
-
-    [Fact]
-    public void SlideListResult_DefaultState_EmptySlidesList()
-    {
-        var result = new SlideListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Slides);
-        Assert.Empty(result.Slides);
-    }
-
-    [Fact]
-    public void ShapeListResult_DefaultState_EmptyShapesList()
-    {
-        var result = new ShapeListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Shapes);
-        Assert.Empty(result.Shapes);
-    }
-
-    [Fact]
-    public void TextResult_DefaultState_EmptyText()
-    {
-        var result = new TextResult();
-        Assert.False(result.Success);
-        Assert.Equal(string.Empty, result.Text);
-        Assert.NotNull(result.Paragraphs);
-        Assert.Empty(result.Paragraphs);
-    }
-
-    [Fact]
-    public void SlideInfo_DefaultValues_AreReasonable()
-    {
-        var info = new SlideInfo();
-        Assert.Equal(0, info.SlideIndex);
-        Assert.Equal(0, info.SlideNumber);
-        Assert.Equal(string.Empty, info.SlideId);
-        Assert.Equal(string.Empty, info.LayoutName);
-        Assert.Equal(string.Empty, info.MasterName);
-        Assert.Equal(0, info.ShapeCount);
-        Assert.False(info.HasNotes);
-        Assert.False(info.HasAnimations);
-        Assert.Null(info.Name);
-    }
-
-    [Fact]
-    public void ShapeInfo_DefaultValues_AreReasonable()
-    {
-        var info = new ShapeInfo();
-        Assert.Equal(0, info.ShapeId);
-        Assert.Equal(string.Empty, info.Name);
-        Assert.Equal(string.Empty, info.ShapeType);
-        Assert.Equal(0f, info.Left);
-        Assert.Equal(0f, info.Top);
-        Assert.Equal(0f, info.Width);
-        Assert.Equal(0f, info.Height);
-        Assert.False(info.HasTextFrame);
-        Assert.False(info.HasTable);
-        Assert.False(info.HasChart);
-        Assert.False(info.IsGroup);
-        Assert.False(info.IsPlaceholder);
-        Assert.Null(info.Text);
-        Assert.Null(info.AlternativeText);
-        Assert.Null(info.PlaceholderType);
-        Assert.Null(info.GroupItems);
-    }
-
-    [Fact]
-    public void RenameResult_DefaultValues()
-    {
-        var result = new RenameResult();
-        Assert.False(result.Success);
-        Assert.Equal(string.Empty, result.ObjectType);
-        Assert.Equal(string.Empty, result.OldName);
-        Assert.Equal(string.Empty, result.NewName);
-    }
-
-    [Fact]
-    public void ExportResult_DefaultValues()
-    {
-        var result = new ExportResult();
-        Assert.False(result.Success);
-        Assert.Equal(string.Empty, result.OutputPath);
-        Assert.Equal(string.Empty, result.Format);
-    }
-
-    [Fact]
-    public void ChartInfoResult_DefaultValues()
-    {
-        var result = new ChartInfoResult();
-        Assert.False(result.Success);
-        Assert.Equal(string.Empty, result.ShapeName);
-        Assert.Equal(string.Empty, result.ChartTypeName);
-        Assert.Null(result.Title);
-        Assert.False(result.HasLegend);
-        Assert.Equal(0, result.SeriesCount);
-    }
-
-    [Fact]
-    public void VbaModuleListResult_DefaultValues()
-    {
-        var result = new VbaModuleListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Modules);
-        Assert.Empty(result.Modules);
-    }
-
-    [Fact]
-    public void DocumentPropertyResult_AllPropertiesNullByDefault()
-    {
-        var result = new DocumentPropertyResult();
-        Assert.False(result.Success);
-        Assert.Null(result.Title);
-        Assert.Null(result.Subject);
-        Assert.Null(result.Author);
-        Assert.Null(result.Keywords);
-        Assert.Null(result.Comments);
-        Assert.Null(result.Company);
-        Assert.Null(result.Category);
-    }
-
-    [Fact]
-    public void SectionListResult_DefaultValues()
-    {
-        var result = new SectionListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Sections);
-        Assert.Empty(result.Sections);
-    }
-
-    [Fact]
-    public void AnimationListResult_DefaultValues()
-    {
-        var result = new AnimationListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Animations);
-        Assert.Empty(result.Animations);
-    }
-
-    [Fact]
-    public void HyperlinkListResult_DefaultValues()
-    {
-        var result = new HyperlinkListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Hyperlinks);
-        Assert.Empty(result.Hyperlinks);
-    }
-
-    [Fact]
-    public void MasterListResult_DefaultValues()
-    {
-        var result = new MasterListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Masters);
-        Assert.Empty(result.Masters);
-    }
-
-    [Fact]
-    public void DesignListResult_DefaultValues()
-    {
-        var result = new DesignListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Designs);
-        Assert.Empty(result.Designs);
-    }
-
-    [Fact]
-    public void FileValidationInfo_DefaultValues()
-    {
-        var result = new FileValidationInfo();
-        Assert.False(result.Success);
-        Assert.False(result.Exists);
-        Assert.Equal(string.Empty, result.FileName);
-        Assert.Equal(0, result.FileSizeBytes);
-        Assert.False(result.IsReadOnly);
-        Assert.False(result.IsMacroEnabled);
-        Assert.Equal(0, result.SlideCount);
-    }
-
-    [Fact]
-    public void CommentListResult_DefaultValues()
-    {
-        var result = new CommentListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Comments);
-        Assert.Empty(result.Comments);
-    }
-
-    [Fact]
-    public void PlaceholderListResult_DefaultValues()
-    {
-        var result = new PlaceholderListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Placeholders);
-        Assert.Empty(result.Placeholders);
-        Assert.Equal(0, result.SlideIndex);
-    }
-
-    [Fact]
-    public void BackgroundResult_DefaultValues()
-    {
-        var result = new BackgroundResult();
-        Assert.False(result.Success);
-        Assert.False(result.FollowMasterBackground);
-        Assert.Equal(string.Empty, result.FillType);
-    }
-
-    [Fact]
-    public void HeaderFooterResult_DefaultValues()
-    {
-        var result = new HeaderFooterResult();
-        Assert.False(result.Success);
-        Assert.False(result.ShowFooter);
-        Assert.False(result.ShowSlideNumber);
-        Assert.False(result.ShowDate);
-        Assert.Null(result.FooterText);
-    }
-
-    [Fact]
-    public void SmartArtInfoResult_DefaultValues()
-    {
-        var result = new SmartArtInfoResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Nodes);
-        Assert.Empty(result.Nodes);
-        Assert.Equal(string.Empty, result.LayoutName);
-    }
-
-    [Fact]
-    public void CustomShowListResult_DefaultValues()
-    {
-        var result = new CustomShowListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Shows);
-        Assert.Empty(result.Shows);
-    }
-
-    [Fact]
-    public void PageSetupResult_DefaultValues()
-    {
-        var result = new PageSetupResult();
-        Assert.False(result.Success);
-        Assert.Equal(0f, result.SlideWidth);
-        Assert.Equal(0f, result.SlideHeight);
-    }
-
-    [Fact]
-    public void TagListResult_DefaultValues()
-    {
-        var result = new TagListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.Tags);
-        Assert.Empty(result.Tags);
-        Assert.Null(result.ShapeName);
-    }
-
-    [Fact]
-    public void ColorSchemeListResult_DefaultValues()
-    {
-        var result = new ColorSchemeListResult();
-        Assert.False(result.Success);
-        Assert.NotNull(result.ColorSchemes);
-        Assert.Empty(result.ColorSchemes);
-    }
-
-    [Fact]
-    public void AccessibilityAuditResult_DefaultValues()
-    {
-        var result = new AccessibilityAuditResult();
-        Assert.False(result.Success);
-        Assert.Equal(0, result.TotalSlides);
-        Assert.Equal(0, result.IssueCount);
-        Assert.NotNull(result.Issues);
-        Assert.Empty(result.Issues);
-    }
-
-    [Fact]
-    public void ReadingOrderResult_DefaultValues()
-    {
-        var result = new ReadingOrderResult();
-        Assert.False(result.Success);
-        Assert.Equal(0, result.SlideIndex);
-        Assert.NotNull(result.Shapes);
-        Assert.Empty(result.Shapes);
     }
 }

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **85 dead PowerPoint result types** deleted from `ResultTypes.cs` (123 down to 38), along with the
+  18 tests that were the only thing still referencing them. Nothing in the product could reach any
+  of them; they were inherited from the fork and survived both cleanup epics because the earlier
+  sweep matched on keywords like `Slide` and `Shape` rather than checking every type by name.
+
+### Changed
+
+- **`ResultTypeInvariantTests` is now driven by reflection** over every model type instead of 24
+  hand-written per-type copies. The old tests asserted the same two invariants once each, every one
+  of them against a PowerPoint type, so no Outlook result type had ever been checked. The new
+  version covers all of them and every type added later, and it distinguishes non-nullable
+  collections (which must default to empty) from deliberately nullable ones such as
+  `MailSummaryInfo.AccessDenied`, where null means "nothing was blocked" and is omitted from the
+  wire.
+
 ### Added
 
 - **`mail get-conversation` now names the non-mail members of a thread** (#111). Meeting

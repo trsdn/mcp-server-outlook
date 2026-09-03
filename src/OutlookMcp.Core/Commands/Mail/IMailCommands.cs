@@ -38,6 +38,12 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "forward accepts recipients since a forwarded message otherwise has nobody to send to. All three accept an optional "
     + "body to prepend above the quoted original message. "
     + "Use set-subject, set-body, and set-recipients to edit an existing draft before sending. "
+    + "create-draft, reply, reply-all, forward and set-body all accept bodyFormat, which is 'plain' (the default) "
+    + "or 'html'. Pass 'html' when the body argument is markup you want rendered - lists, links, emphasis, tables. "
+    + "Leave it as 'plain' for ordinary text: plain text is escaped rather than interpreted, so a body containing "
+    + "'<' or '&' arrives exactly as written instead of being silently mangled. An unrecognised value is refused "
+    + "rather than guessed at. On reply, reply-all and forward the body goes above the quoted original and the "
+    + "quoted message keeps its own formatting either way. "
     + "Use send to send a saved draft by entry id or the current active draft explicitly. Send requires confirm=true "
     + "(it is refused otherwise) and accepts an optional operationId so a retried call with the same operationId after "
     + "a timeout or crash is answered from a cached result instead of risking a duplicate send. "
@@ -109,7 +115,8 @@ public interface IMailCommands
         string? bcc = null,
         string? subject = null,
         string? body = null,
-        bool display = false);
+        bool display = false,
+        string bodyFormat = "plain");
 
     [ServiceAction("reply")]
     MailDraftResult Reply(
@@ -117,7 +124,8 @@ public interface IMailCommands
         string? storeId = null,
         bool useActiveMail = true,
         string? body = null,
-        bool display = false);
+        bool display = false,
+        string bodyFormat = "plain");
 
     [ServiceAction("reply-all")]
     MailDraftResult ReplyAll(
@@ -125,7 +133,8 @@ public interface IMailCommands
         string? storeId = null,
         bool useActiveMail = true,
         string? body = null,
-        bool display = false);
+        bool display = false,
+        string bodyFormat = "plain");
 
     [ServiceAction("forward")]
     MailDraftResult Forward(
@@ -136,7 +145,8 @@ public interface IMailCommands
         string? cc = null,
         string? bcc = null,
         string? body = null,
-        bool display = false);
+        bool display = false,
+        string bodyFormat = "plain");
 
     [ServiceAction("send", Destructive = true)]
     MailSendResult Send(
@@ -185,7 +195,8 @@ public interface IMailCommands
         string body,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = true,
+        string bodyFormat = "plain");
 
     [ServiceAction("set-recipients")]
     MailMutationResult SetRecipients(

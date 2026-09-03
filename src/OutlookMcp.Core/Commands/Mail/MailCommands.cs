@@ -656,8 +656,20 @@ public class MailCommands : IMailCommands
         string? bcc = null,
         string? subject = null,
         string? body = null,
-        bool display = false)
+        bool display = false,
+        string bodyFormat = "plain")
     {
+        if (!TryParseBodyFormat(bodyFormat, out bool asHtml, out string? formatError))
+        {
+            return new MailDraftResult
+            {
+                Success = false,
+                Saved = false,
+                Displayed = false,
+                ErrorMessage = formatError
+            };
+        }
+
         return OutlookInteropRunner.Execute(
             "OutlookMailCreateDraft",
             (application, session) =>
@@ -702,7 +714,14 @@ public class MailCommands : IMailCommands
 
                     if (body != null)
                     {
-                        mail.Body = body;
+                        if (asHtml)
+                        {
+                            mail.HTMLBody = body;
+                        }
+                        else
+                        {
+                            mail.Body = body;
+                        }
                     }
 
                     mail.Save();
@@ -748,7 +767,8 @@ public class MailCommands : IMailCommands
         string? storeId = null,
         bool useActiveMail = true,
         string? body = null,
-        bool display = false)
+        bool display = false,
+        string bodyFormat = "plain")
         => ExecuteDraftFromMail(
             "OutlookMailReply",
             "Created Outlook reply draft.",
@@ -760,6 +780,7 @@ public class MailCommands : IMailCommands
             bcc: null,
             body,
             display,
+            bodyFormat,
             sourceMail => sourceMail.Reply());
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -768,7 +789,8 @@ public class MailCommands : IMailCommands
         string? storeId = null,
         bool useActiveMail = true,
         string? body = null,
-        bool display = false)
+        bool display = false,
+        string bodyFormat = "plain")
         => ExecuteDraftFromMail(
             "OutlookMailReplyAll",
             "Created Outlook reply-all draft.",
@@ -780,6 +802,7 @@ public class MailCommands : IMailCommands
             bcc: null,
             body,
             display,
+            bodyFormat,
             sourceMail => sourceMail.ReplyAll());
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
@@ -791,7 +814,8 @@ public class MailCommands : IMailCommands
         string? cc = null,
         string? bcc = null,
         string? body = null,
-        bool display = false)
+        bool display = false,
+        string bodyFormat = "plain")
         => ExecuteDraftFromMail(
             "OutlookMailForward",
             "Created Outlook forward draft.",
@@ -803,6 +827,7 @@ public class MailCommands : IMailCommands
             bcc,
             body,
             display,
+            bodyFormat,
             sourceMail => sourceMail.Forward());
 
     /// <summary>
@@ -1402,7 +1427,8 @@ public class MailCommands : IMailCommands
         string body,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = true,
+        string bodyFormat = "plain")
     {
         if (body == null)
         {
@@ -1410,6 +1436,15 @@ public class MailCommands : IMailCommands
             {
                 Success = false,
                 ErrorMessage = "body is required for mail.set-body."
+            };
+        }
+
+        if (!TryParseBodyFormat(bodyFormat, out bool asHtml, out string? formatError))
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = formatError
             };
         }
 
@@ -1445,7 +1480,15 @@ public class MailCommands : IMailCommands
                         return CreateMailMutationNotFoundResult(entryId);
                     }
 
-                    mail.Body = body;
+                    if (asHtml)
+                    {
+                        mail.HTMLBody = body;
+                    }
+                    else
+                    {
+                        mail.Body = body;
+                    }
+
                     mail.Save();
 
                     return new MailMutationResult
@@ -2020,6 +2063,143 @@ public class MailCommands : IMailCommands
             });
     }
 
+    /// <summary>
+    /// Reads the caller's <c>bodyFormat</c> argument.
+    ///
+    /// <para>
+    /// Unknown values are refused rather than defaulted. Quietly treating <c>"richtext"</c> as plain
+    /// would put the markup the caller expected to be rendered in front of a human as visible tag
+    /// soup, and the call would have reported success.
+    /// </para>
+    /// </summary>
+    private static bool TryParseBodyFormat(string? bodyFormat, out bool asHtml, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(bodyFormat)
+            || bodyFormat.Equals("plain", StringComparison.OrdinalIgnoreCase)
+            || bodyFormat.Equals("text", StringComparison.OrdinalIgnoreCase))
+        {
+            asHtml = false;
+            error = null;
+            return true;
+        }
+
+        if (bodyFormat.Equals("html", StringComparison.OrdinalIgnoreCase))
+        {
+            asHtml = true;
+            error = null;
+            return true;
+        }
+
+        asHtml = false;
+        error = $"bodyFormat '{bodyFormat}' is not supported. Use 'plain' or 'html'.";
+        return false;
+    }
+
+    /// <summary>
+    /// Puts the caller's text above the quoted original in a reply or forward draft, without
+    /// destroying the quote.
+    ///
+    /// <para>
+    /// The previous version of this read <c>draftMail.Body</c> - the lossy plain-text projection of a
+    /// quoted original that is almost always HTML - and wrote it straight back. That silently
+    /// flattened the entire quoted thread: fonts, tables, inline images, links, all of it, replaced by
+    /// text. The call reported success and every word was still present, so nothing looked wrong
+    /// until someone opened the draft. Writing to <c>HTMLBody</c> instead keeps the original intact.
+    /// </para>
+    ///
+    /// <para>
+    /// Plain caller text is HTML-escaped on the way in. Without that, a user writing "profit &lt;
+    /// loss" would lose everything after the bracket to an unclosed tag - a silent edit of somebody's
+    /// words, which is worse than a visible failure.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static void PrependToDraftBody(Outlook.MailItem draftMail, string body, bool asHtml)
+    {
+        bool draftIsHtml = SafeIsHtmlBody(draftMail);
+
+        if (!draftIsHtml && !asHtml)
+        {
+            // Nothing to preserve and nothing to render: the plain-text concatenation is correct.
+            string existingBody = SafeGet(() => draftMail.Body) ?? string.Empty;
+            draftMail.Body = body + Environment.NewLine + Environment.NewLine + existingBody;
+            return;
+        }
+
+        string addition = asHtml ? body : $"<div>{PlainTextToHtml(body)}</div>";
+        string existingHtml = SafeGet(() => draftMail.HTMLBody) ?? string.Empty;
+
+        draftMail.HTMLBody = InsertAtStartOfHtmlBody(existingHtml, addition);
+    }
+
+    /// <summary>
+    /// Whether the draft is an HTML message. A failure to read the property is treated as "not HTML",
+    /// which keeps the caller's text as text rather than risking markup being injected into a message
+    /// whose format is unknown.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool SafeIsHtmlBody(Outlook.MailItem mail)
+    {
+        try
+        {
+            return mail.BodyFormat == Outlook.OlBodyFormat.olFormatHTML;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Escapes plain text for inclusion in an HTML body, keeping the caller's line breaks visible.
+    /// </summary>
+    private static string PlainTextToHtml(string text)
+    {
+        string escaped = text
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+
+        return escaped
+            .Replace("\r\n", "<br>", StringComparison.Ordinal)
+            .Replace("\n", "<br>", StringComparison.Ordinal)
+            .Replace("\r", "<br>", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Inserts content just inside an HTML document's <c>&lt;body&gt;</c> element, so it appears
+    /// above everything already there.
+    ///
+    /// <para>
+    /// Concatenating in front of the whole document instead would put the text before
+    /// <c>&lt;html&gt;</c>, outside any element. Browsers and Outlook usually recover from that, but
+    /// "usually" is not a property worth depending on for the visible content of somebody's mail. If
+    /// there is no <c>&lt;body&gt;</c> tag - Outlook does produce bare fragments - prepending is the
+    /// correct answer rather than a fallback.
+    /// </para>
+    /// </summary>
+    private static string InsertAtStartOfHtmlBody(string html, string addition)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return addition;
+        }
+
+        int bodyTag = html.IndexOf("<body", StringComparison.OrdinalIgnoreCase);
+
+        if (bodyTag >= 0)
+        {
+            int tagEnd = html.IndexOf('>', bodyTag);
+
+            if (tagEnd >= 0)
+            {
+                return html[..(tagEnd + 1)] + addition + html[(tagEnd + 1)..];
+            }
+        }
+
+        return addition + html;
+    }
+
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static MailDraftResult ExecuteDraftFromMail(
         string operationName,
@@ -2032,8 +2212,20 @@ public class MailCommands : IMailCommands
         string? bcc,
         string? body,
         bool display,
+        string bodyFormat,
         Func<Outlook.MailItem, Outlook.MailItem> createDraft)
     {
+        if (!TryParseBodyFormat(bodyFormat, out bool asHtml, out string? formatError))
+        {
+            return new MailDraftResult
+            {
+                Success = false,
+                Saved = false,
+                Displayed = false,
+                ErrorMessage = formatError
+            };
+        }
+
         return OutlookInteropRunner.Execute(
             operationName,
             (application, session) =>
@@ -2114,11 +2306,7 @@ public class MailCommands : IMailCommands
 
                     if (body != null)
                     {
-                        // Reply()/ReplyAll()/Forward() pre-populate Body with the quoted original
-                        // message; prepending the caller's text keeps that quoted context instead
-                        // of destroying it, matching how a person would type above a quoted reply.
-                        string existingBody = SafeGet(() => draftMail.Body) ?? string.Empty;
-                        draftMail.Body = body + Environment.NewLine + Environment.NewLine + existingBody;
+                        PrependToDraftBody(draftMail, body, asHtml);
                     }
 
                     draftMail.Save();

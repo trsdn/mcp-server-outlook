@@ -550,6 +550,27 @@ public class MailListResult : ResultBase
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SortDirection { get; set; }
 
+    /// <summary>
+    /// Which engine answered this query: <c>clientScan</c> (each candidate hydrated and checked
+    /// client-side, substring semantics, bounded by a scan limit) or <c>contentIndex</c> (Outlook's
+    /// full-text index, whole-word semantics, no scan horizon).
+    ///
+    /// <para>
+    /// Reported on every search because an empty result means different things depending on which
+    /// one produced it, and a caller cannot tell them apart otherwise. See #42.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SearchEngine { get; set; }
+
+    /// <summary>
+    /// Anything the caller needs to know about how the answer was arrived at that the numbers do not
+    /// say - most importantly, that a requested content-index search could not be served by this
+    /// store and fell back to the client-side scan.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
+
     public List<MailSummaryInfo> Messages { get; set; } = [];
 }
 

@@ -113,7 +113,8 @@ internal sealed class MailPageCursor
         string? subjectContains,
         string? receivedAfter,
         string? receivedBefore,
-        bool? hasAttachment)
+        bool? hasAttachment,
+        string? searchMode = null)
     {
         // Unit separator: cannot occur in any of these values, so no field can impersonate another
         // by containing the delimiter.
@@ -126,7 +127,11 @@ internal sealed class MailPageCursor
             subjectContains ?? "\u0000",
             receivedAfter ?? "\u0000",
             receivedBefore ?? "\u0000",
-            hasAttachment?.ToString(CultureInfo.InvariantCulture) ?? "\u0000");
+            hasAttachment?.ToString(CultureInfo.InvariantCulture) ?? "\u0000",
+            // The engine is part of the query's identity: the same words answered by the content
+            // index and by the client-side scan are different result sets, so a cursor minted by one
+            // must not be accepted by the other.
+            searchMode ?? "\u0000");
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)))[..16];
     }

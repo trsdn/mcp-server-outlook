@@ -32,11 +32,30 @@ Dates are ISO 8601 (`2024-03-07` or `2024-03-07T14:30`). A bare date means local
 filters combine with AND.
 
 `query` is different: it is a free-text match over subject, sender and the **full** body, applied
-after the structured filters. It is exhaustive rather than indexed, so it will not miss a term buried
-deep in a long message - but reaching the body means opening every candidate item, which is slow.
-`Restrict` cannot filter on body text at all, so pair `query` with structured filters whenever you
-can rather than relying on it alone in a large folder: the structured filters decide how many items
-have to be opened.
+after the structured filters. By default it is exhaustive rather than indexed, so it will not miss a
+term buried deep in a long message - but reaching the body means opening every candidate item, which
+is slow, and the scan stops at a safety limit. Pair `query` with structured filters whenever you can:
+they decide how many items have to be opened.
+
+### Two search engines, and why the response says which one answered
+
+`mail.search` takes `searchMode`:
+
+- `clientScan` (**default**) - each candidate is opened and checked. **Substring** matching, so `foo`
+  matches inside `foobar`. Exact, but bounded: in a folder larger than the scan limit a genuine match
+  further back is never reached.
+- `fullText` - Outlook's content index answers the query. **Whole-word** matching, so `foo` matches
+  "a foo arrived" but *not* `foobar`. Nothing is opened client-side and there is no scan horizon, so
+  it finds matches arbitrarily far back.
+
+These are different questions, not fast and slow versions of the same one. Use `fullText` for a large
+folder or a term you expect to be a real word; use the default when you need substring matching or a
+short, exact answer.
+
+Every search response reports `searchEngine` as `clientScan` or `contentIndex`. **Read it before you
+conclude anything from an empty result** - the two engines disagree about what "no matches" means. If
+you asked for `fullText` and the store could not serve it, `searchEngine` comes back `clientScan` and
+`message` says why, rather than the tool pretending the index answered.
 
 
 ## Read past the first page

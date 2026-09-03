@@ -139,7 +139,8 @@ public class MailCommands : IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
-        string? cursor = null)
+        string? cursor = null,
+        string? searchMode = null)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -162,7 +163,8 @@ public class MailCommands : IMailCommands
             receivedAfter,
             receivedBefore,
             hasAttachment,
-            cursor);
+            cursor,
+            searchMode);
     }
 
     /// <summary>
@@ -1713,7 +1715,8 @@ public class MailCommands : IMailCommands
         string? receivedAfter = null,
         string? receivedBefore = null,
         bool? hasAttachment = null,
-        string? cursor = null)
+        string? cursor = null,
+        string? searchMode = null)
     {
         int boundedMaxCount = Math.Clamp(maxCount, 1, 100);
         // Safety net only (not a "found" cutoff): protects against pathologically slow scans of
@@ -1740,19 +1743,32 @@ public class MailCommands : IMailCommands
             };
         }
 
+        // An unrecognised mode is refused rather than defaulted. Falling back silently would hand
+        // the caller substring semantics while they believed they had asked for the index, and the
+        // difference is only visible in results they never see.
+        if (!TryParseSearchMode(searchMode, out bool useContentIndex, out string? modeError))
+        {
+            return new MailListResult { Success = false, ErrorMessage = modeError };
+        }
+
+        // The content index answers the free-text question itself, so the query is pushed down
+        // instead of being checked client-side afterwards.
+        string? pushedDownQuery = useContentIndex ? query : null;
+
         string? restrictFilter = MailRestrictFilter.Build(
             unreadOnly,
             fromAddress,
             subjectContains,
             parsedAfter,
             parsedBefore,
-            hasAttachment);
+            hasAttachment,
+            pushedDownQuery);
 
         // A cursor is bound to the exact query that minted it (#43). maxCount is deliberately not
         // part of the fingerprint: changing page size part-way through a walk is legitimate.
         string fingerprint = MailPageCursor.BuildFingerprint(
             folder, query, unreadOnly, fromAddress, subjectContains,
-            receivedAfter, receivedBefore, hasAttachment);
+            receivedAfter, receivedBefore, hasAttachment, searchMode);
 
         MailPageCursor? page = null;
         if (!string.IsNullOrWhiteSpace(cursor))
@@ -1780,7 +1796,8 @@ public class MailCommands : IMailCommands
                 subjectContains,
                 parsedAfter,
                 effectiveBefore,
-                hasAttachment);
+                hasAttachment,
+                pushedDownQuery);
         }
 
         return OutlookInteropRunner.Execute(
@@ -1816,15 +1833,18 @@ public class MailCommands : IMailCommands
                     // client-side scan cap). See #27.
                     Outlook.Items itemsToScan = items;
                     int scanCount = totalItemCount;
+                    bool contentIndexAnswered = useContentIndex;
+                    string? engineMessage = null;
+
                     if (restrictFilter != null)
                     {
                         try
                         {
                             restrictedItems = items.Restrict(restrictFilter);
-                            itemsToScan = restrictedItems;
                             scanCount = SafeGetInt(() => restrictedItems.Count);
+                            itemsToScan = restrictedItems;
                         }
-                        catch (COMException)
+                        catch (COMException ex)
                         {
                             // Fall back to the unfiltered folder if Restrict is unavailable for
                             // this folder/store type. The client-side checks below are applied
@@ -1832,6 +1852,20 @@ public class MailCommands : IMailCommands
                             // slower, and bounded by ScanSafetyLimit.
                             itemsToScan = items;
                             scanCount = totalItemCount;
+
+                            if (useContentIndex)
+                            {
+                                // ...except here, where the two paths are *not* equivalent. The
+                                // index was asked for and could not answer, so say so: silently
+                                // handing back substring semantics under the label the caller asked
+                                // for is how a search result becomes quietly wrong.
+                                contentIndexAnswered = false;
+                                engineMessage =
+                                    "This store could not answer from the content index, so the query was run as a "
+                                    + "client-side scan instead. That matches substrings rather than whole words and "
+                                    + "stops at a scan limit, so a match far back in a very large folder may be missed. "
+                                    + $"Outlook reported: {ex.Message}";
+                            }
                         }
                     }
 
@@ -1843,7 +1877,9 @@ public class MailCommands : IMailCommands
                         Query = query,
                         TotalItemCount = totalItemCount,
                         SortedBy = "receivedTime",
-                        SortDirection = "descending"
+                        SortDirection = "descending",
+                        SearchEngine = contentIndexAnswered ? "contentIndex" : "clientScan",
+                        Message = engineMessage
                     };
 
                     int scanned = 0;
@@ -1914,15 +1950,24 @@ public class MailCommands : IMailCommands
                             // Applied even when Restrict succeeded. The DASL filter is deliberately
                             // over-inclusive -- it drops any predicate it cannot express exactly
                             // (see MailRestrictFilter) -- so this is what makes the result exact.
+                            //
+                            // The free-text query is the exception. When the content index answered
+                            // it, re-checking it here as a substring would *narrow* the result:
+                            // the index legitimately matches a word the substring check would not
+                            // see (a different inflection, a term inside an attachment it indexed).
+                            // Re-applying it would throw those away and leave the caller believing
+                            // the index found nothing.
+                            string? clientSideQuery = contentIndexAnswered ? null : query;
+
                             bool matches = mail != null
                                 ? MatchesStructuredFilters(
                                       mail, unreadOnly, fromAddress, subjectContains,
                                       parsedAfter, parsedBefore, hasAttachment)
-                                  && MatchesQuery(mail, query)
+                                  && MatchesQuery(mail, clientSideQuery)
                                 : MatchesStructuredFilters(
                                       meeting!, unreadOnly, fromAddress, subjectContains,
                                       parsedAfter, parsedBefore, hasAttachment)
-                                  && MatchesQuery(meeting!, query);
+                                  && MatchesQuery(meeting!, clientSideQuery);
 
                             if (!matches)
                             {
@@ -2293,6 +2338,46 @@ public class MailCommands : IMailCommands
     private static bool ContainsIgnoreCase(string? value, string searchText)
         => !string.IsNullOrWhiteSpace(value)
            && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves the caller's <c>searchMode</c> to a decision about which engine answers the free-text
+    /// query (#42).
+    /// </summary>
+    /// <remarks>
+    /// An unrecognised value is an error rather than a default. The two engines do not answer the
+    /// same question - the index matches whole words, the scan matches substrings and stops at a
+    /// limit - so a typo silently resolving to the default would give the caller results they did not
+    /// ask for, in the one place where the difference is invisible: the matches they never see.
+    /// </remarks>
+    private static bool TryParseSearchMode(string? searchMode, out bool useContentIndex, out string? errorMessage)
+    {
+        useContentIndex = false;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(searchMode))
+        {
+            return true;
+        }
+
+        switch (searchMode.Trim().ToLowerInvariant())
+        {
+            case "clientscan":
+            case "client":
+                return true;
+
+            case "fulltext":
+            case "contentindex":
+                useContentIndex = true;
+                return true;
+
+            default:
+                errorMessage =
+                    $"searchMode '{searchMode}' is not recognised. Use 'clientScan' (the default: exact substring "
+                    + "matching, bounded by a scan limit) or 'fullText' (Outlook's content index: whole-word matching "
+                    + "with no scan limit).";
+                return false;
+        }
+    }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static MailSummaryInfo CreateMailSummary(Outlook.MailItem mail, bool includeBodyPreview)

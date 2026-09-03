@@ -11,7 +11,9 @@ namespace OutlookMcp.Core.Commands.Folder;
     + "Use resolve-path to normalize a folder identifier, and list-items to inspect mixed Outlook items inside a resolved folder. "
     + "Use list-stores to discover every mailbox, archive and data file in the profile. A profile often holds more than one, "
     + "and every one of them has its own Inbox, so an unqualified request only ever reaches the default delivery store. "
-    + "Pass a storeId from list-stores to list-default to read a specific mailbox; folder results name the store they came from.")]
+    + "Pass a storeId from list-stores to list-default to read a specific mailbox; folder results name the store they came from. "
+    + "Use open-shared to reach another person's Inbox or Calendar when they have granted access, without adding their mailbox to the profile; "
+    + "it returns a folder path usable with the mail and calendar tools.")]
 public interface IFolderCommands
 {
     [ServiceAction("list-default")]
@@ -19,6 +21,9 @@ public interface IFolderCommands
 
     [ServiceAction("list-stores")]
     OutlookStoreListResult ListStores();
+
+    [ServiceAction("open-shared")]
+    OutlookFolderResolveResult OpenShared(string? address = null, string? role = null);
 
     [ServiceAction("list-children")]
     OutlookFolderListResult ListChildren(

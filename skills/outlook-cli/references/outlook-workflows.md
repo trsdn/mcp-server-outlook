@@ -333,8 +333,28 @@ or an imported data file.
 Inbox, Drafts or Calendar at all. `list-default` reports those roles as `available: false` with a
 `note`; use `folder.list-children` on the store's `rootFolderPath` to see what it really contains.
 
-Not covered: another person's mailbox by delegate access. Shared and delegate mailboxes that are not
-already open in the profile are still unreachable.
+### Someone else's mailbox
+
+The stores above are the ones already in the profile. A shared or delegate mailbox that is *not* in
+the profile is reached by address instead:
+
+```
+folder.open-shared(address: "team-inbox@contoso.com", role: "calendar")
+  → folderPath, then mail.list / calendar.list against that path
+```
+
+`role` is one of `inbox`, `calendar`, `contacts`, `tasks`, `notes`, `journal` - Outlook supports no
+others for a mailbox opened this way. The returned `folderPath` behaves like any other: pass it to
+`mail.list`, `calendar.list` or `folder.list-children`.
+
+**`address` is required and is never guessed.** Outlook resolves an unknown address to the current
+user, so a defaulted or mistyped address would return *your own* inbox with `success: true` - a
+convincing wrong answer, which is worse than an error. If the address cannot be opened the call
+fails and names the mailbox.
+
+A failure here means either no such mailbox or no access granted; **Outlook cannot distinguish
+those**, so the error says both. If a user expects access they do not have, the fix is on the
+Exchange side, not here.
 
 ## What this surface does not do
 

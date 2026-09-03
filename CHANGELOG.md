@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Shared and delegate mailboxes** (#38). New `folder open-shared --address <smtp> --role <role>`,
+  where `role` is one of `inbox`, `calendar`, `contacts`, `tasks`, `notes` or `journal`. The returned
+  folder path works with `mail list`, `calendar list` and `folder list-children` like any other.
+
+  Previously the only mailboxes reachable were those already in the profile, so "read the team
+  inbox" or "check a colleague's calendar" had no answer at all.
+
+  **`address` is required, and an address that cannot be opened is refused.** This is the whole
+  reason the operation is written the way it is: `Recipient.Resolve` returns `false` rather than
+  throwing, and Outlook then treats an unresolved recipient as the current user - so a defaulted or
+  mistyped address would return *your own* inbox with `success: true`. Silently answering about the
+  wrong mailbox is worse than any error.
+
+  Verified live that the resolve guard alone is **not sufficient**: `Resolve` returns `true` for
+  `no-such-person@invalid.example`, because Outlook accepts any syntactically valid SMTP address as
+  a one-off recipient without consulting the directory. The refusal in that case comes from
+  `GetSharedDefaultFolder` failing, which is why the error names the mailbox and the role and states
+  plainly that Outlook cannot distinguish "no such mailbox" from "no access granted".
+
+  Tested against the signed-in user's own address, which is the only mailbox a test can assume
+  access to - `open-shared` for that address returns the same folder path as `list-default`, which
+  is what makes the test non-vacuous. **Access to a genuinely foreign mailbox is unverified**; this
+  profile has no delegate rights to borrow.
+
 - **Store discovery, and default folders from a specific mailbox** (#38). New `folder list-stores`,
   and `folder list-default` takes `storeId`.
 

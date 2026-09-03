@@ -51,6 +51,10 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "in the mailbox's list is accepted and reported as a success, then turns out to be uncolourable and "
     + "unfilterable, so discover names rather than guessing them. Colours come back as names such as "
     + "'yellow', never as raw enum numbers. "
+    + "Use list-reminders to see what Outlook is set to remind the user about, earliest first, across "
+    + "appointments, tasks and flagged mail. Overdue reminders are excluded by default because on a "
+    + "long-lived mailbox they are usually the large majority and bury the ones still to come; the "
+    + "result always reports how many were held back. "
     + "Use list-rules to see the mailbox's inbox rules. Rules move, delete and forward mail before this "
     + "tool ever sees it, so when a folder looks empty or a sender's mail is missing, check the rules "
     + "before concluding nothing arrived. Pass includeDetail to get each rule's conditions, actions and "
@@ -219,6 +223,14 @@ public interface IMailCommands
 
     [ServiceAction("list-rules")]
     MailRuleListResult ListRules(bool includeDetail = false);
+
+    /// <summary>
+    /// The reminders Outlook is holding, earliest first.
+    /// </summary>
+    /// <param name="maxCount">How many rows to return. The counts always describe the full set.</param>
+    /// <param name="upcomingOnly">Keep only reminders that have not yet fallen due. On by default, because most reminders on a long-lived mailbox are years overdue and including them buries the ones that matter.</param>
+    [ServiceAction("list-reminders")]
+    MailReminderListResult ListReminders(int maxCount = 50, bool upcomingOnly = true);
 
     [ServiceAction("set-subject")]
     MailMutationResult SetSubject(

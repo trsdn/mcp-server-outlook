@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`mail list-reminders`** (#15). Lists what Outlook intends to remind the user about - appointments,
+  tasks and flagged mail together - earliest first, with counts for the whole set.
+
+  Three behaviours were measured against a real mailbox, and each is a trap a plausible
+  implementation walks into.
+
+  The due time comes from `OriginalReminderDate`. `NextReminderDate` is the obvious-looking choice
+  and is only populated once a reminder has snoozed or recurred: 152 of the 605 reminders on the test
+  mailbox sit at the OLE zero date, so a quarter of the listing would arrive dated 1899.
+
+  Results are sorted here, because Outlook does not return the collection in date order. Applying a
+  limit to its native order hands back an arbitrary handful out of six years of reminders.
+
+  Overdue reminders are excluded by default — 416 of 605 on the test mailbox, the oldest five years
+  old — because including them buries everything still to come. `overdueCount` is always reported so
+  a caller knows what was held back rather than mistaking a page for the whole picture.
+
+  `IsVisible` is deliberately not surfaced: it means "the reminder dialog is on screen right now",
+  which was false for all 605, so presenting it as pending-ness would report a mailbox full of
+  reminders as having none.
+
+  Read-only; dismissing and snoozing are not exposed.
+
 - **`mail list-rules`** (#15). Enumerates the mailbox's inbox rules, optionally with each rule's
   conditions, actions and move-to destination.
 

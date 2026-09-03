@@ -352,6 +352,57 @@ public class OutlookStoreListResult : ResultBase
 }
 
 /// <summary>
+/// The reminders Outlook is holding, across appointments, tasks and flagged mail.
+///
+/// <para>
+/// The counts matter as much as the rows. Most reminders on a long-lived mailbox are overdue, so a
+/// page of rows without the totals reads as the whole picture when it is a small slice of one.
+/// </para>
+/// </summary>
+public class MailReminderListResult : ResultBase
+{
+    public List<MailReminderInfo> Reminders { get; set; } = [];
+
+    /// <summary>Every reminder Outlook holds, regardless of filtering or <c>maxCount</c>.</summary>
+    public int TotalCount { get; set; }
+
+    /// <summary>Reminders due now or later.</summary>
+    public int UpcomingCount { get; set; }
+
+    /// <summary>
+    /// Reminders whose time has already passed. Usually the large majority, and excluded by default.
+    /// </summary>
+    public int OverdueCount { get; set; }
+}
+
+public class MailReminderInfo
+{
+    /// <summary>The text Outlook shows in the reminder window - normally the item's subject.</summary>
+    public string Caption { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When the reminder is set for, taken from <c>OriginalReminderDate</c>. Deliberately not
+    /// <c>NextReminderDate</c>, which Outlook leaves at the OLE zero date unless the reminder has
+    /// been snoozed.
+    /// </summary>
+    public DateTime ReminderTime { get; set; }
+
+    /// <summary>
+    /// The time a snoozed reminder will fire again, or null when it has not been snoozed.
+    /// </summary>
+    public DateTime? NextReminderTime { get; set; }
+
+    /// <summary>Whether <see cref="ReminderTime"/> has already passed.</summary>
+    public bool IsOverdue { get; set; }
+
+    /// <summary>The kind of item being reminded about: appointment, task, mail, or contact.</summary>
+    public string ItemType { get; set; } = string.Empty;
+
+    /// <summary>The subject of the underlying item, when it has one.</summary>
+    public string? Subject { get; set; }
+}
+
+/// <summary>
 /// The mailbox's inbox rules.
 ///
 /// <para>

@@ -264,6 +264,7 @@ public class MailCommands : IMailCommands
                     List<string> threadEntryIds = ReadThreadEntryIds(table);
 
                     var messages = new List<MailSummaryInfo>(threadEntryIds.Count);
+                    var otherItems = new List<MailThreadItemInfo>();
                     int skipped = 0;
 
                     foreach (string threadEntryId in threadEntryIds)
@@ -281,10 +282,11 @@ public class MailCommands : IMailCommands
 
                             if (threadMail == null)
                             {
-                                // A meeting request or delivery report filed into the same
-                                // conversation. Counted rather than dropped silently, so a caller
-                                // can see why the totals differ.
-                                skipped++;
+                                // A meeting invitation, the appointment it created, or an acceptance.
+                                // Named rather than counted: on a real thread these were the majority
+                                // of it, and the invitation and acceptance are usually the substance.
+                                // See #111.
+                                otherItems.Add(DescribeThreadItem(item, threadEntryId, itemStoreId));
                                 continue;
                             }
 
@@ -297,6 +299,7 @@ public class MailCommands : IMailCommands
                         {
                             // An entry the conversation still lists but the store can no longer
                             // return - deleted mid-read, or in a store this profile cannot open.
+                            // This is the only thing skippedItemCount means.
                             skipped++;
                         }
                         finally
@@ -312,6 +315,9 @@ public class MailCommands : IMailCommands
                     // vanishing.
                     List<MailSummaryInfo> ordered = [.. messages
                         .OrderBy(m => m.ReceivedTime ?? m.SentOn ?? DateTimeOffset.MaxValue)];
+
+                    List<MailThreadItemInfo> orderedOthers = [.. otherItems
+                        .OrderBy(i => i.Timestamp ?? DateTimeOffset.MaxValue)];
 
                     bool truncated = ordered.Count > boundedMaxCount;
                     List<MailSummaryInfo> page = truncated
@@ -330,7 +336,8 @@ public class MailCommands : IMailCommands
                         Truncated = truncated,
                         SortedBy = "receivedTime",
                         SortDirection = "ascending",
-                        Messages = page
+                        Messages = page,
+                        OtherItems = orderedOthers
                     };
                 }
                 finally
@@ -599,6 +606,82 @@ public class MailCommands : IMailCommands
                 normalized = response?.Trim() ?? string.Empty;
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Names a non-mail conversation member and reads the little that is meaningful for it. Typed
+    /// pattern matching rather than <c>MessageClass</c> parsing: the class string carries custom
+    /// suffixes ("IPM.Schedule.Meeting.Resp.Pos" and forms derived from it), so matching on it by
+    /// prefix would either miss variants or mis-file them.
+    ///
+    /// <para>
+    /// Every read is individually guarded. An item that cannot report its subject is still worth
+    /// returning as a named type in a folder - degrading to "unknown" would throw away the part that
+    /// was read successfully, which is the failure this whole change exists to remove.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static MailThreadItemInfo DescribeThreadItem(object? item, string entryId, string? storeId)
+    {
+        var info = new MailThreadItemInfo
+        {
+            EntryId = entryId,
+            StoreId = string.IsNullOrWhiteSpace(storeId) ? null : storeId,
+            ItemType = "unknown"
+        };
+
+        object? parent = null;
+
+        try
+        {
+            switch (item)
+            {
+                case Outlook.AppointmentItem appointment:
+                    info.ItemType = "appointment";
+                    info.Subject = SafeGet(() => appointment.Subject);
+                    info.Timestamp = SafeGetDateTimeOffset(() => appointment.Start);
+                    parent = SafeGetComObject(() => appointment.Parent);
+                    break;
+
+                case Outlook.MeetingItem meeting:
+                    // Invitations and responses share one COM type; the class distinguishes them,
+                    // and here the distinction is worth the string check because "they invited us"
+                    // and "they accepted" are different answers to the caller's question.
+                    string meetingClass = SafeGet(() => meeting.MessageClass) ?? string.Empty;
+                    info.ItemType = meetingClass.Contains(".Resp.", StringComparison.OrdinalIgnoreCase)
+                        ? "meetingResponse"
+                        : "meetingRequest";
+                    info.Subject = SafeGet(() => meeting.Subject);
+                    info.Timestamp = SafeGetDateTimeOffset(() => meeting.ReceivedTime)
+                        ?? SafeGetDateTimeOffset(() => meeting.SentOn);
+                    parent = SafeGetComObject(() => meeting.Parent);
+                    break;
+
+                case Outlook.TaskItem task:
+                    info.ItemType = "task";
+                    info.Subject = SafeGet(() => task.Subject);
+                    info.Timestamp = SafeGetDateTimeOffset(() => task.DueDate);
+                    parent = SafeGetComObject(() => task.Parent);
+                    break;
+
+                case Outlook.ContactItem contact:
+                    info.ItemType = "contact";
+                    info.Subject = SafeGet(() => contact.FullName);
+                    parent = SafeGetComObject(() => contact.Parent);
+                    break;
+            }
+
+            if (parent is Outlook.MAPIFolder folder)
+            {
+                info.FolderPath = OutlookInteropRunner.GetFolderPath(folder);
+            }
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref parent);
+        }
+
+        return info;
     }
 
     /// <summary>

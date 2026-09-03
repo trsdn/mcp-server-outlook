@@ -524,3 +524,17 @@ Not covered: emptying a folder in place. Delete the items with `mail.delete`, or
 There is no window, visibility, or "watch me work" control. Outlook stays as the user left it.
 Contacts, tasks, and rules are not exposed. If a user asks for one of these, say so plainly rather
 than approximating it with mail operations.
+
+## A thread is not all mail
+
+`get-conversation` returns two lists, and reading only the first one loses most of the answer.
+
+`messages` holds the mail. `otherItems` holds the meeting invitation, the calendar appointment it
+created, and the acceptances or declines - each with a named `itemType` and the folder it lives in.
+On a real thread these were four of seven items. *When did we agree to meet, and did they accept?*
+is answered entirely by `otherItems`, so a summary built from `messages` alone will confidently
+omit it.
+
+`skippedItemCount` means something narrower: entries the conversation still lists but the store
+could not return - deleted mid-read, or in a store this profile cannot open. It is a data-loss
+signal. If it is non-zero, say so rather than presenting the thread as complete.

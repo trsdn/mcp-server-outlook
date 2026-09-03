@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Folder mutation: `folder create`, `rename`, `move` and `delete`** (#15). The `folder` tool could
+  only read, so "file these into a 2024 folder" ended at the first step.
+
+  **Default folders and store roots are refused for rename, move and delete.** Outlook itself
+  permits deleting the Inbox - no prompt, no error, and every message in it goes too - so this guard
+  is the substance of the feature rather than a nicety around it. It compares entry ids, not names,
+  across *every* store in the profile: a folder merely called "Inbox" that is not the default Inbox
+  stays deletable, and an archive's Deleted Items is protected as much as the primary mailbox's.
+
+  Also refused: creating a folder with a blank name or one containing a backslash (both produce a
+  folder that cannot afterwards be addressed by path), creating a duplicate sibling name (the
+  existing folder is deliberately *not* returned - a caller expecting a new empty folder would
+  otherwise be handed one with contents in it), and moving a folder into its own subtree.
+
+  Emptying a folder in place is deliberately not included; delete the items or delete the folder.
+
+  Found while testing, and fixed here: **setting `MAPIFolder.Name` does not refresh the reference**,
+  so reading the name and path back from it returns the old values. A rename therefore reported
+  success while appearing not to have happened. The folder is now re-fetched by entry id, which
+  Outlook preserves across a rename.
+
+  That same staleness left four real folders in the developer's mailbox: the tests cleaned up by the
+  path the operation had returned, and when that path was stale the delete quietly failed with its
+  result discarded. They were found by listing the Inbox afterwards, not by any assertion. Cleanup
+  now sweeps by name prefix, twice, and reports what it could not remove.
+
 - **Shared and delegate mailboxes** (#38). New `folder open-shared --address <smtp> --role <role>`,
   where `role` is one of `inbox`, `calendar`, `contacts`, `tasks`, `notes` or `journal`. The returned
   folder path works with `mail list`, `calendar list` and `folder list-children` like any other.
@@ -55,6 +81,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `note` saying so, rather than failing the call.
 
 ### Fixed
+
+- **Folder paths resolved against a stale listing** (#15). Resolving `\\store\Inbox\Project` walked
+  `NameSpace.Folders` recursively, comparing each child's `Name`. Two problems, one of which is a
+  correctness bug rather than a slow path.
+
+  Outlook's `Folders` enumeration goes **stale after a rename and stays stale for the life of the
+  process**: the enumerated child keeps reporting its old name indefinitely. So a folder renamed
+  through this tool could not then be addressed by the path the rename itself had just returned - the
+  caller got `Unsupported Outlook folder` for a folder that plainly existed. Cross-process it worked,
+  which is what made it look like a timing lag; it is not. Bounded retries were tried and failed at
+  the same rate, which is what finally identified the cache.
+
+  Path lookup now walks segment by segment through the `Folders["name"]` indexer, which asks Outlook
+  instead of reading a cached listing. It sees renames immediately, and it is O(depth) rather than a
+  depth-first scan of every folder in every store - the folder test suite went from 50s to 5s.
+  Enumeration is still used for bare names and store-less paths, where there is no segment to walk.
 
 - **A folder path that was not a path** (#38). `GetFolderPath` returned whatever Outlook's
   `FolderPath` gave it. For a folder that is not in a store's tree, that is the folder's **entry

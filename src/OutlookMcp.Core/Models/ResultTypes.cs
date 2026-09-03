@@ -294,6 +294,14 @@ public class OutlookFolderResolveResult : ResultBase
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DefaultRole { get; set; }
 
+    /// <summary>
+    /// Set when the operation succeeded but something about the result needs saying - most often that
+    /// Outlook reports no usable path for the folder, so it cannot be addressed by path afterwards.
+    /// A caller that ignores this would silently store an identifier that resolves to nothing.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Note { get; set; }
+
     public int ChildFolderCount { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

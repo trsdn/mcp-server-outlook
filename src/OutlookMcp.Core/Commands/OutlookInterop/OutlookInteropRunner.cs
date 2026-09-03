@@ -287,6 +287,16 @@ internal static class OutlookInteropRunner
         {
             string normalizedPath = NormalizeFolderIdentifier(folderPath);
             bool simpleName = !normalizedPath.Contains('\\');
+
+            if (!simpleName)
+            {
+                var direct = WalkFolderPath(session, normalizedPath);
+                if (direct != null)
+                {
+                    return direct;
+                }
+            }
+
             rootFolders = session.Folders;
 
             int count = rootFolders.Count;
@@ -318,6 +328,112 @@ internal static class OutlookInteropRunner
         finally
         {
             ReleaseComObject(ref rootFolders);
+        }
+    }
+
+    /// <summary>
+    /// Resolves a full folder path one segment at a time, using Outlook's <c>Folders["name"]</c>
+    /// indexer rather than enumerating the tree.
+    ///
+    /// <para>
+    /// <b>This exists because enumerating goes stale.</b> A folder renamed in this process is not
+    /// found by the recursive walk afterwards - the enumerated child objects still report the old
+    /// name, and no amount of retrying refreshes them, so a path the tool had just handed back
+    /// resolved to nothing. Verified intermittently, roughly one run in three. The name indexer asks
+    /// Outlook for the folder instead of reading a cached listing, and sees the new name immediately.
+    /// </para>
+    ///
+    /// <para>
+    /// It is also enormously cheaper: the walk is O(depth) instead of a depth-first search of every
+    /// folder in every store, which on a real mailbox is thousands of COM calls per lookup.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns null rather than throwing when any segment is missing, so the caller can fall back to
+    /// the enumerating search - which still handles a bare folder name, and a path given without its
+    /// store prefix.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.MAPIFolder? WalkFolderPath(Outlook.NameSpace session, string normalizedPath)
+    {
+        string[] segments = normalizedPath.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+        {
+            return null;
+        }
+
+        Outlook.MAPIFolder? current = null;
+        try
+        {
+            Outlook.Folders? rootFolders = null;
+            try
+            {
+                rootFolders = session.Folders;
+                current = TryGetChild(rootFolders, segments[0]);
+            }
+            finally
+            {
+                ReleaseComObject(ref rootFolders);
+            }
+
+            if (current == null)
+            {
+                return null;
+            }
+
+            for (int index = 1; index < segments.Length; index++)
+            {
+                Outlook.Folders? children = null;
+                Outlook.MAPIFolder? next = null;
+                try
+                {
+                    children = current.Folders;
+                    next = TryGetChild(children, segments[index]);
+                }
+                finally
+                {
+                    ReleaseComObject(ref children);
+                }
+
+                if (next == null)
+                {
+                    return null;
+                }
+
+                ReleaseComObject(ref current);
+                current = next;
+            }
+
+            var resolved = current;
+            current = null;
+            return resolved;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            ReleaseComObject(ref current);
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.MAPIFolder? TryGetChild(Outlook.Folders folders, string name)
+    {
+        try
+        {
+            return folders[name];
+        }
+        catch (COMException)
+        {
+            // Outlook raises rather than returning null when there is no such child.
+            return null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 

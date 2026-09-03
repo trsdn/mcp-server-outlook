@@ -1260,6 +1260,170 @@ public class MailCommands : IMailCommands
             });
     }
 
+    /// <summary>
+    /// Sets, completes or clears a message's follow-up flag (#15).
+    ///
+    /// <para>
+    /// <c>complete</c> is deliberately distinct from <c>none</c>. Marking something done and never
+    /// having flagged it look the same in a naive implementation, and they are not the same answer to
+    /// "what still needs attention" - one is handled, the other was never raised.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailMutationResult SetFlag(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string flagStatus = "flagged",
+        string? dueDate = null,
+        string? flagRequest = null)
+    {
+        string status = string.IsNullOrWhiteSpace(flagStatus) ? "flagged" : flagStatus.Trim();
+
+        if (!status.Equals("flagged", StringComparison.OrdinalIgnoreCase)
+            && !status.Equals("complete", StringComparison.OrdinalIgnoreCase)
+            && !status.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"flagStatus '{flagStatus}' is not supported. Use 'flagged', 'complete' or 'none'."
+            };
+        }
+
+        if (!TryParseFilterDate(dueDate, nameof(dueDate), out DateTimeOffset? parsedDue, out string? dateError))
+        {
+            return new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = dateError
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailSetFlag",
+            (application, session) =>
+            {
+                Outlook.MailItem? mail = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                object? selectedItem = null;
+                object? resolvedItem = null;
+
+                try
+                {
+                    mail = OutlookInteropRunner.ResolveMailItem(
+                        application,
+                        session,
+                        entryId,
+                        storeId,
+                        useActiveMail,
+                        out inspector,
+                        out explorer,
+                        out selection,
+                        out currentItem,
+                        out selectedItem,
+                        out resolvedItem);
+
+                    if (mail == null)
+                    {
+                        return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    if (status.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // ClearTaskFlag() reports success on a draft and leaves FlagStatus untouched
+                        // - measured, not assumed - so the state is assigned directly instead.
+                        // Clearing the status alone also leaves the old task dates behind, which
+                        // would surface as a due date on an unflagged message, so they are reset to
+                        // the same far-future sentinel Outlook uses for "never set".
+                        mail.FlagStatus = Outlook.OlFlagStatus.olNoFlag;
+                        TrySetTaskDate(d => mail.TaskDueDate = d, NoTaskDate);
+                        TrySetTaskDate(d => mail.TaskStartDate = d, NoTaskDate);
+                    }
+                    else if (status.Equals("complete", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            mail.FlagStatus = Outlook.OlFlagStatus.olFlagComplete;
+                        }
+                        catch (Exception ex) when (ex is NotImplementedException or COMException)
+                        {
+                            return new MailMutationResult
+                            {
+                                Success = false,
+                                ErrorMessage = "Outlook will not mark a draft as complete - a follow-up can only be "
+                                    + "completed on a message that has been sent or received. Send the message first, "
+                                    + "or use flagStatus 'none' to clear the flag."
+                            };
+                        }
+                    }
+                    else
+                    {
+                        // MarkAsTask is the documented way to raise a flag and is what makes the item
+                        // appear under follow-up, but Outlook refuses it on drafts ("MarkAsTask is
+                        // only valid on items that have been sent or received"). It signals that as
+                        // E_NOTIMPL, which the interop assembly surfaces as NotImplementedException
+                        // rather than COMException - measured, not assumed. Assigning the status
+                        // directly does work on a draft, so that is the fallback rather than failing.
+                        try
+                        {
+                            mail.MarkAsTask(Outlook.OlMarkInterval.olMarkNoDate);
+                        }
+                        catch (Exception ex) when (ex is NotImplementedException or COMException)
+                        {
+                            mail.FlagStatus = Outlook.OlFlagStatus.olFlagMarked;
+                        }
+
+                        mail.FlagRequest = string.IsNullOrWhiteSpace(flagRequest) ? "Follow up" : flagRequest;
+
+                        if (parsedDue.HasValue)
+                        {
+                            DateTime due = parsedDue.Value.LocalDateTime.Date;
+                            TrySetTaskDate(d => mail.TaskStartDate = d, due);
+                            TrySetTaskDate(d => mail.TaskDueDate = d, due);
+                        }
+                    }
+
+                    mail.Save();
+
+                    return new MailMutationResult
+                    {
+                        Success = true,
+                        EntryId = SafeGet(() => mail.EntryID),
+                        StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => mail.Subject),
+                        FolderName = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.Name : null),
+                        FolderPath = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder
+                            ? OutlookInteropRunner.GetFolderPath(folder)
+                            : null),
+                        Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                        Read = !SafeGetBool(() => mail.UnRead),
+                        Message = status.Equals("none", StringComparison.OrdinalIgnoreCase)
+                            ? "Cleared the Outlook follow-up flag."
+                            : $"Set the Outlook follow-up flag to {status.ToLowerInvariant()}."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selectedItem);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref mail);
+                }
+            },
+            ex => new MailMutationResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update the Outlook follow-up flag: {ex.Message}"
+            });
+    }
+
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailMutationResult SetCategories(
         string? categories = null,
@@ -1731,6 +1895,9 @@ public class MailCommands : IMailCommands
                 ConversationTopic = SafeGet(() => mail.ConversationTopic),
                 BodyPreview = OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body)),
                 Categories = ParseCategories(SafeGet(() => mail.Categories)),
+                FlagStatus = MapFlagStatus(SafeGetInt(() => (int)mail.FlagStatus)),
+                FlagRequest = NullIfBlank(SafeGet(() => mail.FlagRequest)),
+                FlagDueDate = NormalizeTaskDate(SafeGetDateTimeOffset(() => mail.TaskDueDate)),
                 AccessDenied = accessDenied.Count > 0 ? accessDenied : null,
                 Unread = SafeGetBool(() => mail.UnRead),
                 Importance = SafeGetInt(() => (int)mail.Importance),
@@ -2592,13 +2759,62 @@ public class MailCommands : IMailCommands
             Importance = SafeGetInt(() => (int)mail.Importance),
             AttachmentCount = SafeGetInt(() => mail.Attachments.Count),
             ReceivedTime = SafeGetDateTimeOffset(() => mail.ReceivedTime),
-            SentOn = SafeGetDateTimeOffset(() => mail.SentOn)
+            SentOn = SafeGetDateTimeOffset(() => mail.SentOn),
+            FlagStatus = MapFlagStatus(SafeGetInt(() => (int)mail.FlagStatus)),
+            FlagRequest = NullIfBlank(SafeGet(() => mail.FlagRequest)),
+            FlagDueDate = NormalizeTaskDate(SafeGetDateTimeOffset(() => mail.TaskDueDate))
         };
 
         summary.AccessDenied = accessDenied.Count > 0 ? accessDenied : null;
         summary.ItemType = "mail";
         return summary;
     }
+
+    /// <summary>
+    /// Outlook's stand-in for "this task date was never set". It does not use null, so clearing a
+    /// flag means writing this back rather than nulling the field.
+    /// </summary>
+    private static readonly DateTime NoTaskDate = new(4501, 1, 1);
+
+    /// <summary>
+    /// Assigns a task date, tolerating the stores that refuse the write. The flag itself is the
+    /// point of the operation; a store that will not record the date should not fail the whole call
+    /// and roll nothing back, so the date is best-effort while the status is not.
+    /// </summary>
+    private static void TrySetTaskDate(Action<DateTime> assign, DateTime value)
+    {
+        try
+        {
+            assign(value);
+        }
+        catch (Exception ex) when (ex is NotImplementedException or COMException)
+        {
+            // Left unset; the read path reports it as "no due date" rather than inventing one.
+        }
+    }
+
+    /// <summary>
+    /// Maps Outlook's <c>OlFlagStatus</c> onto the wire values. <c>complete</c> is kept distinct from
+    /// <c>none</c> deliberately: "I dealt with this" and "this was never flagged" are different
+    /// answers to "what still needs attention".
+    /// </summary>
+    private static string MapFlagStatus(int? flagStatus) => flagStatus switch
+    {
+        (int)Outlook.OlFlagStatus.olFlagMarked => "flagged",
+        (int)Outlook.OlFlagStatus.olFlagComplete => "complete",
+        _ => "none"
+    };
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// Outlook does not leave task dates null when there is no due date - it stores a far-future
+    /// sentinel (year 4501). Reporting that verbatim would tell a caller the mail is due in the
+    /// 46th century, so it is normalised to "no date".
+    /// </summary>
+    private static DateTimeOffset? NormalizeTaskDate(DateTimeOffset? value) =>
+        value is null || value.Value.Year >= 4000 ? null : value;
 
     /// <summary>
     /// Builds a listing entry for a meeting request, cancellation or response.
@@ -2796,3 +3012,5 @@ public class MailCommands : IMailCommands
         return names.Count > 0 ? string.Join("; ", names) : null;
     }
 }
+
+

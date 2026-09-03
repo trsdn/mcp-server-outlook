@@ -38,6 +38,14 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "forward accepts recipients since a forwarded message otherwise has nobody to send to. All three accept an optional "
     + "body to prepend above the quoted original message. "
     + "Use set-subject, set-body, and set-recipients to edit an existing draft before sending. "
+    + "Use set-flag to raise, complete or clear a follow-up flag. flagStatus is 'flagged' (the default), "
+    + "'complete' or 'none'; an unrecognised value is refused rather than guessed at. 'complete' and 'none' "
+    + "are different outcomes and not interchangeable: 'complete' records that the item was dealt with, "
+    + "while 'none' says it was never flagged at all. Optionally pass dueDate and a flagRequest label such "
+    + "as 'Review'. Outlook only allows a flag to be completed on a message that has been sent or received, "
+    + "so completing a draft is refused with an explanation. read, list and search all report flagStatus, "
+    + "always - an unflagged message reports 'none' rather than omitting the field - plus flagRequest and "
+    + "flagDueDate when set, so 'what still needs follow-up' costs no extra call per message. "
     + "create-draft, reply, reply-all, forward and set-body all accept bodyFormat, which is 'plain' (the default) "
     + "or 'html'. Pass 'html' when the body argument is markup you want rendered - lists, links, emphasis, tables. "
     + "Leave it as 'plain' for ordinary text: plain text is escaped rather than interpreted, so a body containing "
@@ -175,6 +183,15 @@ public interface IMailCommands
         string? entryId = null,
         string? storeId = null,
         bool useActiveMail = true);
+
+    [ServiceAction("set-flag")]
+    MailMutationResult SetFlag(
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        string flagStatus = "flagged",
+        string? dueDate = null,
+        string? flagRequest = null);
 
     [ServiceAction("set-categories")]
     MailMutationResult SetCategories(

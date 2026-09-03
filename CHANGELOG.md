@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Follow-up flags: `mail set-flag`** (#15). Raise, complete or clear a follow-up flag, with an
+  optional due date and label. `read`, `list` and `search` now report `flagStatus` — always, as
+  `none`, `flagged` or `complete`, never omitted — plus `flagRequest` and `flagDueDate` when set, so
+  "what still needs following up?" is one listing call rather than one read per message.
+
+  `complete` and `none` are deliberately distinct. Collapsing them would report work that was done as
+  work that was never raised.
+
+  Two behaviours were measured against Outlook rather than assumed, and both would otherwise have
+  shipped as silent wrong answers. `MarkAsTask` is refused on drafts (raised as
+  `NotImplementedException`, not `COMException`, so the obvious catch misses it) and completing a flag
+  on a draft is refused outright — that now returns an explanation instead of a raw COM error. And
+  `ClearTaskFlag()` reports success on a draft while leaving the flag exactly where it was; clearing
+  assigns the state directly and also resets the task dates, which otherwise survive and surface as a
+  due date on an unflagged message.
+
+  An unrecognised `flagStatus` is refused before the item is touched, so nothing is half-applied.
+
 - **HTML message bodies** (#15). `create-draft`, `reply`, `reply-all`, `forward` and `set-body` take
   `bodyFormat`, which is `plain` (the default, and what every existing caller keeps getting) or
   `html`. Composing a bulleted list, a link or a table no longer means writing tags and watching them

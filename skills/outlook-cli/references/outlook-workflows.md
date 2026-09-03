@@ -286,6 +286,33 @@ of putting raw tags in front of a human.
 On `reply`, `reply-all` and `forward` the body goes *above* the quoted original, and the quoted
 message keeps its own formatting whichever format you choose - you do not have to match it.
 
+## Follow-up flags
+
+Every listing and read reports `flagStatus`, always, as `none`, `flagged` or `complete`. It is never
+omitted, so "this message is not flagged" is distinguishable from "this listing does not tell you
+about flags" - the two would otherwise look identical and only one of them means there is nothing to
+do. `flagRequest` (the label) and `flagDueDate` appear when they are set.
+
+That means "what still needs following up?" is answerable from a single `mail.list` call. Do not read
+each message in turn to find out.
+
+```
+1. mail.list(folder: "inbox", maxCount: 100)   → filter for flagStatus == "flagged"
+2. mail.set-flag(entryId: ..., flagStatus: "complete")
+```
+
+`complete` and `none` are not interchangeable. `complete` says the work was done; `none` says it was
+never raised. Clearing a flag the user has finished with throws away the record that they finished
+it, so prefer `complete` unless they actually want the flag removed.
+
+Two limits Outlook imposes, not this server:
+
+- A flag can only be **completed** on a message that has been sent or received. Completing a draft is
+  refused with an explanation rather than a raw COM error.
+- Flagging a draft works, but a draft is rarely what you want to flag in the first place.
+
+An unrecognised `flagStatus` is refused rather than guessed at, and nothing is applied.
+
 ## Save attachments
 
 ```

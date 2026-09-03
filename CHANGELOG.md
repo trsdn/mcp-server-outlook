@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Attendees on calendar items** (#32). `calendar.create-appointment` accepts `requiredAttendees` and
+  `optionalAttendees` (semicolon-separated), which turns the item into a meeting, and
+  `sendInvitation` mails them. `calendar.read` reports `isMeeting` and an `attendees` list with each
+  person's type and `responseStatus`. Previously the calendar surface could only ever produce a solo
+  appointment: an agent asked to "set up a call with Anna" would put an entry in the caller's own
+  calendar, report success, and never tell Anna.
+
+  Creating a meeting and inviting people are deliberately separate. The meeting is saved to the
+  caller's own calendar and nobody is told until `sendInvitation` is set, and the response message
+  says so in words rather than leaving it to be inferred.
+
+  An attendee Outlook cannot resolve is a **failure**, not a warning: the meeting is not created and
+  `unresolvedAttendees` names them. Outlook will happily save such a meeting, so the naive behaviour
+  is to report success for a meeting that can never reach the person the caller named.
+
+  Verified against classic Outlook, including a real self-addressed invitation under
+  `RunType=OnDemand` with the self-addressing constraint enforced in code. Delivery itself is *not*
+  verified - with the owner as the only attendee there is nobody for Exchange to notify - and the
+  test says so rather than implying more than it checked.
+
 - **Conversations and threads** (#39). `mail.get-conversation` returns a whole thread from any one
   message in it, ordered oldest-first and spanning folders, so a reply sitting in Sent Items comes
   back alongside the original in the Inbox. `mail.read`, `mail.list` and `mail.search` now carry

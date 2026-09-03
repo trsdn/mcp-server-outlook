@@ -78,6 +78,24 @@ Every entry in a listing carries `itemType`:
 `skippedItemCount` counts items that could not be summarised at all. If it is non-zero, the listing
 is not the whole folder - do not describe it as such.
 
+## Inviting people is a separate step from creating the entry
+
+`calendar.create-appointment` with `requiredAttendees` or `optionalAttendees` (semicolon-separated)
+creates a **meeting** rather than a private appointment. It is saved to the user's own calendar and
+**nobody is told**. Only `sendInvitation: true` mails the attendees.
+
+So: say which one you did. "I've put it in your calendar" and "I've invited them" are different
+claims, and only the second one requires `sendInvitation`.
+
+If Outlook cannot resolve an attendee, the meeting is **not** created and `unresolvedAttendees` names
+them. That is deliberate - an unresolved attendee never receives the invitation, so creating the
+meeting anyway would look like success while leaving the person uninvited. Ask the user for a full
+SMTP address rather than retrying the same name.
+
+`calendar.read` reports `isMeeting` and an `attendees` list with each person's `responseStatus`
+(`none`, `organizer`, `tentative`, `accepted`, `declined`, `notResponded`). `none` means the item is
+not a meeting response yet - it does not mean they declined.
+
 
 ## Reply to the message the user is looking at
 

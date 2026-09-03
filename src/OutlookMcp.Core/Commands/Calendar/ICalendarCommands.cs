@@ -8,7 +8,9 @@ namespace OutlookMcp.Core.Commands.Calendar;
     Description = "Inspect Outlook calendar items and manage appointments without opening a persistent session. "
     + "Use list to inspect the default Calendar folder or a specific Outlook folder path. "
     + "Use read to inspect an explicit appointment by entry id/store id or fall back to the active appointment inspector. "
-    + "Use create-appointment, update-appointment, and delete-appointment to create, modify, and permanently delete Outlook calendar items — delete-appointment and update-appointment are destructive and cannot be undone.")]
+    + "Use create-appointment, update-appointment, and delete-appointment to create, modify, and permanently delete Outlook calendar items — delete-appointment and update-appointment are destructive and cannot be undone. "
+    + "Naming requiredAttendees or optionalAttendees (semicolon-separated) turns a new item into a meeting; it is saved to your own calendar and nobody is told until sendInvitation is true. "
+    + "Attendees Outlook cannot resolve are reported and the meeting is not created, because an unresolved attendee never receives the invitation.")]
 public interface ICalendarCommands
 {
     [ServiceAction("list", Destructive = false)]
@@ -33,7 +35,10 @@ public interface ICalendarCommands
         string? location = null,
         string? body = null,
         bool allDay = false,
-        bool display = false);
+        bool display = false,
+        string? requiredAttendees = null,
+        string? optionalAttendees = null,
+        bool sendInvitation = false);
 
     [ServiceAction("update-appointment", Destructive = true)]
     CalendarMutationResult UpdateAppointment(

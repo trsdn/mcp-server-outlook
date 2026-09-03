@@ -187,7 +187,10 @@ public class CalendarCommands : ICalendarCommands
         string? location = null,
         string? body = null,
         bool allDay = false,
-        bool display = false)
+        bool display = false,
+        string? requiredAttendees = null,
+        string? optionalAttendees = null,
+        bool sendInvitation = false)
     {
         if (string.IsNullOrWhiteSpace(subject))
         {
@@ -208,6 +211,20 @@ public class CalendarCommands : ICalendarCommands
                 Saved = false,
                 Displayed = false,
                 ErrorMessage = parseError
+            };
+        }
+
+        bool wantsMeeting = !string.IsNullOrWhiteSpace(requiredAttendees) || !string.IsNullOrWhiteSpace(optionalAttendees);
+
+        if (sendInvitation && !wantsMeeting)
+        {
+            return new CalendarAppointmentResult
+            {
+                Success = false,
+                Saved = false,
+                Displayed = false,
+                ErrorMessage = "sendInvitation was requested but no attendees were named, so there is nobody to invite. "
+                    + "Pass requiredAttendees or optionalAttendees."
             };
         }
 
@@ -248,7 +265,59 @@ public class CalendarCommands : ICalendarCommands
                         appointment.Body = body;
                     }
 
+                    var attendees = new List<MeetingAttendeeInfo>();
+
+                    if (wantsMeeting)
+                    {
+                        appointment.MeetingStatus = Outlook.OlMeetingStatus.olMeeting;
+
+                        if (!string.IsNullOrWhiteSpace(requiredAttendees))
+                        {
+                            appointment.RequiredAttendees = requiredAttendees;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(optionalAttendees))
+                        {
+                            appointment.OptionalAttendees = optionalAttendees;
+                        }
+
+                        attendees = ReadAttendees(appointment, resolveFirst: true);
+                        List<string> unresolved = attendees
+                            .Where(a => !a.Resolved)
+                            .Select(a => a.Name ?? a.Address ?? "(unnamed)")
+                            .ToList();
+
+                        if (unresolved.Count > 0)
+                        {
+                            // Nothing has been saved yet, so there is no stray item to clean up.
+                            // Saving anyway would report success for a meeting that can never reach
+                            // the people the caller named.
+                            return new CalendarAppointmentResult
+                            {
+                                Success = false,
+                                Saved = false,
+                                Displayed = false,
+                                IsMeeting = true,
+                                InvitationSent = false,
+                                Attendees = attendees,
+                                UnresolvedAttendees = unresolved,
+                                ErrorMessage = "Outlook could not resolve these attendees, so no meeting was created: "
+                                    + string.Join(", ", unresolved)
+                                    + ". Use a full SMTP address or a name that exists in the address book."
+                            };
+                        }
+                    }
+
                     appointment.Save();
+
+                    bool invitationSent = false;
+
+                    if (sendInvitation)
+                    {
+                        appointment.Send();
+                        invitationSent = true;
+                    }
+
                     if (display)
                     {
                         appointment.Display(false);
@@ -259,6 +328,9 @@ public class CalendarCommands : ICalendarCommands
                         Success = true,
                         Saved = true,
                         Displayed = display,
+                        IsMeeting = wantsMeeting,
+                        InvitationSent = invitationSent,
+                        Attendees = attendees,
                         EntryId = SafeGet(() => appointment.EntryID),
                         StoreId = SafeGet(() => appointment.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
                         Subject = SafeGet(() => appointment.Subject),
@@ -266,7 +338,11 @@ public class CalendarCommands : ICalendarCommands
                         Start = SafeGetDateTimeOffset(() => appointment.Start),
                         End = SafeGetDateTimeOffset(() => appointment.End),
                         AllDay = SafeGetBool(() => appointment.AllDayEvent),
-                        Message = "Created Outlook appointment."
+                        Message = wantsMeeting
+                            ? invitationSent
+                                ? "Created Outlook meeting and sent the invitation."
+                                : "Created Outlook meeting. No invitation was sent - the attendees have not been told. Pass sendInvitation to invite them."
+                            : "Created Outlook appointment."
                     };
                 }
                 finally
@@ -622,7 +698,9 @@ public class CalendarCommands : ICalendarCommands
                 End = SafeGetDateTimeOffset(() => appointment.End),
                 AllDay = SafeGetBool(() => appointment.AllDayEvent),
                 ReminderSet = SafeGetBool(() => appointment.ReminderSet),
-                BusyStatus = SafeGetInt(() => (int)appointment.BusyStatus)
+                BusyStatus = SafeGetInt(() => (int)appointment.BusyStatus),
+                IsMeeting = SafeGetBool(() => appointment.MeetingStatus != Outlook.OlMeetingStatus.olNonMeeting),
+                Attendees = ReadAttendees(appointment, resolveFirst: false)
             };
         }
         finally
@@ -630,6 +708,95 @@ public class CalendarCommands : ICalendarCommands
             OutlookInteropRunner.ReleaseComObject(ref parentFolder);
         }
     }
+
+    /// <summary>
+    /// Reads the invitee list off an appointment.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <paramref name="resolveFirst"/> asks Outlook to resolve the names against the address book.
+    /// That is only wanted when attendees have just been assigned from caller-supplied text; on an
+    /// item read back from the store the recipients are already resolved, and resolving again would
+    /// be a needless round trip that can prompt.
+    /// </para>
+    /// <para>
+    /// <c>Recipients.ResolveAll</c> returns false when *any* recipient failed, so it cannot say which
+    /// one. Each <c>Recipient.Resolved</c> flag is read individually instead - naming the attendee
+    /// that failed is the whole point.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static List<MeetingAttendeeInfo> ReadAttendees(Outlook.AppointmentItem appointment, bool resolveFirst)
+    {
+        var attendees = new List<MeetingAttendeeInfo>();
+        Outlook.Recipients? recipients = null;
+
+        try
+        {
+            recipients = appointment.Recipients;
+
+            if (recipients == null)
+            {
+                return attendees;
+            }
+
+            if (resolveFirst)
+            {
+                _ = recipients.ResolveAll();
+            }
+
+            int count = recipients.Count;
+
+            for (int index = 1; index <= count; index++)
+            {
+                Outlook.Recipient? recipient = null;
+
+                try
+                {
+                    recipient = recipients[index];
+
+                    attendees.Add(new MeetingAttendeeInfo
+                    {
+                        Name = SafeGet(() => recipient.Name),
+                        Address = SafeGet(() => recipient.Address),
+                        Type = DescribeRecipientType(SafeGetInt(() => recipient.Type)),
+                        ResponseStatus = DescribeResponseStatus(SafeGetInt(() => (int)recipient.MeetingResponseStatus)),
+                        Resolved = SafeGetBool(() => recipient.Resolved)
+                    });
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref recipient);
+                }
+            }
+
+            return attendees;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref recipients);
+        }
+    }
+
+    private static string DescribeRecipientType(int type) => type switch
+    {
+        (int)Outlook.OlMeetingRecipientType.olOrganizer => "organizer",
+        (int)Outlook.OlMeetingRecipientType.olRequired => "required",
+        (int)Outlook.OlMeetingRecipientType.olOptional => "optional",
+        (int)Outlook.OlMeetingRecipientType.olResource => "resource",
+        _ => "unknown"
+    };
+
+    private static string DescribeResponseStatus(int status) => status switch
+    {
+        (int)Outlook.OlResponseStatus.olResponseNone => "none",
+        (int)Outlook.OlResponseStatus.olResponseOrganized => "organizer",
+        (int)Outlook.OlResponseStatus.olResponseTentative => "tentative",
+        (int)Outlook.OlResponseStatus.olResponseAccepted => "accepted",
+        (int)Outlook.OlResponseStatus.olResponseDeclined => "declined",
+        (int)Outlook.OlResponseStatus.olResponseNotResponded => "notResponded",
+        _ => "unknown"
+    };
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static CalendarSummaryInfo CreateCalendarSummary(Outlook.AppointmentItem appointment, bool includeBodyPreview)

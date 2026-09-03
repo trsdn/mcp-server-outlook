@@ -348,6 +348,254 @@ public class MailCommands : IMailCommands
     }
 
     /// <summary>
+    /// Accepts, declines or tentatively accepts a meeting invitation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Answering and notifying are separate. <c>Respond</c> updates the caller's own calendar
+    /// immediately; the response item it hands back is only mailed when <paramref name="sendResponse"/>
+    /// is set. That is Outlook's own "do not send a response" behaviour, and making it the default
+    /// keeps the irreversible half - mail to a real organiser - opt-in.
+    /// </para>
+    /// <para>
+    /// A cancellation or a response is not an invitation, and neither is ordinary mail. All three
+    /// turn up in a listing looking like something you could answer, so each is refused by name
+    /// rather than failing obscurely inside Outlook.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MeetingResponseResult RespondToMeeting(
+        string? entryId = null,
+        string? storeId = null,
+        string response = "accept",
+        bool sendResponse = false,
+        string? responseText = null,
+        bool useActiveMail = false)
+    {
+        if (!TryParseMeetingResponse(response, out Outlook.OlMeetingResponse parsedResponse, out string normalizedResponse))
+        {
+            return new MeetingResponseResult
+            {
+                Success = false,
+                ResponseSent = false,
+                ErrorMessage = $"'{response}' is not a valid response for mail.respond-to-meeting. "
+                    + "Use accept, decline or tentative."
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(entryId) && !useActiveMail)
+        {
+            return new MeetingResponseResult
+            {
+                Success = false,
+                ResponseSent = false,
+                Response = normalizedResponse,
+                ErrorMessage = "entryId is required for mail.respond-to-meeting, or set useActiveMail to answer the "
+                    + "invitation currently open or selected in Outlook."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailRespondToMeeting",
+            (application, session) =>
+            {
+                object? resolvedItem = null;
+                Outlook.Inspector? inspector = null;
+                Outlook.Explorer? explorer = null;
+                Outlook.Selection? selection = null;
+                object? currentItem = null;
+                Outlook.MeetingItem? invitation = null;
+                Outlook.AppointmentItem? appointment = null;
+                object? responseItem = null;
+                Outlook.MeetingItem? responseMeeting = null;
+
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(entryId))
+                    {
+                        resolvedItem = session.GetItemFromID(
+                            entryId,
+                            string.IsNullOrWhiteSpace(storeId) ? Type.Missing : storeId);
+                    }
+                    else
+                    {
+                        inspector = application.ActiveInspector();
+                        currentItem = inspector?.CurrentItem;
+                        resolvedItem = currentItem;
+
+                        if (resolvedItem is not Outlook.MeetingItem)
+                        {
+                            explorer = application.ActiveExplorer();
+                            selection = explorer?.Selection;
+
+                            if (selection != null && selection.Count > 0)
+                            {
+                                resolvedItem = selection[1];
+                            }
+                        }
+                    }
+
+                    if (resolvedItem == null)
+                    {
+                        return new MeetingResponseResult
+                        {
+                            Success = false,
+                            ResponseSent = false,
+                            Response = normalizedResponse,
+                            ErrorMessage = string.IsNullOrWhiteSpace(entryId)
+                                ? "No Outlook item is open or selected, so there is no invitation to answer."
+                                : "The requested Outlook item could not be resolved, so there is no invitation to answer."
+                        };
+                    }
+
+                    invitation = resolvedItem as Outlook.MeetingItem;
+
+                    if (invitation == null)
+                    {
+                        return new MeetingResponseResult
+                        {
+                            Success = false,
+                            ResponseSent = false,
+                            Response = normalizedResponse,
+                            ErrorMessage = "That Outlook item is not a meeting invitation, so it cannot be accepted or declined. "
+                                + "A listing's itemType says which items are invitations ('meetingRequest')."
+                        };
+                    }
+
+                    string? messageClass = SafeGet(() => invitation.MessageClass);
+                    string? kind = ClassifyMeetingItem(messageClass);
+
+                    if (kind != "meetingRequest")
+                    {
+                        return new MeetingResponseResult
+                        {
+                            Success = false,
+                            ResponseSent = false,
+                            Response = normalizedResponse,
+                            Subject = SafeGet(() => invitation.Subject),
+                            ErrorMessage = kind switch
+                            {
+                                "meetingCancellation" => "That item is a meeting cancellation, not an invitation - the meeting is already off, "
+                                    + "so there is nothing to accept or decline.",
+                                "meetingResponse" => "That item is somebody else's response to a meeting you organised, not an invitation to you, "
+                                    + "so it cannot be accepted or declined.",
+                                _ => $"That item is a scheduling message of class '{messageClass}', not a meeting invitation, "
+                                    + "so it cannot be accepted or declined."
+                            }
+                        };
+                    }
+
+                    // false: read the appointment as it stands rather than adding a copy to the
+                    // calendar before the caller has actually answered.
+                    appointment = invitation.GetAssociatedAppointment(false);
+
+                    if (appointment == null)
+                    {
+                        return new MeetingResponseResult
+                        {
+                            Success = false,
+                            ResponseSent = false,
+                            Response = normalizedResponse,
+                            Subject = SafeGet(() => invitation.Subject),
+                            ErrorMessage = "Outlook could not open the appointment behind this invitation, so it cannot be answered."
+                        };
+                    }
+
+                    responseItem = appointment.Respond(parsedResponse, true, false);
+                    responseMeeting = responseItem as Outlook.MeetingItem;
+
+                    bool sent = false;
+
+                    if (sendResponse)
+                    {
+                        if (responseMeeting == null)
+                        {
+                            return new MeetingResponseResult
+                            {
+                                Success = false,
+                                ResponseSent = false,
+                                Response = normalizedResponse,
+                                Subject = SafeGet(() => appointment.Subject),
+                                ErrorMessage = "Your calendar was updated, but Outlook did not produce a response message, "
+                                    + "so the organiser has not been told."
+                            };
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(responseText))
+                        {
+                            responseMeeting.Body = responseText;
+                        }
+
+                        responseMeeting.Send();
+                        sent = true;
+                    }
+
+                    return new MeetingResponseResult
+                    {
+                        Success = true,
+                        ResponseSent = sent,
+                        Response = normalizedResponse,
+                        EntryId = SafeGet(() => appointment.EntryID),
+                        StoreId = SafeGet(() => appointment.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                        Subject = SafeGet(() => appointment.Subject),
+                        Message = sent
+                            ? $"Responded '{normalizedResponse}' and told the organiser."
+                            : $"Responded '{normalizedResponse}' in your own calendar. The organiser has not been told - "
+                                + "pass sendResponse to notify them."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref responseMeeting);
+                    OutlookInteropRunner.ReleaseComObject(ref responseItem);
+                    OutlookInteropRunner.ReleaseComObject(ref appointment);
+                    OutlookInteropRunner.ReleaseComObject(ref invitation);
+                    OutlookInteropRunner.ReleaseComObject(ref currentItem);
+                    OutlookInteropRunner.ReleaseComObject(ref selection);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                    OutlookInteropRunner.ReleaseComObject(ref inspector);
+                    OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
+                }
+            },
+            ex => new MeetingResponseResult
+            {
+                Success = false,
+                ResponseSent = false,
+                Response = normalizedResponse,
+                ErrorMessage = $"Failed to respond to the Outlook meeting invitation: {ex.Message}"
+            });
+    }
+
+    private static bool TryParseMeetingResponse(
+        string? response,
+        out Outlook.OlMeetingResponse parsed,
+        out string normalized)
+    {
+        switch (response?.Trim().ToLowerInvariant())
+        {
+            case "accept":
+            case "accepted":
+                parsed = Outlook.OlMeetingResponse.olMeetingAccepted;
+                normalized = "accept";
+                return true;
+            case "decline":
+            case "declined":
+                parsed = Outlook.OlMeetingResponse.olMeetingDeclined;
+                normalized = "decline";
+                return true;
+            case "tentative":
+            case "tentatively":
+                parsed = Outlook.OlMeetingResponse.olMeetingTentative;
+                normalized = "tentative";
+                return true;
+            default:
+                parsed = Outlook.OlMeetingResponse.olMeetingDeclined;
+                normalized = response?.Trim() ?? string.Empty;
+                return false;
+        }
+    }
+
+    /// <summary>
     /// Pulls the entry ids out of a conversation table. Only <c>EntryID</c> is requested: the
     /// remaining default columns are read for every row and never used, and their meaning varies by
     /// item type.

@@ -23,6 +23,23 @@ public class FolderCommands : IFolderCommands
             ["junk"] = Outlook.OlDefaultFolders.olFolderJunk
         };
 
+    /// <summary>
+    /// The folder roles Outlook will open in another person's mailbox. This is deliberately narrower
+    /// than <see cref="DefaultFolderAliases"/>: <c>GetSharedDefaultFolder</c> accepts only these, and
+    /// passing anything else produces a COM error a caller cannot act on. Rejecting up front lets the
+    /// error name the supported set instead.
+    /// </summary>
+    private static readonly Dictionary<string, Outlook.OlDefaultFolders> SharedFolderRoles =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["inbox"] = Outlook.OlDefaultFolders.olFolderInbox,
+            ["calendar"] = Outlook.OlDefaultFolders.olFolderCalendar,
+            ["contacts"] = Outlook.OlDefaultFolders.olFolderContacts,
+            ["tasks"] = Outlook.OlDefaultFolders.olFolderTasks,
+            ["notes"] = Outlook.OlDefaultFolders.olFolderNotes,
+            ["journal"] = Outlook.OlDefaultFolders.olFolderJournal
+        };
+
     private static readonly (string Role, Outlook.OlDefaultFolders Folder)[] DefaultFolders =
     [
         ("inbox", Outlook.OlDefaultFolders.olFolderInbox),
@@ -277,10 +294,174 @@ public class FolderCommands : IFolderCommands
     }
 
     /// <summary>
-    /// Maps store id to the account that delivers there. Comparison is ordinal: a store id is an
-    /// opaque hex string, so case-insensitive matching would risk conflating two distinct stores.
+    /// Opens another person's default folder by address, using delegate or shared-mailbox rights
+    /// (#38).
+    ///
+    /// <para>
+    /// <c>NameSpace.GetSharedDefaultFolder</c> reaches a mailbox that is not in the profile at all,
+    /// which is the only way to read a colleague's calendar without adding their account. It takes a
+    /// <c>Recipient</c>, so the address has to be resolved against the address book first.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The unresolved-recipient case is the dangerous one.</b> <c>Resolve</c> returns
+    /// <see langword="false"/> rather than throwing, and Outlook then treats the unresolved recipient
+    /// as the current user - so a caller asking for a colleague's calendar would be shown their own,
+    /// with <c>success: true</c> and a perfectly plausible folder. An unresolved address is therefore
+    /// refused outright.
+    /// </para>
+    ///
+    /// <para>
+    /// <b><c>Resolve</c> is not an existence check, though.</b> Verified live: it returns
+    /// <see langword="true"/> for <c>no-such-person@invalid.example</c>, because Outlook accepts any
+    /// syntactically valid SMTP address as a one-off recipient without consulting the directory. So
+    /// the guard above catches only part of the problem; the rest is caught by
+    /// <c>GetSharedDefaultFolder</c> itself failing, which is why that failure is reported with the
+    /// mailbox and role named rather than as a bare HRESULT. Do not tighten this into a directory
+    /// lookup - on a non-Exchange profile every legitimate recipient is a plain SMTP entry too, so
+    /// that would reject real mailboxes.
+    /// </para>
     /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public OutlookFolderResolveResult OpenShared(string? address = null, string? role = null)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return new OutlookFolderResolveResult
+            {
+                Success = false,
+                ErrorMessage =
+                    "An address is required: open-shared answers the question of whose mailbox to "
+                    + "open, so there is no sensible default."
+            };
+        }
+
+        string requestedRole = string.IsNullOrWhiteSpace(role) ? "inbox" : role!.Trim();
+
+        if (!SharedFolderRoles.TryGetValue(requestedRole, out var folderType))
+        {
+            return new OutlookFolderResolveResult
+            {
+                Success = false,
+                RequestedFolder = requestedRole,
+                ErrorMessage =
+                    $"'{requestedRole}' is not a folder role that can be opened in another mailbox. "
+                    + "Outlook supports: " + string.Join(", ", SharedFolderRoles.Keys.Order(StringComparer.Ordinal))
+                    + "."
+            };
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookFolderOpenShared",
+            (application, session) =>
+            {
+                Outlook.Recipient? recipient = null;
+                Outlook.MAPIFolder? folder = null;
+                Outlook.Folders? children = null;
+                Outlook.Items? items = null;
+                Outlook.Store? store = null;
+
+                try
+                {
+                    recipient = session.CreateRecipient(address);
+
+                    if (!recipient.Resolve())
+                    {
+                        return new OutlookFolderResolveResult
+                        {
+                            Success = false,
+                            RequestedFolder = requestedRole,
+                            ErrorMessage =
+                                $"Outlook could not resolve '{address}' against the address book. The "
+                                + "request is refused rather than served, because an unresolved recipient "
+                                + "makes Outlook return the signed-in user's own folder instead - which "
+                                + "would look like a successful answer about someone else's mailbox."
+                        };
+                    }
+
+                    folder = session.GetSharedDefaultFolder(recipient, folderType);
+
+                    string? folderPath = OutlookInteropRunner.GetFolderPath(folder);
+
+                    if (folderPath == null)
+                    {
+                        return new OutlookFolderResolveResult
+                        {
+                            Success = false,
+                            RequestedFolder = requestedRole,
+                            ErrorMessage =
+                                $"Outlook returned a '{requestedRole}' folder for '{address}' that has no "
+                                + "usable path, so nothing can be read from it. This normally means the "
+                                + "mailbox exists but the folder is not actually shared."
+                        };
+                    }
+
+                    children = folder.Folders;
+                    items = folder.Items;
+                    store = SafeGetStore(folder);
+
+                    return new OutlookFolderResolveResult
+                    {
+                        Success = true,
+                        Resolved = true,
+                        RequestedFolder = requestedRole,
+                        Name = SafeGet(() => folder.Name),
+                        FolderPath = folderPath,
+                        StoreId = store != null ? SafeGet(() => store.StoreID) : null,
+                        DefaultRole = requestedRole,
+                        ChildFolderCount = children.Count,
+                        ItemCount = items.Count
+                    };
+                }
+                catch (COMException ex) when (OutlookInteropRunner.IsObjectModelGuardDenial(ex))
+                {
+                    return new OutlookFolderResolveResult
+                    {
+                        Success = false,
+                        RequestedFolder = requestedRole,
+                        ErrorMessage =
+                            "Outlook's security prompt blocked reading the address book, which is needed "
+                            + "to resolve the recipient. Answer the prompt and retry."
+                    };
+                }
+                catch (COMException ex)
+                {
+                    // Outlook reports both "no such mailbox" and "you do not have permission" as a
+                    // plain COM failure, and cannot distinguish them: Recipient.Resolve accepts any
+                    // syntactically valid SMTP address as a one-off without consulting the directory,
+                    // so a typo reaches this point looking exactly like a permissions problem. Naming
+                    // both possibilities is what makes the error actionable.
+                    return new OutlookFolderResolveResult
+                    {
+                        Success = false,
+                        RequestedFolder = requestedRole,
+                        ErrorMessage =
+                            $"Could not open the '{requestedRole}' folder of '{address}'. Either no such "
+                            + "mailbox exists, or it has not granted access. Outlook cannot tell those "
+                            + $"apart. Outlook reported: {ex.Message}"
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref store);
+                    OutlookInteropRunner.ReleaseComObject(ref items);
+                    OutlookInteropRunner.ReleaseComObject(ref children);
+                    OutlookInteropRunner.ReleaseComObject(ref folder);
+                    OutlookInteropRunner.ReleaseComObject(ref recipient);
+                }
+            },
+            ex => new OutlookFolderResolveResult
+            {
+                Success = false,
+                RequestedFolder = requestedRole,
+                ErrorMessage = $"Failed to open a shared Outlook folder: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Maps store id to the account that delivers there. Comparison is ordinal: a store id is an
+    /// opaque hex string, so case-insensitive matching would risk conflating two distinct stores.
+    /// </summary>    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static Dictionary<string, (string? Smtp, string? Name)> ReadAccounts(Outlook.NameSpace session)
     {
         var map = new Dictionary<string, (string? Smtp, string? Name)>(StringComparer.Ordinal);

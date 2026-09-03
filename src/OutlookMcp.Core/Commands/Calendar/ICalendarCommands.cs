@@ -17,7 +17,12 @@ namespace OutlookMcp.Core.Commands.Calendar;
     + "recurrenceCount or recurrenceEndDate to bound it. list only expands a series into its individual occurrences "
     + "when both start and endTime are given, because a series with no end date has infinitely many; it reports "
     + "recurringExpanded so a caller can tell. Never conclude somebody is free from a listing whose recurringExpanded "
-    + "is false - it contains series masters only, so a weekly meeting is missing from every date but its first.")]
+    + "is false - it contains series masters only, so a weekly meeting is missing from every date but its first. "
+    + "Every occurrence of a series carries the series' own entry id, so update-appointment and delete-appointment "
+    + "against that entry id change or cancel the WHOLE series. To change or cancel one instance, pass occurrenceDate "
+    + "with the date of that instance; a bare date takes its time of day from the series. Naming occurrenceDate on an "
+    + "item that is not recurring is refused rather than silently ignored, and the response reports scope as series or "
+    + "occurrence so a caller can confirm what was actually touched.")]
 public interface ICalendarCommands
 {
     [ServiceAction("list", Destructive = false)]
@@ -62,13 +67,15 @@ public interface ICalendarCommands
         string? location = null,
         string? body = null,
         bool? allDay = null,
-        bool useActiveAppointment = false);
+        bool useActiveAppointment = false,
+        string? occurrenceDate = null);
 
     [ServiceAction("delete-appointment", Destructive = true)]
     CalendarMutationResult DeleteAppointment(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveAppointment = false);
+        bool useActiveAppointment = false,
+        string? occurrenceDate = null);
 
     [ServiceAction("get-free-busy", Destructive = false)]
     CalendarFreeBusyResult GetFreeBusy(

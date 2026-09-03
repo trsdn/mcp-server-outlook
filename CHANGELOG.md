@@ -8,6 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Single-occurrence changes and cancellations** (#33). `calendar.update-appointment` and
+  `calendar.delete-appointment` take an optional `occurrenceDate` that limits the change to one
+  instance of a recurring series.
+
+  The trap this closes is silent. Every occurrence of a series carries the *master's* entry id, so
+  updating or deleting "an occurrence" by its entry id changed or cancelled the **whole series**
+  while looking exactly like a single-instance edit. Cancelling one stand-up wiped out every
+  stand-up, and nothing reported an error, because as far as Outlook was concerned that is what was
+  asked for.
+
+  So the scope of the change is now something the caller states rather than something they discover
+  afterwards. The response reports `scope` as `series` or `occurrence`; naming `occurrenceDate` on an
+  item that is not recurring is refused rather than ignored; and a date the series does not fall on
+  is refused rather than being quietly turned into a series-wide edit.
+
+  `occurrenceDate` may be a bare date. Outlook's `GetOccurrence` matches on the occurrence's exact
+  start to the minute and throws if it is off by one, so a value with no time of day takes its time
+  from the series - a caller asking to cancel Thursday's stand-up should not have to know it starts
+  at 09:17.
+
+  Verified against classic Outlook: 6 new integration tests, confirmed failing first. The two
+  load-bearing ones assert that the *rest of the series survives*, not merely that the named instance
+  is gone - asserting only the absence would pass just as happily if everything had been wiped out,
+  which is the bug.
+
 - **Recurring appointments** (#33). `calendar.list` now expands a recurring series into its
   individual occurrences, and `calendar.create-appointment` can create one.
 

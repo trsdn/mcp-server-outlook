@@ -1160,6 +1160,19 @@ public class CalendarMutationResult : ResultBase
     public bool AllDay { get; set; }
     public bool Updated { get; set; }
     public bool Deleted { get; set; }
+
+    /// <summary>
+    /// What the change actually touched: <c>series</c> for the whole item (recurring or not) or
+    /// <c>occurrence</c> for a single instance of a series.
+    ///
+    /// <para>
+    /// This is reported rather than inferred because an occurrence carries its master's entry id, so
+    /// a series-wide edit and a single-instance edit are indistinguishable in the response otherwise.
+    /// A caller that cancelled one stand-up needs to be able to see that it cancelled one stand-up.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Scope { get; set; }
 }
 
 public class AttachmentListResult : ResultBase

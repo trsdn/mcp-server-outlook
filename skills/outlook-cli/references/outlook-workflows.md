@@ -100,7 +100,7 @@ Each listed item carries `recurrenceState`:
 - `exception` - an instance that was moved, shortened or otherwise changed
 
 An occurrence carries the **master's** entry id, so editing or deleting it by entry id affects the
-whole series, not just that date.
+whole series, not just that date. To change or cancel one instance, name `occurrenceDate` - see below.
 
 To create a series, pass `recurrenceType` (`daily`, `weekly`, `monthly` or `yearly`) to
 `calendar.create-appointment`, with:
@@ -114,6 +114,30 @@ To create a series, pass `recurrenceType` (`daily`, `weekly`, `monthly` or `year
 `calendar.read` reports the stored pattern under `recurrence`, including `exceptionCount`. A non-zero
 `exceptionCount` means the pattern alone does not describe the series - some occurrences differ - so
 do not describe the schedule from the pattern without saying so.
+
+### Changing or cancelling one instance
+
+`calendar.update-appointment` and `calendar.delete-appointment` take an optional `occurrenceDate`.
+
+- **Omitted** - the whole series is changed or cancelled. Every occurrence moves; every occurrence
+  disappears.
+- **Given** - only the instance starting on that date is touched. The rest of the series is left
+  alone, and the changed instance becomes an `exception`.
+
+The response reports `scope` as `series` or `occurrence`, so you can confirm what was actually
+touched rather than inferring it from an entry id that is the same either way.
+
+`occurrenceDate` may be a bare date (`2026-03-12`); the time of day is then taken from the series, so
+you do not need to know that the stand-up starts at 09:17. Give a full date and time only when you
+mean a specific instance that may already have been moved.
+
+Naming `occurrenceDate` on an appointment that is not recurring is **refused**, not ignored - a
+caller who asked to touch one instance of a series should not be told it succeeded against a one-off
+item. A date the series does not fall on is likewise refused; check it against a listing first, and
+remember that an instance somebody already cancelled no longer exists.
+
+Cancelling a single occurrence of a **meeting** does not notify the attendees - nothing is sent by
+this tool. Say so rather than implying the others have been told.
 
 ## Answering an invitation
 

@@ -1521,6 +1521,23 @@ public class MailCommands : IMailCommands
                         };
                     }
 
+                    // Outlook refuses to build a reply or forward from an item that was never sent -
+                    // there is nobody to reply to - and reports it as "Could not send the message",
+                    // which is nonsense to a caller who is not sending anything and unactionable to
+                    // an agent, which will simply retry. Name the actual cause first (#92).
+                    if (!SafeGetBool(() => sourceMail.Sent))
+                    {
+                        return new MailDraftResult
+                        {
+                            Success = false,
+                            Saved = false,
+                            Displayed = false,
+                            ErrorMessage = "This message is an unsent draft, so Outlook cannot create a reply or forward from it. "
+                                + "Reply to or forward a message that was actually sent or received; to edit the draft itself, "
+                                + "use mail.set-subject, mail.set-body or mail.set-recipients."
+                        };
+                    }
+
                     draftMail = createDraft(sourceMail);
 
                     if (!string.IsNullOrEmpty(recipientTo))

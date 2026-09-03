@@ -35,6 +35,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The tool no longer claims Outlook is not running while Outlook is running** (#90). Availability
+  was determined solely by looking Outlook up in the COM Running Object Table. Outlook does not
+  reliably register itself there: with Outlook open, the mailbox loaded and the window in front of
+  you, `GetActiveObject` returns `MK_E_UNAVAILABLE` while `CoCreateInstance` on the same ProgID, in
+  the same process and as the same user, hands back a working `Application` immediately.
+
+  So every call returned "Outlook does not appear to be running" - a confident, checkable, wrong
+  statement about the state of the machine. It also meant every integration test in this repository
+  skipped itself, and the suite reported green while verifying nothing against a mailbox.
+
+  Resolution now falls back to attaching via `CoCreateInstance`, which returns the already-running
+  instance because Outlook is a single-instance COM server. The fallback is gated on an `OUTLOOK.EXE`
+  process actually existing **in the current Windows session**, because `CoCreateInstance` would
+  otherwise *launch* Outlook, which this tool must never do. The session filter is load-bearing: a
+  COM attach cannot reach another session's Outlook, so counting one would defeat the guard.
+
+- **`folder.list-items` no longer returns an arbitrary subset of a large folder** (#91). It walked
+  the folder in store order and stopped at `maxCount`, so 25 items out of 119 were an arbitrary 25 -
+  a caller looking for a message they had just created could be told, in effect, that it did not
+  exist. Items are now ordered newest-first before truncation, and the response says which property
+  the ordering used (`sortedBy`, `sortDirection`) and whether anything was cut (`truncated`). Where
+  no orderable property exists the order is reported as unknown rather than presented as an ordering.
+
+- **Replying to or forwarding an unsent draft now explains why it cannot work** (#92). Outlook
+  rejects the operation - there is nobody to reply to - but reports it as "Could not send the
+  message", which describes an action the caller never requested and gives an agent nothing to act
+  on except a retry that cannot succeed. The message now names the cause and points at the draft
+  editing actions instead.
+
 - **`mail.search` no longer silently misses terms buried in long message bodies** (#42). The
   free-text `query` matcher fetched the whole body through COM and then discarded everything past
   1200 characters before searching it. A term further in was invisible, and the caller was not told

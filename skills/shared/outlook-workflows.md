@@ -120,6 +120,12 @@ meeting with other attendees.
 
 `resolve-path` is cheaper than walking the tree when the user already named the folder.
 
+`list-items` returns the newest items first and caps at `maxCount`. When it reports `truncated: true`
+you are looking at the newest slice of a larger folder, not the whole of it - do not conclude an item
+is absent from a truncated listing. Check `sortedBy`: if it is null the folder had no orderable
+timestamp and the order is arbitrary, so a truncated result there tells you nothing about what is
+missing.
+
 ## What this surface does not do
 
 There is no window, visibility, or "watch me work" control. Outlook stays as the user left it.

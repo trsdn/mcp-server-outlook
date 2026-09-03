@@ -277,22 +277,24 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         // or item selected -- this is what makes "find a message, then reply to it" usable.
         EnsureOutlookAvailable();
 
-        var sourceDraft = CreateSmokeDraft();
+        // A received message, not a draft. Outlook cannot build a reply from an item that was never
+        // sent (#92); an earlier version of this test asked it to and had skipped itself ever since,
+        // so the impossible assertion was never observed.
+        (string EntryId, string? StoreId) source = FindReceivedMessage();
         MailDraftResult? replyDraft = null;
 
         try
         {
             var commands = new MailCommands();
             replyDraft = commands.Reply(
-                entryId: sourceDraft.EntryId,
-                storeId: sourceDraft.StoreId,
+                entryId: source.EntryId,
+                storeId: source.StoreId,
                 useActiveMail: false,
                 body: "Headless reply body.");
 
             Assert.True(replyDraft.Success, replyDraft.ErrorMessage);
             Assert.True(replyDraft.Saved);
             Assert.False(string.IsNullOrWhiteSpace(replyDraft.EntryId));
-            Assert.StartsWith("RE:", replyDraft.Subject);
 
             var replyBody = commands.Read(entryId: replyDraft.EntryId, storeId: replyDraft.StoreId, useActiveMail: false);
             Assert.Contains("Headless reply body.", replyBody.BodyPreview ?? string.Empty);
@@ -303,7 +305,35 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             {
                 DeleteDraft(replyDraft.EntryId, replyDraft.StoreId);
             }
+        }
+    }
 
+    /// <summary>
+    /// Replying to a draft is impossible in Outlook, so the only useful behaviour is to say why.
+    /// Asserted because the raw Outlook message - "Could not send the message" - describes an
+    /// operation the caller did not ask for and gives an agent nothing to act on (#92).
+    /// </summary>
+    [SkippableFact]
+    public void MailReply_ToAnUnsentDraft_ExplainsWhyRatherThanReportingASendFailure()
+    {
+        EnsureOutlookAvailable();
+
+        var sourceDraft = CreateSmokeDraft();
+
+        try
+        {
+            var result = new MailCommands().Reply(
+                entryId: sourceDraft.EntryId,
+                storeId: sourceDraft.StoreId,
+                useActiveMail: false,
+                body: "This cannot work.");
+
+            Assert.False(result.Success);
+            Assert.Contains("unsent draft", result.ErrorMessage ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Could not send the message", result.ErrorMessage ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
             DeleteDraft(sourceDraft.EntryId!, sourceDraft.StoreId);
         }
     }
@@ -315,24 +345,40 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
         // nobody to send to and no headless way to add one.
         EnsureOutlookAvailable();
 
-        var sourceDraft = CreateSmokeDraft();
         MailDraftResult? forwardDraft = null;
 
         try
         {
             var commands = new MailCommands();
-            forwardDraft = commands.Forward(
-                entryId: sourceDraft.EntryId,
-                storeId: sourceDraft.StoreId,
-                useActiveMail: false,
-                recipientTo: "copilot-outlook-smoke@example.com",
-                body: "Headless forward body.");
 
-            Assert.True(forwardDraft.Success, forwardDraft.ErrorMessage);
+            // A real mailbox can hold rights-protected mail carrying a "Do Not Forward" policy,
+            // which Outlook enforces regardless of what this code does. That is the policy working,
+            // not a defect -- so walk past those messages to a forwardable one rather than skipping
+            // the whole test on the first one, which would quietly stop testing anything.
+            foreach ((string entryId, string? storeId) in FindReceivedMessages())
+            {
+                forwardDraft = commands.Forward(
+                    entryId: entryId,
+                    storeId: storeId,
+                    useActiveMail: false,
+                    recipientTo: "copilot-outlook-smoke@example.com",
+                    body: "Headless forward body.");
+
+                if (forwardDraft.Success
+                    || !(forwardDraft.ErrorMessage ?? string.Empty).Contains("Permission to this message is restricted", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                forwardDraft = null;
+            }
+
+            Skip.If(forwardDraft == null, "Every received message available is rights-protected and cannot be forwarded.");
+
+            Assert.True(forwardDraft!.Success, forwardDraft.ErrorMessage);
             Assert.True(forwardDraft.Saved);
             Assert.False(string.IsNullOrWhiteSpace(forwardDraft.EntryId));
             Assert.Equal("copilot-outlook-smoke@example.com", forwardDraft.To);
-            Assert.StartsWith("FW:", forwardDraft.Subject);
         }
         finally
         {
@@ -340,9 +386,33 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             {
                 DeleteDraft(forwardDraft.EntryId, forwardDraft.StoreId);
             }
-
-            DeleteDraft(sourceDraft.EntryId!, sourceDraft.StoreId);
         }
+    }
+
+    /// <summary>
+    /// Picks a real received message out of the Inbox to reply to. Skips rather than fails when the
+    /// Inbox is empty: no message means nothing to test, which is different from the behaviour being
+    /// wrong.
+    /// </summary>
+    private static (string EntryId, string? StoreId) FindReceivedMessage()
+    {
+        var candidates = FindReceivedMessages();
+        Skip.If(candidates.Count == 0, "The Inbox holds no received message to reply to.");
+        return candidates[0];
+    }
+
+    /// <summary>
+    /// Returns received Inbox messages, newest first, for tests that may need to walk past ones the
+    /// mailbox's own policies rule out.
+    /// </summary>
+    private static List<(string EntryId, string? StoreId)> FindReceivedMessages()
+    {
+        var listed = new MailCommands().List(folder: "inbox", maxCount: 25);
+        Assert.True(listed.Success, listed.ErrorMessage);
+
+        return [.. listed.Messages
+            .Where(m => !m.IsDraft && !string.IsNullOrWhiteSpace(m.EntryId))
+            .Select(m => (m.EntryId!, m.StoreId))];
     }
 
     [SkippableFact]

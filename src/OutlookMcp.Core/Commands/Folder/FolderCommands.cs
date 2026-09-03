@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Core.Models;
 using Outlook = Microsoft.Office.Interop.Outlook;
@@ -309,12 +310,23 @@ public class FolderCommands : IFolderCommands
 
                     items = resolvedFolder.Items;
                     int totalItemCount = SafeGetInt(() => items.Count);
+
+                    // Without this the cap below returns an arbitrary subset in store order, which
+                    // a caller reads as "this is what is in the folder" (#91). Ordering is attempted
+                    // newest-first and the property actually used is reported, because a folder of
+                    // appointments or contacts has no received time and the honest answer there is a
+                    // different ordering rather than a pretended one.
+                    string? sortedBy = TrySortNewestFirst(items);
+
                     var result = new OutlookFolderItemListResult
                     {
                         Success = true,
                         FolderName = SafeGet(() => resolvedFolder.Name),
                         FolderPath = OutlookInteropRunner.GetFolderPath(resolvedFolder),
-                        TotalItemCount = totalItemCount
+                        TotalItemCount = totalItemCount,
+                        Truncated = totalItemCount > boundedMaxCount,
+                        SortedBy = sortedBy,
+                        SortDirection = sortedBy == null ? null : "descending"
                     };
 
                     for (int index = 1; index <= totalItemCount && result.Items.Count < boundedMaxCount; index++)
@@ -352,6 +364,42 @@ public class FolderCommands : IFolderCommands
                 ErrorMessage = $"Failed to enumerate Outlook folder items: {ex.Message}"
             });
     }
+
+    /// <summary>
+    /// Orders a folder's items newest-first, returning the property that worked.
+    ///
+    /// <para>
+    /// <c>ReceivedTime</c> is preferred because it is what "newest" means for mail, but it does not
+    /// exist on appointments, contacts or tasks and Outlook throws rather than ignoring it there.
+    /// <c>LastModificationTime</c> exists on every item type and is the fallback. If both fail the
+    /// caller is told the order is unknown rather than being handed store order dressed up as an
+    /// ordering. See #91.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? TrySortNewestFirst(Outlook.Items items)
+    {
+        foreach ((string property, string reported) in SortCandidates)
+        {
+            try
+            {
+                items.Sort(property, true);
+                return reported;
+            }
+            catch (COMException)
+            {
+                // Property not available on this folder's item types; try the next one.
+            }
+        }
+
+        return null;
+    }
+
+    private static readonly (string Property, string Reported)[] SortCandidates =
+    [
+        ("[ReceivedTime]", "receivedTime"),
+        ("[LastModificationTime]", "lastModificationTime")
+    ];
 
     private static DateTimeOffset? SafeGetDateTimeOffset(Func<DateTime> getter)
     {

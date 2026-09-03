@@ -249,19 +249,36 @@ public class OutlookMailConversationTests(ITestOutputHelper output)
         }
     }
 
+    private static readonly string[] ReceivedMessageFolders = ["inbox", "Inbox/older", "Archive"];
+
     /// <summary>
-    /// Finds a real received message to thread from. Skips when the Inbox is empty: nothing to test
-    /// is not the same as the behaviour being wrong.
+    /// Finds a real received message to thread from. More than one folder is searched: an Inbox that
+    /// happens to be empty would otherwise make every one of these tests skip, which looks like a
+    /// pass and verifies nothing.
     /// </summary>
     private static string FindReceivedMessage(MailCommands commands)
     {
-        var listed = commands.List(folder: "inbox", maxCount: 25);
-        Assert.True(listed.Success, listed.ErrorMessage);
+        foreach (string folder in ReceivedMessageFolders)
+        {
+            var listed = commands.List(folder: folder, maxCount: 25);
 
-        var candidate = listed.Messages.FirstOrDefault(m => !m.IsDraft && !string.IsNullOrWhiteSpace(m.EntryId));
-        Skip.If(candidate == null, "The Inbox holds no received message to build a thread from.");
+            if (!listed.Success)
+            {
+                continue;
+            }
 
-        return candidate!.EntryId!;
+            var candidate = listed.Messages.FirstOrDefault(
+                m => !m.IsDraft
+                     && !string.IsNullOrWhiteSpace(m.EntryId)
+                     && (m.ItemType == null || m.ItemType == "mail"));
+
+            if (candidate != null)
+            {
+                return candidate.EntryId!;
+            }
+        }
+
+        throw new SkipException("This mailbox holds no received message to build a thread from.");
     }
 
     private static string CreateDraft(MailCommands commands, string marker)

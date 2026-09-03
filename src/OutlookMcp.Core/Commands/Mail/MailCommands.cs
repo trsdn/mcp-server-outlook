@@ -1599,6 +1599,7 @@ public class MailCommands : IMailCommands
                     };
 
                     int scanned = 0;
+                    int skipped = 0;
 
                     // Rolling record of the tied band at the frontier of the scan: the received time
                     // of the last item examined, and every entry id examined at that exact instant.
@@ -1614,19 +1615,32 @@ public class MailCommands : IMailCommands
                     {
                         object? rawItem = null;
                         Outlook.MailItem? mail = null;
+                        Outlook.MeetingItem? meeting = null;
 
                         try
                         {
                             rawItem = itemsToScan[index];
                             scanned++;
+
                             mail = rawItem as Outlook.MailItem;
-                            if (mail == null)
+
+                            // A meeting invitation is a MeetingItem, not a MailItem. This used to be
+                            // `if (mail == null) continue;`, which made every invitation invisible in
+                            // every listing with nothing in the response to say so. See #32.
+                            meeting = mail == null ? rawItem as Outlook.MeetingItem : null;
+
+                            if (mail == null && meeting == null)
                             {
+                                skipped++;
                                 continue;
                             }
 
-                            DateTimeOffset? received = SafeGetDateTimeOffset(() => mail.ReceivedTime);
-                            string? entryId = SafeGet(() => mail.EntryID);
+                            DateTimeOffset? received = mail != null
+                                ? SafeGetDateTimeOffset(() => mail.ReceivedTime)
+                                : SafeGetDateTimeOffset(() => meeting!.ReceivedTime);
+                            string? entryId = mail != null
+                                ? SafeGet(() => mail.EntryID)
+                                : SafeGet(() => meeting!.EntryID);
 
                             if (received.HasValue)
                             {
@@ -1652,29 +1666,36 @@ public class MailCommands : IMailCommands
                             // Applied even when Restrict succeeded. The DASL filter is deliberately
                             // over-inclusive -- it drops any predicate it cannot express exactly
                             // (see MailRestrictFilter) -- so this is what makes the result exact.
-                            if (!MatchesStructuredFilters(
-                                    mail, unreadOnly, fromAddress, subjectContains,
-                                    parsedAfter, parsedBefore, hasAttachment))
+                            bool matches = mail != null
+                                ? MatchesStructuredFilters(
+                                      mail, unreadOnly, fromAddress, subjectContains,
+                                      parsedAfter, parsedBefore, hasAttachment)
+                                  && MatchesQuery(mail, query)
+                                : MatchesStructuredFilters(
+                                      meeting!, unreadOnly, fromAddress, subjectContains,
+                                      parsedAfter, parsedBefore, hasAttachment)
+                                  && MatchesQuery(meeting!, query);
+
+                            if (!matches)
                             {
                                 continue;
                             }
 
-                            if (!MatchesQuery(mail, query))
-                            {
-                                continue;
-                            }
-
-                            result.Messages.Add(CreateMailSummary(mail, includeBodyPreview));
+                            result.Messages.Add(mail != null
+                                ? CreateMailSummary(mail, includeBodyPreview)
+                                : CreateMeetingSummary(meeting!, includeBodyPreview));
                         }
                         finally
                         {
                             OutlookInteropRunner.ReleaseComObject(ref mail);
+                            OutlookInteropRunner.ReleaseComObject(ref meeting);
                             OutlookInteropRunner.ReleaseComObject(ref rawItem);
                         }
                     }
 
                     result.ReturnedCount = result.Messages.Count;
                     result.ScannedCount = scanned;
+                    result.SkippedItemCount = skipped;
                     // Truncated: there was more to look at than we actually evaluated, whether
                     // because the result cap (maxCount) was hit first or the safety limit was --
                     // either way, "no more results" must not be inferred from this response alone.
@@ -2054,6 +2075,203 @@ public class MailCommands : IMailCommands
         };
 
         summary.AccessDenied = accessDenied.Count > 0 ? accessDenied : null;
+        summary.ItemType = "mail";
         return summary;
+    }
+
+    /// <summary>
+    /// Builds a listing entry for a meeting request, cancellation or response.
+    ///
+    /// <para>
+    /// A <c>MeetingItem</c> is not a <c>MailItem</c> and shares no interface with it, so this cannot
+    /// reuse <see cref="CreateMailSummary"/> - the properties happen to be named the same but are
+    /// declared on unrelated COM types. It deliberately reads only the fields that mean the same
+    /// thing on both, so a caller can treat a listing uniformly and use <c>itemType</c> to decide
+    /// what it may do with an entry. See #32.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static MailSummaryInfo CreateMeetingSummary(Outlook.MeetingItem meeting, bool includeBodyPreview)
+    {
+        var accessDenied = new List<string>();
+
+        var summary = new MailSummaryInfo
+        {
+            EntryId = SafeGet(() => meeting.EntryID),
+            StoreId = SafeGet(() => meeting.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+            Subject = SafeGet(() => meeting.Subject),
+            SenderName = SafeGet(() => meeting.SenderName),
+            SenderEmailAddress = SafeGet(() => meeting.SenderEmailAddress, nameof(MailSummaryInfo.SenderEmailAddress), accessDenied),
+            // MeetingItem has no To/CC; the attendees live on Recipients. Rendered into To so a
+            // listing reads uniformly, rather than leaving a meeting looking like it is addressed to
+            // nobody.
+            To = SafeGet(() => JoinRecipients(meeting.Recipients), nameof(MailSummaryInfo.To), accessDenied),
+            ConversationId = SafeGet(() => meeting.ConversationID),
+            ConversationTopic = SafeGet(() => meeting.ConversationTopic),
+            BodyPreview = includeBodyPreview
+                ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => meeting.Body))
+                : null,
+            Categories = ParseCategories(SafeGet(() => meeting.Categories)),
+            Unread = SafeGetBool(() => meeting.UnRead),
+            IsDraft = false,
+            Importance = SafeGetInt(() => (int)meeting.Importance),
+            AttachmentCount = SafeGetInt(() => meeting.Attachments.Count),
+            ReceivedTime = SafeGetDateTimeOffset(() => meeting.ReceivedTime),
+            SentOn = SafeGetDateTimeOffset(() => meeting.SentOn),
+            ItemType = ClassifyMeetingItem(SafeGet(() => meeting.MessageClass))
+        };
+
+        summary.AccessDenied = accessDenied.Count > 0 ? accessDenied : null;
+        return summary;
+    }
+
+    /// <summary>
+    /// Maps a scheduling message class onto the distinction that actually changes what a caller may
+    /// do: an invitation can be responded to, a cancellation cannot, and a response is somebody
+    /// else's answer to an invitation you sent.
+    /// </summary>
+    private static string ClassifyMeetingItem(string? messageClass)
+    {
+        if (string.IsNullOrWhiteSpace(messageClass))
+        {
+            return "other";
+        }
+
+        if (messageClass.StartsWith("IPM.Schedule.Meeting.Canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            return "meetingCancellation";
+        }
+
+        if (messageClass.StartsWith("IPM.Schedule.Meeting.Resp", StringComparison.OrdinalIgnoreCase))
+        {
+            return "meetingResponse";
+        }
+
+        return messageClass.StartsWith("IPM.Schedule.Meeting", StringComparison.OrdinalIgnoreCase)
+            ? "meetingRequest"
+            : "other";
+    }
+
+    /// <summary>
+    /// The structured-filter check for meeting items. Mirrors the <c>MailItem</c> overload exactly; the duplication exists because <c>MeetingItem</c> and <c>MailItem</c> are unrelated
+    /// COM types with coincidentally identical property names.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool MatchesStructuredFilters(
+        Outlook.MeetingItem meeting,
+        bool unreadOnly,
+        string? fromAddress,
+        string? subjectContains,
+        DateTimeOffset? receivedAfter,
+        DateTimeOffset? receivedBefore,
+        bool? hasAttachment)
+    {
+        if (unreadOnly && !SafeGetBool(() => meeting.UnRead))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(subjectContains)
+            && !ContainsIgnoreCase(SafeGet(() => meeting.Subject), subjectContains.Trim()))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fromAddress))
+        {
+            string needle = fromAddress.Trim();
+            if (!ContainsIgnoreCase(SafeGet(() => meeting.SenderEmailAddress), needle)
+                && !ContainsIgnoreCase(SafeGet(() => meeting.SenderName), needle))
+            {
+                return false;
+            }
+        }
+
+        if (hasAttachment.HasValue && SafeGetInt(() => meeting.Attachments.Count) > 0 != hasAttachment.Value)
+        {
+            return false;
+        }
+
+        if (receivedAfter.HasValue || receivedBefore.HasValue)
+        {
+            DateTimeOffset? received = SafeGetDateTimeOffset(() => meeting.ReceivedTime);
+            if (received == null)
+            {
+                return false;
+            }
+
+            if (receivedAfter.HasValue && received.Value < receivedAfter.Value)
+            {
+                return false;
+            }
+
+            if (receivedBefore.HasValue && received.Value > receivedBefore.Value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Free-text match for meeting items. See <see cref="MatchesQuery(Outlook.MailItem, string?)"/>.</summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool MatchesQuery(Outlook.MeetingItem meeting, string? query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return true;
+        }
+
+        string searchText = query.Trim();
+        return ContainsIgnoreCase(SafeGet(() => meeting.Subject), searchText)
+            || ContainsIgnoreCase(SafeGet(() => meeting.SenderName), searchText)
+            || ContainsIgnoreCase(SafeGet(() => meeting.SenderEmailAddress), searchText)
+            || ContainsIgnoreCase(SafeGet(() => JoinRecipients(meeting.Recipients)), searchText)
+            || ContainsIgnoreCase(OutlookInteropRunner.NormalizeBodyText(SafeGet(() => meeting.Body)), searchText);
+    }
+
+    /// <summary>
+    /// Renders a meeting's attendees into a single display string, so a meeting entry in a listing
+    /// carries the same "who is this addressed to" information a message does.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? JoinRecipients(Outlook.Recipients? recipients)
+    {
+        if (recipients == null)
+        {
+            return null;
+        }
+
+        var names = new List<string>();
+
+        try
+        {
+            for (int index = 1; index <= recipients.Count; index++)
+            {
+                Outlook.Recipient? recipient = null;
+
+                try
+                {
+                    recipient = recipients[index];
+                    string? name = SafeGet(() => recipient.Name);
+
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        names.Add(name);
+                    }
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref recipient);
+                }
+            }
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref recipients);
+        }
+
+        return names.Count > 0 ? string.Join("; ", names) : null;
     }
 }

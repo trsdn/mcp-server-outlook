@@ -33,9 +33,10 @@ jobs:
       - name: Report disabled Outlook runner
         shell: pwsh
         run: |
-          Write-Output "Outlook integration workflow is configured but inactive."
-          Write-Output "Set repository variable ENABLE_OUTLOOK_INTEGRATION_CI=true and provide a self-hosted Windows runner labeled 'outlook' with classic Outlook installed. See issue #31."
-          Write-Output "See docs/AZURE_SELFHOSTED_RUNNER_SETUP.md for setup details."
+          Write-Output "Outlook integration workflow is inactive, and is expected to stay that way."
+          Write-Output "There is no self-hosted Outlook runner and there is no plan to provide one: see issue #31, closed as not planned."
+          Write-Output "Outlook behaviour is verified by running the tests locally against a real profile. A green CI run says nothing about it."
+          Write-Output "If that decision is ever revisited, see docs/AZURE_SELFHOSTED_RUNNER_SETUP.md and set ENABLE_OUTLOOK_INTEGRATION_CI=true."
 
   outlook-integration:
     if: ${{ vars.ENABLE_OUTLOOK_INTEGRATION_CI == 'true' }}

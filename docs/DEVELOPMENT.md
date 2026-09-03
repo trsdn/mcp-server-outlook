@@ -100,7 +100,7 @@ The `main` branch should be protected with:
 
 ### Current Reality
 
-OutlookMcp's active runtime surface automates classic Outlook for Windows through COM. Hosted CI does not verify Outlook behavior today because that requires a self-hosted Windows runner with classic Outlook installed, running, signed in, and licensed.
+OutlookMcp's active runtime surface automates classic Outlook for Windows through COM. Hosted CI does not verify Outlook behavior and is not going to: that would require a self-hosted Windows runner with classic Outlook installed, running, signed in, and licensed, and there is no plan to provide one (#31, closed as not planned).
 
 CI-safe tests can still verify generated metadata, protocol plumbing, serialization, CLI daemon behavior, and pure .NET validation.
 
@@ -244,7 +244,7 @@ When creating a PR, verify:
 
 - Do not commit directly to `main`.
 - Do not create releases without PRs.
-- Do not claim Outlook behavior is CI-verified until the self-hosted runner exists.
+- Never claim Outlook behavior is CI-verified. No CI job verifies it and none is planned; only a local run against a real profile counts.
 - Do not document deleted presentation tools as active features.
 - Do not run OutlookMcp against mailbox data you are not allowed to expose.
 - Do not update version numbers manually unless the release process requires it.

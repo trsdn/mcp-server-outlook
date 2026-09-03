@@ -131,7 +131,7 @@ dotnet test tests\OutlookMcp.CLI.Tests
 dotnet test tests\OutlookMcp.Core.Tests --filter "Feature=OutlookSeed"
 ```
 
-Hosted CI does not currently verify Outlook behavior because a self-hosted Windows runner with classic Outlook is not available.
+Hosted CI does not verify Outlook behavior, and it never will: that would require a self-hosted Windows runner with classic Outlook, and there is no plan to provide one (#31, closed as not planned). Verify locally against a real profile, and say plainly when you have not.
 
 ## Adding New Commands
 

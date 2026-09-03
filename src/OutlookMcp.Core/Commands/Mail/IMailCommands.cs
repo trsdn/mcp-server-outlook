@@ -17,6 +17,11 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "filters. It is exhaustive rather than indexed, so it will not miss a term buried deep in a long message, but "
     + "reaching the body means opening every candidate item; Outlook cannot filter on body text server-side, so pair "
     + "query with structured filters in large folders to cut how many items must be opened. "
+    + "list and search page with an opaque cursor: when a response has hasMore true, pass its nextCursor back as "
+    + "cursor on an otherwise identical call to get the next page, and keep going until hasMore is false. Never treat "
+    + "a truncated or empty page as proof that no such mail exists while hasMore is true. A cursor only continues the "
+    + "exact folder, query and filters that produced it - changing any of them requires restarting without a cursor - "
+    + "but maxCount may be changed freely mid-walk. "
     + "Use create-draft to create and save a new Outlook draft with optional recipients, subject, and body text. "
     + "Use reply, reply-all, and forward to create saved draft responses targeting an explicit mail item by entry id/store id, "
     + "or fall back to the active mail item; works headlessly with no Outlook window focused when entryId is supplied. "
@@ -48,7 +53,8 @@ public interface IMailCommands
         string? subjectContains = null,
         string? receivedAfter = null,
         string? receivedBefore = null,
-        bool? hasAttachment = null);
+        bool? hasAttachment = null,
+        string? cursor = null);
 
     [ServiceAction("search", Destructive = false)]
     MailListResult Search(
@@ -61,7 +67,8 @@ public interface IMailCommands
         string? subjectContains = null,
         string? receivedAfter = null,
         string? receivedBefore = null,
-        bool? hasAttachment = null);
+        bool? hasAttachment = null,
+        string? cursor = null);
 
     [ServiceAction("create-draft")]
     MailDraftResult CreateMailDraft(

@@ -397,22 +397,42 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
     private static (string EntryId, string? StoreId) FindReceivedMessage()
     {
         var candidates = FindReceivedMessages();
-        Skip.If(candidates.Count == 0, "The Inbox holds no received message to reply to.");
+        Skip.If(candidates.Count == 0, "The mailbox holds no received message to reply to.");
         return candidates[0];
     }
 
+    private static readonly string[] ReceivedMessageFolders = ["inbox", "Inbox/older", "Archive"];
+
     /// <summary>
-    /// Returns received Inbox messages, newest first, for tests that may need to walk past ones the
+    /// Returns received messages, newest first, for tests that may need to walk past ones the
     /// mailbox's own policies rule out.
+    ///
+    /// <para>
+    /// More than one folder is searched because an Inbox holding two rights-protected messages is
+    /// enough to make every one of these tests skip - which looks like a pass and verifies nothing.
+    /// </para>
     /// </summary>
     private static List<(string EntryId, string? StoreId)> FindReceivedMessages()
     {
-        var listed = new MailCommands().List(folder: "inbox", maxCount: 25);
-        Assert.True(listed.Success, listed.ErrorMessage);
+        var found = new List<(string EntryId, string? StoreId)>();
 
-        return [.. listed.Messages
-            .Where(m => !m.IsDraft && !string.IsNullOrWhiteSpace(m.EntryId))
-            .Select(m => (m.EntryId!, m.StoreId))];
+        foreach (string folder in ReceivedMessageFolders)
+        {
+            var listed = new MailCommands().List(folder: folder, maxCount: 25);
+
+            if (!listed.Success)
+            {
+                continue;
+            }
+
+            found.AddRange(listed.Messages
+                .Where(m => !m.IsDraft
+                            && !string.IsNullOrWhiteSpace(m.EntryId)
+                            && (m.ItemType == null || m.ItemType == "mail"))
+                .Select(m => (m.EntryId!, m.StoreId)));
+        }
+
+        return found;
     }
 
     [SkippableFact]

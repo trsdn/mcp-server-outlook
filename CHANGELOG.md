@@ -54,6 +54,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Meeting invitations are no longer invisible in mail listings** (#32). `mail.list` and
+  `mail.search` cast every folder item with `as MailItem` and skipped anything that came back null.
+  A meeting request is a `MeetingItem`, an unrelated COM type, so every invitation, cancellation and
+  response was silently absent - and the response said nothing about it. A user asking what was in a
+  folder got some of it, confidently, with no sign anything had been withheld. In one folder on the
+  test mailbox that was seven items out of forty.
+
+  Scheduling items are now listed, and every entry carries `itemType` (`mail`, `meetingRequest`,
+  `meetingCancellation`, `meetingResponse` or `other`) because a caller must be able to tell them
+  apart: replying to an invitation is not accepting it. A meeting's attendees are rendered into `to`,
+  since `MeetingItem` has no `to` of its own and a meeting listed as addressed to nobody is
+  misleading.
+
+  Anything still not summarisable is counted in `skippedItemCount` rather than dropped. A listing
+  whose numbers do not add up is how "here is what is in your folder" quietly becomes false.
+
+  Responding to invitations, creating meetings with attendees and FreeBusy lookup remain open on #32.
+
 - **The tool no longer claims Outlook is not running while Outlook is running** (#90). Availability
   was determined solely by looking Outlook up in the COM Running Object Table. Outlook does not
   reliably register itself there: with Outlook open, the mailbox loaded and the window in front of

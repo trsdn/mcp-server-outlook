@@ -502,6 +502,18 @@ public class MailListResult : ResultBase
     public int ScannedCount { get; set; }
 
     /// <summary>
+    /// Items that were scanned but could not be summarised at all - a folder item of a type this
+    /// surface does not model, for instance.
+    ///
+    /// <para>
+    /// Reported rather than left implicit because a listing whose numbers do not add up is how
+    /// "here is what is in your folder" quietly becomes false. Meeting requests used to land here by
+    /// accident - invisibly, since nothing was counted either - which is the bug #32 records.
+    /// </para>
+    /// </summary>
+    public int SkippedItemCount { get; set; }
+
+    /// <summary>
     /// True when this call did not exhaustively scan/match every item in
     /// <see cref="TotalItemCount"/> -- either because the result-count cap (<c>maxCount</c>) was
     /// reached, or (for <c>mail.search</c>'s client-side body-substring fallback path only) a
@@ -649,6 +661,19 @@ public class MailSummaryInfo
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? AccessDenied { get; set; }
+
+    /// <summary>
+    /// What kind of item this is: <c>mail</c>, <c>meetingRequest</c>, <c>meetingCancellation</c>,
+    /// <c>meetingResponse</c> or <c>other</c>.
+    ///
+    /// <para>
+    /// A meeting invitation is a <c>MeetingItem</c>, not a <c>MailItem</c>, and listings used to drop
+    /// it silently. It is now listed - but a caller must be able to tell it apart, because the two
+    /// afford completely different actions: replying to an invitation is not accepting it. See #32.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ItemType { get; set; }
 
     public bool Unread { get; set; }
     public bool IsDraft { get; set; }

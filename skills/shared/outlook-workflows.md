@@ -64,6 +64,20 @@ Do not try to build your own paging out of `receivedBefore`. Results are ordered
 descending (`sortedBy` and `sortDirection` say so explicitly), and the cursor already handles
 messages that share a received time; a hand-rolled date window silently drops them.
 
+## Not everything in a folder is a message
+
+Every entry in a listing carries `itemType`:
+
+- `mail` - an ordinary message
+- `meetingRequest` - an invitation. Replying to it is **not** accepting it; a reply is just mail back
+  to the organiser and leaves the invitation unanswered. Say so rather than implying you accepted.
+- `meetingCancellation` - the meeting is off
+- `meetingResponse` - somebody's answer to an invitation you sent
+- `other` - something this surface does not model
+
+`skippedItemCount` counts items that could not be summarised at all. If it is non-zero, the listing
+is not the whole folder - do not describe it as such.
+
 
 ## Reply to the message the user is looking at
 

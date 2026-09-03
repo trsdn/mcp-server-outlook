@@ -8,6 +8,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Store discovery, and default folders from a specific mailbox** (#38). New `folder list-stores`,
+  and `folder list-default` takes `storeId`.
+
+  Everything targeted the default delivery store implicitly. `NameSpace.GetDefaultFolder` always
+  reads that one store, so `folder list-default` reported a single mailbox's folders and said nothing
+  about the others existing - a caller with an archive or a second account was told, with
+  `success: true`, that its Inbox was the only Inbox. Verified on the developer's own profile: it has
+  two stores, and the Online Archive was unreachable through the tool.
+
+  `list-stores` reports `storeId`, `displayName`, `isDefaultStore`, `isDataFileStore`,
+  `exchangeStoreType`, `filePath`, `rootFolderPath`, and the delivering account's address where one
+  exists. Accounts are folded into the store list rather than exposed separately, so a caller never
+  has to correlate two lists by id to answer "which mailbox is this?".
+
+  Folder results now carry `storeId` and `storeName`, because on a multi-store profile a folder
+  listing that does not name its store is ambiguous and the caller has no way to notice.
+
+  An unknown `storeId` is **refused**, not quietly served from the default store. Returning real
+  folders and real item counts from a mailbox the caller did not ask for is the worst outcome
+  available here. A store that genuinely lacks a default role reports `available: false` with a
+  `note` saying so, rather than failing the call.
+
+### Fixed
+
+- **A folder path that was not a path** (#38). `GetFolderPath` returned whatever Outlook's
+  `FolderPath` gave it. For a folder that is not in a store's tree, that is the folder's **entry
+  id** - a long hex string that looks like a value, is accepted everywhere a path is, and resolves
+  to nothing.
+
+  This surfaced the moment store targeting made archives reachable. `Store.GetDefaultFolder` answers
+  for every default role whether or not the store has one: the developer's online archive contains
+  four folders, but reported all ten roles as available, nine of them with an entry id where the
+  path should be. A caller would have passed one straight back to `mail.list` and been told the
+  folder was empty.
+
+  A real Outlook folder path always begins with `\\`, so anything else is now reported as absent.
+  This is a general fix in the shared helper, so every result that carries a folder path benefits,
+  not just the new store paths.
+
+  Found by running the tool against a live mailbox. The first version of the new tests asserted "10
+  of 10 roles available" and **passed** - a check reporting success without having verified
+  anything, which is the failure mode this project keeps rediscovering. They now assert that an
+  available role's path round-trips through `resolve-path`.
+
 - **Full-text search via Outlook's content index** (#42). `mail.search` takes `searchMode`, and every
   search response now reports `searchEngine`.
 

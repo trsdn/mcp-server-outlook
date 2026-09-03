@@ -31,9 +31,12 @@ mail.list(folder: <inbox>, subjectContains: "invoice", hasAttachment: true)
 Dates are ISO 8601 (`2024-03-07` or `2024-03-07T14:30`). A bare date means local midnight. All the
 filters combine with AND.
 
-`query` is different: it is a free-text match over subject, sender and a preview of the body, and it
-is applied after the structured filters. Outlook cannot search message bodies server-side, so pair
-`query` with structured filters whenever you can, rather than relying on it alone in a large folder.
+`query` is different: it is a free-text match over subject, sender and the **full** body, applied
+after the structured filters. It is exhaustive rather than indexed, so it will not miss a term buried
+deep in a long message - but reaching the body means opening every candidate item, which is slow.
+`Restrict` cannot filter on body text at all, so pair `query` with structured filters whenever you
+can rather than relying on it alone in a large folder: the structured filters decide how many items
+have to be opened.
 
 
 ## Reply to the message the user is looking at

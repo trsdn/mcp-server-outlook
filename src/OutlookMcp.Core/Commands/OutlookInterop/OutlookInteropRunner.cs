@@ -304,17 +304,31 @@ internal static class OutlookInteropRunner
         return normalized.Trim('\\');
     }
 
-    internal static string NormalizeBodyPreview(string? body, int maxLength = 500)
+    /// <summary>
+    /// Normalizes a body's line endings and trims it, without shortening it.
+    /// <para>
+    /// Kept separate from <see cref="NormalizeBodyPreview"/> because the two have opposite purposes.
+    /// A preview is deliberately short: it is for a human or an LLM to read. Searching is the
+    /// opposite - shortening the text before matching it silently loses hits and reports them as
+    /// "no such mail", so search must see the whole body.
+    /// </para>
+    /// </summary>
+    internal static string NormalizeBodyText(string? body)
     {
         if (string.IsNullOrWhiteSpace(body))
         {
             return string.Empty;
         }
 
-        string normalized = body
+        return body
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')
             .Trim();
+    }
+
+    internal static string NormalizeBodyPreview(string? body, int maxLength = 500)
+    {
+        string normalized = NormalizeBodyText(body);
 
         if (normalized.Length <= maxLength)
         {

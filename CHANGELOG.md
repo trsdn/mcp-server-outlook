@@ -26,6 +26,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   An unrecognised `flagStatus` is refused before the item is touched, so nothing is half-applied.
 
+- **`flaggedOnly` filter on `mail list` / `mail search`** (#15, #27). Returns only messages with an
+  outstanding follow-up flag. Pushed into Outlook as a DASL `Restrict` clause on
+  `PR_FLAG_STATUS` — which has no `urn:schemas:httpmail:` equivalent and so is addressed by MAPI
+  proptag `0x10900003` — rather than hydrating the folder and filtering afterwards. Verified against
+  a live mailbox by comparing `scannedCount` with and without the filter, since a client-side
+  implementation would return identical results while doing all the work.
+
+  The clause is `= 2`, deliberately not `<> 0`. A completed flag is finished work, and returning it
+  under "flagged" would put items the user has already dealt with back on their to-do list. The same
+  narrowing is applied client-side after `Restrict`, because the DASL filter is over-inclusive by
+  design and a caller can reach that path with nothing pushed down. Meeting requests carry the same
+  flag and are filtered identically instead of being dropped for being a different item type, and
+  they now report `flagStatus` in listings so a returned item cannot claim to be unflagged.
+
+  `flaggedOnly` is part of the paging cursor's fingerprint, so a cursor minted under one filter is
+  not silently accepted under another.
+
 - **HTML message bodies** (#15). `create-draft`, `reply`, `reply-all`, `forward` and `set-body` take
   `bodyFormat`, which is `plain` (the default, and what every existing caller keeps getting) or
   `html`. Composing a bulleted list, a link or a table no longer means writing tags and watching them

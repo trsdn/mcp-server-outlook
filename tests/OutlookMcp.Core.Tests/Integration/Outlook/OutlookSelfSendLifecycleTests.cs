@@ -224,6 +224,18 @@ public class OutlookSelfSendLifecycleTests(ITestOutputHelper output)
             Assert.Equal("Review", afterFlag.FlagRequest);
             Assert.Equal(due, afterFlag.FlagDueDate!.Value.Date);
 
+            // The whole point of the filter is to answer "what is still on my plate", so it is
+            // checked against a genuinely received message rather than only against the draft-based
+            // tests, which cannot reach the completed state at all.
+            var flaggedList = commands.List(
+                folder: "inbox",
+                maxCount: 100,
+                subjectContains: token,
+                flaggedOnly: true);
+
+            Assert.True(flaggedList.Success, flaggedList.ErrorMessage);
+            Assert.Contains(flaggedList.Messages, m => m.EntryId == deliveredEntryId);
+
             // Completing is the path a draft cannot reach at all.
             var completed = commands.SetFlag(
                 entryId: deliveredEntryId,
@@ -238,6 +250,17 @@ public class OutlookSelfSendLifecycleTests(ITestOutputHelper output)
             // Completed is not unflagged. Collapsing the two would report handled work as work that
             // was never raised.
             Assert.Equal("complete", afterComplete.FlagStatus);
+
+            // A completed flag is finished work. Leaving it in the flagged listing would put items
+            // the user has already dealt with back on their to-do list.
+            var afterCompleteList = commands.List(
+                folder: "inbox",
+                maxCount: 100,
+                subjectContains: token,
+                flaggedOnly: true);
+
+            Assert.True(afterCompleteList.Success, afterCompleteList.ErrorMessage);
+            Assert.DoesNotContain(afterCompleteList.Messages, m => m.EntryId == deliveredEntryId);
 
             var cleared = commands.SetFlag(
                 entryId: deliveredEntryId,

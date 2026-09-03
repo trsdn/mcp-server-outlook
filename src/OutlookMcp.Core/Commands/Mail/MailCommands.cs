@@ -1428,6 +1428,76 @@ public class MailCommands : IMailCommands
             });
     }
 
+    /// <summary>
+    /// Enumerates the mailbox's master category list.
+    ///
+    /// <para>
+    /// This exists because <c>set-categories</c> writes a string Outlook does not validate. A name
+    /// that is not in this list is accepted and reported as a success, and only later turns out to
+    /// be uncolourable and unfilterable. Discovery is what lets a caller write a real name instead
+    /// of guessing one.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailCategoryListResult ListCategories()
+    {
+        return OutlookInteropRunner.Execute(
+            "OutlookMailListCategories",
+            (application, session) =>
+            {
+                Outlook.Categories? categories = null;
+
+                try
+                {
+                    var result = new MailCategoryListResult { Success = true };
+
+                    categories = session.Categories;
+                    int count = categories.Count;
+
+                    for (int index = 1; index <= count; index++)
+                    {
+                        Outlook.Category? category = null;
+
+                        try
+                        {
+                            category = categories[index];
+
+                            string? name = SafeGet(() => category.Name);
+                            if (string.IsNullOrWhiteSpace(name))
+                            {
+                                // A nameless category cannot be passed to set-categories, so
+                                // listing it would advertise something the caller cannot use.
+                                continue;
+                            }
+
+                            result.Categories.Add(new MailCategoryInfo
+                            {
+                                Name = name,
+                                Color = MapCategoryColor(SafeGetInt(() => (int)category.Color)),
+                                CategoryId = NullIfBlank(SafeGet(() => category.CategoryID)),
+                                ShortcutKey = MapCategoryShortcut(SafeGetInt(() => (int)category.ShortcutKey))
+                            });
+                        }
+                        finally
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref category);
+                        }
+                    }
+
+                    return result;
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref categories);
+                }
+            },
+            ex => new MailCategoryListResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to read the Outlook category list: {ex.Message}"
+            });
+    }
+
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailMutationResult SetCategories(
         string? categories = null,
@@ -2823,6 +2893,46 @@ public class MailCommands : IMailCommands
 
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// Turns an <c>OlCategoryColor</c> ordinal into the colour name a user would recognise.
+    ///
+    /// <para>
+    /// Derived from the enum rather than a hand-written table: Outlook defines 26 colours, and a
+    /// table would silently report the wrong colour for any value it had drifted out of step with.
+    /// An unrecognised ordinal is reported as <c>none</c> rather than invented.
+    /// </para>
+    /// </summary>
+    private static string MapCategoryColor(int? color) =>
+        StripEnumPrefix(
+            color.HasValue ? Enum.GetName(typeof(Outlook.OlCategoryColor), color.Value) : null,
+            "olCategoryColor") ?? "none";
+
+    /// <summary>
+    /// The shortcut key assigned in Outlook, or null when there is none. Null rather than "none" so
+    /// the field disappears from the payload entirely for the overwhelmingly common case.
+    /// </summary>
+    private static string? MapCategoryShortcut(int? shortcutKey)
+    {
+        string? name = StripEnumPrefix(
+            shortcutKey.HasValue ? Enum.GetName(typeof(Outlook.OlCategoryShortcutKey), shortcutKey.Value) : null,
+            "olCategoryShortcutKey");
+
+        return string.Equals(name, "none", StringComparison.Ordinal) ? null : name;
+    }
+
+    private static string? StripEnumPrefix(string? enumName, string prefix)
+    {
+        if (string.IsNullOrEmpty(enumName) || !enumName.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        string trimmed = enumName[prefix.Length..];
+        return trimmed.Length == 0
+            ? null
+            : char.ToLowerInvariant(trimmed[0]) + trimmed[1..];
+    }
 
     /// <summary>
     /// Outlook does not leave task dates null when there is no due date - it stores a far-future

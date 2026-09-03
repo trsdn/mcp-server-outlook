@@ -351,6 +351,48 @@ public class OutlookStoreListResult : ResultBase
     public List<OutlookStoreInfo> Stores { get; set; } = [];
 }
 
+/// <summary>
+/// The mailbox's master category list. Outlook does not validate the string
+/// <c>mail set-categories</c> writes, so a category that is not in this list is accepted, reported
+/// as a success, and then cannot be filtered or coloured by. This is how a caller finds out which
+/// names are real before writing one.
+/// </summary>
+public class MailCategoryListResult : ResultBase
+{
+    public List<MailCategoryInfo> Categories { get; set; } = [];
+}
+
+public class MailCategoryInfo
+{
+    /// <summary>
+    /// The value to pass to <c>set-categories</c>. Outlook keeps these unique within the list, so
+    /// the name - not the id - is how a category is addressed.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The colour Outlook shows for this category, as a name such as <c>yellow</c> or
+    /// <c>darkTeal</c>, never as the raw <c>OlCategoryColor</c> ordinal. An ordinal is not something
+    /// a caller can show a user or reason about, and <c>none</c> is a real value meaning the
+    /// category was created without a colour.
+    /// </summary>
+    public string Color { get; set; } = "none";
+
+    /// <summary>
+    /// Outlook's stable identifier for the category. Present for completeness; nothing in this
+    /// surface takes it, because <c>set-categories</c> works in names.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CategoryId { get; set; }
+
+    /// <summary>
+    /// The keyboard shortcut assigned in Outlook, when one is. Null for the common case of no
+    /// shortcut rather than a zero that would read as a real key.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShortcutKey { get; set; }
+}
+
 public class OutlookStoreInfo
 {
     /// <summary>

@@ -51,6 +51,10 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "in the mailbox's list is accepted and reported as a success, then turns out to be uncolourable and "
     + "unfilterable, so discover names rather than guessing them. Colours come back as names such as "
     + "'yellow', never as raw enum numbers. "
+    + "Use list-rules to see the mailbox's inbox rules. Rules move, delete and forward mail before this "
+    + "tool ever sees it, so when a folder looks empty or a sender's mail is missing, check the rules "
+    + "before concluding nothing arrived. Pass includeDetail to get each rule's conditions, actions and "
+    + "move-to destination; it is off by default because gathering it is roughly forty times the work. "
     + "list and search also accept flaggedOnly, which Outlook evaluates over the folder rather than the "
     + "server scanning it, so 'show me my outstanding follow-ups' is one cheap call. It returns only "
     + "outstanding flags: a completed flag is finished work and is excluded. "
@@ -212,6 +216,9 @@ public interface IMailCommands
 
     [ServiceAction("list-categories")]
     MailCategoryListResult ListCategories();
+
+    [ServiceAction("list-rules")]
+    MailRuleListResult ListRules(bool includeDetail = false);
 
     [ServiceAction("set-subject")]
     MailMutationResult SetSubject(

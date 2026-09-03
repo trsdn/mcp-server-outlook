@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mail.search` no longer silently misses terms buried in long message bodies** (#42). The
+  free-text `query` matcher fetched the whole body through COM and then discarded everything past
+  1200 characters before searching it. A term further in was invisible, and the caller was not told
+  the body had been truncated - they were told there was no such mail, which is the one answer a
+  search must never give wrongly.
+
+  The truncation also bought nothing. The expensive part is the `mail.Body` COM call, and by the
+  time the string was cut that had already happened, so matching the full body costs the same. The
+  1200 character limit was pure downside.
+
+  Body matching is now exhaustive over the whole message. Note the trade-off this makes explicit
+  rather than hidden: reaching the body means opening every candidate item, so `query` is slow in a
+  large folder. Pair it with the structured filters added in #27 - those run inside Outlook and
+  decide how many items have to be opened at all. Indexed body search via `AdvancedSearch` remains
+  open under #42.
+
 ### Added
 
 - **`mail.list` and `mail.search` accept structured filters that Outlook evaluates server-side**

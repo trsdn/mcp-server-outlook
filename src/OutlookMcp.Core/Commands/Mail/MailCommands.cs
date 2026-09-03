@@ -1651,6 +1651,15 @@ public class MailCommands : IMailCommands
         return true;
     }
 
+    /// <summary>
+    /// Client-side free-text match, used for the fields <c>Restrict</c> cannot filter on.
+    /// <para>
+    /// The body is matched in full. It used to be truncated to 1200 characters first, which meant a
+    /// term further into a long message was silently invisible and the caller was told there was no
+    /// such mail (#42). The truncation also bought nothing: the expensive part is the
+    /// <c>mail.Body</c> COM call, and by the time the string was cut that had already happened.
+    /// </para>
+    /// </summary>
     private static bool MatchesQuery(Outlook.MailItem mail, string? query)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -1664,7 +1673,7 @@ public class MailCommands : IMailCommands
             || ContainsIgnoreCase(SafeGet(() => mail.SenderEmailAddress), searchText)
             || ContainsIgnoreCase(SafeGet(() => mail.To), searchText)
             || ContainsIgnoreCase(SafeGet(() => mail.CC), searchText)
-            || ContainsIgnoreCase(OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => mail.Body), maxLength: 1200), searchText);
+            || ContainsIgnoreCase(OutlookInteropRunner.NormalizeBodyText(SafeGet(() => mail.Body)), searchText);
     }
 
     private static bool ContainsIgnoreCase(string? value, string searchText)

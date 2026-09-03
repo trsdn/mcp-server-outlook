@@ -1044,4 +1044,95 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
             _ = Marshal.FinalReleaseComObject(value);
         }
     }
+
+    /// <summary>
+    /// A term that appears only deep inside a long body must still be found.
+    /// <para>
+    /// This is the whole of issue #42 reduced to one case. <c>MatchesQuery</c> hydrates the entire
+    /// body through COM and then throws away everything past 1200 characters before searching it, so
+    /// a term further in is invisible. The caller is not told the body was truncated; they are told
+    /// there is no such mail, which is the one answer a search must never give wrongly.
+    /// </para>
+    /// <para>
+    /// The truncation buys nothing. The expensive part is the <c>mail.Body</c> COM call, and that
+    /// already happened by the time the string is cut.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void MailSearch_WithTermBeyondThePreviewWindow_StillFindsIt()
+    {
+        EnsureOutlookAvailable();
+
+        string needle = $"needle{Guid.NewGuid():N}";
+        var draft = CreateDraftWithBuriedTerm(needle, out string subject);
+
+        try
+        {
+            var commands = new MailCommands();
+            var found = commands.Search(query: needle, folder: "drafts", maxCount: 100);
+
+            Assert.True(found.Success, found.ErrorMessage);
+            Assert.Contains(found.Messages, m => m.Subject == subject);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    /// <summary>
+    /// The same search restricted to the first part of the body must still work, so the fix is not
+    /// just "search more" but "search all of it". Guards against a regression that trims from the
+    /// wrong end.
+    /// </summary>
+    [SkippableFact]
+    public void MailSearch_WithTermAtTheStartOfALongBody_StillFindsIt()
+    {
+        EnsureOutlookAvailable();
+
+        string needle = $"needle{Guid.NewGuid():N}";
+        var commands = new MailCommands();
+        string subject = $"Copilot Outlook smoke {Guid.NewGuid():N}";
+
+        var draft = commands.CreateMailDraft(
+            subject: subject,
+            body: needle + " " + new string('x', 4000),
+            display: false);
+
+        Assert.True(draft.Success, draft.ErrorMessage);
+
+        try
+        {
+            var found = commands.Search(query: needle, folder: "drafts", maxCount: 100);
+
+            Assert.True(found.Success, found.ErrorMessage);
+            Assert.Contains(found.Messages, m => m.Subject == subject);
+        }
+        finally
+        {
+            DeleteDraft(draft.EntryId!, draft.StoreId);
+        }
+    }
+
+    /// <summary>
+    /// Creates a draft whose body is long enough that <paramref name="needle"/> sits well past the
+    /// 1200 character window the old client-side matcher looked at.
+    /// </summary>
+    private static MailDraftResult CreateDraftWithBuriedTerm(string needle, out string subject)
+    {
+        subject = $"Copilot Outlook smoke {Guid.NewGuid():N}";
+
+        // Filler first, then the needle at roughly character 3000, then more filler so the term is
+        // not near either edge.
+        string body = new string('a', 3000) + " " + needle + " " + new string('b', 1000);
+
+        var commands = new MailCommands();
+        var result = commands.CreateMailDraft(subject: subject, body: body, display: false);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.Saved);
+        Assert.False(string.IsNullOrWhiteSpace(result.EntryId));
+
+        return result;
+    }
 }

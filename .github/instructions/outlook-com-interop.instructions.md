@@ -297,6 +297,21 @@ Before committing a change under `src/OutlookMcp.Core/`:
 - [ ] No COM property fetched twice in one operation where the result could be passed down instead
 - [ ] No `catch` returning a failure result inside `action`
 - [ ] `Success = true` only where `ErrorMessage` is empty
-- [ ] `check-com-leaks.ps1` reports 0 leaks
 - [ ] `check-success-flag.ps1` passes
 - [ ] Any `dynamic` has a comment explaining why
+
+`check-com-leaks.ps1` is deliberately **not** on that list, even though the pre-commit hook runs
+it. A green result from it is not evidence:
+
+- It only classifies a file that declares an explicitly typed COM local (`Outlook.MailItem mail =`).
+  Anything acquiring COM through `var` is invisible to it. On the current tree it reads 11 of 74
+  source files.
+- For the files it does read, the verdict is two file-wide booleans with no pairing between
+  acquisition and release, so a file that acquires ten objects and releases one still prints
+  `Proper COM cleanup`.
+- Its release pattern matches `ReleaseComObject` and `ReleaseSharedComObject` identically, so it
+  cannot distinguish the correct call from the one that crashes the process - it is structurally
+  incapable of enforcing the two release rules above.
+
+It catches exactly one thing: a file that touches COM and contains no release call anywhere. Treat
+it as that narrow smoke test and rely on the checklist for the rest. See #136.

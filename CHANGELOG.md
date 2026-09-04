@@ -48,6 +48,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   protected, and a denial has to reach the runner's classifier so the caller is told the guard
   blocked it - not told, falsely, that their recipients failed a policy check (Rule 1b).
 
+- **A testing rule for red tests over a sending surface**
+  (`testing-strategy.instructions.md`). Rule 29 requires watching the test fail first, and on a
+  *refusal* the red run performs the very thing the feature exists to prevent - because the block is
+  not there yet. That is inherent to TDD here, not carelessness, and it happened while building this
+  feature: the red run of the recipient-policy test sent a message. It went to a reserved `.invalid`
+  address so it could never be delivered, but it still reached Sent Items and had to be cleared by
+  hand. The rule now says to use a reserved TLD, to sweep Sent Items and Outbox afterwards (a
+  `finally` that deletes only the draft will not catch it - the draft is gone and what remains is a
+  sent item with a new entry ID), and to warn in the test's own doc comment. It applies equally to
+  `mail.reply-all`, `mail.forward` and `calendar.create-appointment` with `sendInvitation`.
+
 - **Confirmation gates on the irreversible destructive actions** (#9): `folder delete`,
   `attachment remove` and `calendar delete-appointment` with an `occurrenceDate` now take a
   `confirm` parameter and are refused without `confirm=true`. So is any item delete whose target is

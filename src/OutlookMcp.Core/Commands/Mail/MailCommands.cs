@@ -1016,6 +1016,39 @@ public partial class MailCommands : IMailCommands
                         string? resolvedEntryId = SafeGet(() => mail.EntryID);
                         string? resolvedStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
 
+                        // The opt-in recipient allow-list. Read here rather than before Execute
+                        // because it needs the resolved item's recipients, and evaluated before
+                        // Send() so a refusal costs nothing. Disabled unless configured, in which
+                        // case CollectDisallowedRecipients returns nothing and this is a no-op.
+                        // See RecipientPolicy and #9.
+                        var policy = RecipientPolicy.FromEnvironment();
+                        if (policy.IsEnabled)
+                        {
+                            Outlook.Recipients? recipients = null;
+                            try
+                            {
+                                recipients = mail.Recipients;
+                                var rejected = policy.CollectDisallowed(recipients);
+                                if (rejected.Count > 0)
+                                {
+                                    return new MailSendResult
+                                    {
+                                        Success = false,
+                                        Sent = false,
+                                        EntryId = resolvedEntryId,
+                                        StoreId = resolvedStoreId,
+                                        Subject = subject,
+                                        To = recipientTo,
+                                        ErrorMessage = policy.BuildRefusal(rejected)
+                                    };
+                                }
+                            }
+                            finally
+                            {
+                                OutlookInteropRunner.ReleaseComObject(ref recipients);
+                            }
+                        }
+
                         mail.Send();
 
                         return new MailSendResult
@@ -1065,7 +1098,14 @@ public partial class MailCommands : IMailCommands
             };
         }
 
-        if (!string.IsNullOrEmpty(operationId))
+        // Only outcomes a retry could actually duplicate are cached. The cache exists to stop a
+        // second attempt re-sending a message the first one may already have sent (#29); a result
+        // that definitively did not send has nothing to protect and caching it is actively harmful.
+        // The recipient-policy refusal is the case that exposed this: the refusal text tells the
+        // caller to fix the recipients or widen OUTLOOKMCP_ALLOWED_RECIPIENTS and try again, and a
+        // cached refusal would answer that retry from the stale result - so the fix would appear
+        // not to have worked. The same reasoning covers "already sent" and "could not resolve".
+        if (!string.IsNullOrEmpty(operationId) && (result.Sent || result.Indeterminate))
         {
             SendResultCache.TryAdd(operationId, result);
         }

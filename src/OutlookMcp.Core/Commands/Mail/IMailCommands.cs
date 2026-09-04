@@ -88,7 +88,14 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "whatever the user happens to have highlighted in Outlook. Get the entry id from read-active, list or "
     + "search first, or pass useActiveMail: true deliberately when the user's current selection really is "
     + "what you mean. read, get-conversation, export, reply, reply-all and forward still default to the "
-    + "active item, because they only read the mailbox or produce a draft that nothing sends on its own.")]
+    + "active item, because they only read the mailbox or produce a draft that nothing sends on its own. "
+    + "RECIPIENT POLICY: if the server is configured with OUTLOOKMCP_ALLOWED_RECIPIENTS, send additionally "
+    + "refuses any recipient outside that allow-list, naming what was refused and what is permitted. "
+    + "It is off unless the user set it, and it covers calendar create-appointment with sendInvitation too. "
+    + "When it refuses, report that - do not retry with a different address, split the recipients across "
+    + "several sends, or invite someone to a meeting instead, to get round it. A refusal is safe to retry "
+    + "with the same operationId once the recipients or the allow-list have changed: nothing was sent, so "
+    + "nothing was cached.")]
 public interface IMailCommands
 {
     [ServiceAction("read-active", Destructive = false)]
@@ -187,6 +194,21 @@ public interface IMailCommands
         bool display = false,
         string bodyFormat = "plain");
 
+    /// <summary>
+    /// Sends a saved draft.
+    ///
+    /// <para>
+    /// <b>Requires <paramref name="confirm"/>.</b> A sent message cannot be recalled and its effect
+    /// leaves the mailbox entirely.
+    /// </para>
+    ///
+    /// <para>
+    /// If the server is configured with <c>OUTLOOKMCP_ALLOWED_RECIPIENTS</c>, the draft's recipients
+    /// are checked against that allow-list first and the send is refused if any fall outside it. The
+    /// policy is off unless configured. See <see cref="RecipientPolicy"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="operationId">An optional caller-supplied id. A retry carrying the same id after a timeout is answered from the first attempt's cached result instead of risking a duplicate send.</param>
     [ServiceAction("send", Destructive = true)]
     MailSendResult Send(
         string? entryId = null,

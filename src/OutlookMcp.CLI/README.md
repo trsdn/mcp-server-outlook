@@ -46,6 +46,26 @@ where the MCP server pays for richer schemas up front.
   `outlookcli application get-status` first; if it reports `NewOutlookOnly`, the new Outlook for
   Windows is the only client present and cannot be automated.
 
+## Optional: restrict who `mail send` may write to
+
+Set `OUTLOOKMCP_ALLOWED_RECIPIENTS` to a semicolon- or comma-separated allow-list of permitted
+recipient domains and addresses:
+
+```powershell
+$env:OUTLOOKMCP_ALLOWED_RECIPIENTS = "@contoso.example; alice@fabrikam.example"
+outlookcli mail send --entry-id $id --confirm true
+```
+
+`mail send` then refuses any recipient outside the list before Outlook is asked to send anything. A
+bare domain and an `@`-prefixed domain mean the same; an entry with a local part is an exact
+address. Matching is case-insensitive, a domain entry does not admit its subdomains, and an address
+that cannot be read as SMTP is refused rather than assumed safe.
+
+**The variable is unset by default and the feature is off.** Set it before the daemon starts - it is
+read per send, but the daemon inherits the environment of whichever `outlookcli` invocation
+launched it. The same variable configures the MCP server, via the `env` block of its client
+definition.
+
 ## Exit codes
 
 - `0` - the command ran and the operation succeeded

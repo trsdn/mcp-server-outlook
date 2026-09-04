@@ -123,6 +123,36 @@ content instead of replacing it. Every test passed, because every test only asse
 
 ---
 
+## A red test over `send` actually sends
+
+Rule 29 requires you to watch the test fail before you implement. On a *refusal* — "this send must
+be blocked" — the red run performs the very thing the feature exists to prevent, because the block
+is not there yet. That is inherent to TDD on a sending surface, not carelessness, and it will
+happen again on `mail.send`, `mail.reply-all`, `mail.forward` and
+`calendar.create-appointment` with `sendInvitation`.
+
+**Address it so it cannot reach a person.** Use a recipient in a reserved TLD — `.invalid`
+(RFC 2606) — or a domain you control and monitor. Never a real colleague, never a distribution
+list, and never an address that merely looks unroutable.
+
+```csharp
+// The red run of this test WILL send. .invalid can never be delivered.
+recipientTo: "blocked@definitely-not-allowed.invalid"
+```
+
+**Then clean up.** The message reaches Sent Items even when delivery fails, and a `finally` that
+only deletes the *draft* will not catch it — the draft is gone, and what is left is a sent item with
+a new entry ID. Check Sent Items and Outbox after any red run of a send test.
+
+**Say so in the test's own doc comment**, so the next person running it against a broken build is
+warned before they run it rather than after.
+
+This is worth the ceremony because the alternative is worse: softening the test so it does not send
+would make it a test that cannot fail, which is the one thing
+[Assertion discipline](#assertion-discipline) forbids.
+
+---
+
 ## Assertion discipline
 
 **Binary assertions only.** Never write an assertion that accepts either outcome:
@@ -150,6 +180,7 @@ green.
 | "Accept both" assertions | Binary assertions only |
 | Mocking `Outlook.Application` or `NameSpace` | See ADR-001 - mocked COM proves nothing |
 | Mutating the user's real mailbox in a test | Operate on drafts you created, and clean up |
+| A red run of a "must be refused" send test actually sending | Reserved `.invalid` recipient, and sweep Sent Items afterwards |
 | Missing `Feature` trait | Add one from the list above |
 | Leaving an integration test undeclared | Mark `[Trait("Category", "Integration")]` |
 

@@ -285,6 +285,11 @@ before telling a user something went wrong.
 5. mail.send(entryId: <draft>, confirm: true)
 ```
 
+If `OUTLOOKMCP_ALLOWED_RECIPIENTS` is set on the server, step 5 additionally refuses any recipient
+outside that list, naming what was refused and what is permitted. The setting is off unless the
+user configured it. When you hit it, report the refusal - do not retry with a different address or
+split the recipients across several sends to get round it.
+
 ## Formatted mail, and when not to use it
 
 `create-draft`, `reply`, `reply-all`, `forward` and `set-body` all take `bodyFormat`, which is

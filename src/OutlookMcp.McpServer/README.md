@@ -45,6 +45,33 @@ Have the assistant call `application.get-status` first to confirm the environmen
 See [`examples/mcp-configs/`](../../examples/mcp-configs/) for Claude Desktop, VS Code, Cursor,
 Cline, and Windsurf snippets, and [`mcpb/`](../../mcpb/) for the Claude Desktop bundle.
 
+### Optional: restrict who `mail.send` may write to
+
+Set `OUTLOOKMCP_ALLOWED_RECIPIENTS` in the server's `env` block to a semicolon- or comma-separated
+allow-list of permitted recipient domains and addresses:
+
+```json
+{
+  "mcpServers": {
+    "outlook": {
+      "command": "OutlookMcp.McpServer",
+      "env": {
+        "OUTLOOKMCP_ALLOWED_RECIPIENTS": "@contoso.example; alice@fabrikam.example"
+      }
+    }
+  }
+}
+```
+
+`mail.send` then refuses any recipient outside the list before Outlook is asked to send anything.
+A bare domain and an `@`-prefixed domain mean the same; an entry with a local part is an exact
+address. Matching is case-insensitive, a domain entry does not admit its subdomains, and an address
+that cannot be read as SMTP is refused rather than assumed safe.
+
+**The variable is unset by default and the feature is off**, so send behaves exactly as it always
+has unless you configure it. Because it is read from the environment, the same setting works for
+the CLI daemon - export it in the shell that starts `outlookcli`.
+
 ## Naming note
 
 Project and assembly names are `OutlookMcp.*`, the hand-written base class is `OutlookToolsBase`

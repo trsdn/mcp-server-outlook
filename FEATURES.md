@@ -71,6 +71,21 @@ draft that nothing sends on its own.
 The alternative is a confused deputy: the caller chooses the verb and the human's current selection
 silently chooses the object.
 
+**An optional recipient allow-list constrains `send` and meeting invitations** (#9). Set
+`OUTLOOKMCP_ALLOWED_RECIPIENTS` to a semicolon- or comma-separated list of permitted domains
+(`contoso.example` or `@contoso.example`) and complete addresses (`alice@contoso.example`), and
+`mail.send` - together with `calendar.create-appointment` when `sendInvitation` is true - refuses
+anything outside it before Outlook is asked to send. Those are the two paths that put a message
+addressed to caller-chosen recipients outside the mailbox; guarding one and not the other would be
+worse than guarding neither. Unset - the default - and both behave exactly as they did before the
+feature existed.
+
+It is configured through the environment because that is the one mechanism both entry points share:
+an MCP client sets `env` on the server definition, and the CLI daemon inherits the shell's. When
+enabled it **fails closed** - an address that cannot be read as SMTP is refused rather than assumed
+safe - which is the opposite of how the Deleted Items check behaves, and deliberately so: this is a
+control the user opted into.
+
 **`export` writes Unicode `.msg`, never the ANSI variant.** Outlook's `olMSG` silently replaces any
 character outside the machine's code page with `?` and reports success, so `msg` always means
 `olMSGUnicode` here. `filePath` must be absolute: Outlook accepts a relative path and resolves it

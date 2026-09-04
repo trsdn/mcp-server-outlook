@@ -8,6 +8,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **An opt-in recipient allow-list for `mail send`** (#9). Set
+  `OUTLOOKMCP_ALLOWED_RECIPIENTS` to a semicolon- or comma-separated list of permitted recipient
+  domains (`contoso.example` or `@contoso.example`) and complete addresses
+  (`alice@contoso.example`), and `send` refuses anything outside it before Outlook is asked to send
+  anything. **Unset - the default - and behaviour is exactly as before.** This was the last
+  unchecked acceptance criterion on #9, and it was specified as opt-in from the start.
+
+  Three decisions worth stating rather than leaving to be discovered:
+
+  - **It covers both outbound paths.** `mail send`, and `calendar create-appointment` with
+    `sendInvitation`. Those are the only two places this surface mails caller-chosen addresses, and
+    an allow-list guarding one of them would be worse than none: the user would believe nothing
+    could reach an unlisted address while a second route stayed open. A refused invitation still
+    saves the appointment to the user's own calendar, and says so, so a caller does not create it
+    twice.
+
+  - **Configured through the environment, not a config file.** It is the one mechanism the two
+    entry points genuinely share: an MCP client sets `env` on the server definition, and the CLI
+    daemon inherits the shell's environment. Neither has a configuration file the other reads, and
+    inventing one would have put a security setting somewhere only half the product could see it.
+
+  - **It fails closed.** With a policy configured, an address that cannot be read as SMTP - empty,
+    malformed, or an unresolved Exchange X500 path - is refused rather than assumed safe. That is
+    the opposite posture from the Deleted Items check added alongside it, and deliberately so: this
+    is a control the user opted into, and waving through the addresses it could not read would make
+    it worthless in precisely the cases it exists for.
+
+  - **Internal Exchange recipients are resolved to SMTP first.** `Recipient.Address` is an X500
+    path (`/o=ExchangeLabs/...`) for anyone inside the organisation, so a naive domain match would
+    have refused every colleague. The address is taken from
+    `AddressEntry.GetExchangeUser().PrimarySmtpAddress` when `Address` is not SMTP-shaped.
+
+  A domain entry matches that domain and nothing else: `@contoso.example` admits neither
+  `evilcontoso.example` nor the subdomain `mail.contoso.example`. Name a subdomain explicitly if it
+  is wanted.
+
+  Nothing in the recipient walk catches: `Recipients` and `AddressEntry` are Object Model Guard
+  protected, and a denial has to reach the runner's classifier so the caller is told the guard
+  blocked it - not told, falsely, that their recipients failed a policy check (Rule 1b).
+
+- **A testing rule for red tests over a sending surface**
+  (`testing-strategy.instructions.md`). Rule 29 requires watching the test fail first, and on a
+  *refusal* the red run performs the very thing the feature exists to prevent - because the block is
+  not there yet. That is inherent to TDD here, not carelessness, and it happened while building this
+  feature: the red run of the recipient-policy test sent a message. It went to a reserved `.invalid`
+  address so it could never be delivered, but it still reached Sent Items and had to be cleared by
+  hand. The rule now says to use a reserved TLD, to sweep Sent Items and Outbox afterwards (a
+  `finally` that deletes only the draft will not catch it - the draft is gone and what remains is a
+  sent item with a new entry ID), and to warn in the test's own doc comment. It applies equally to
+  `mail.reply-all`, `mail.forward` and `calendar.create-appointment` with `sendInvitation`.
+
 - **Confirmation gates on the irreversible destructive actions** (#9): `folder delete`,
   `attachment remove` and `calendar delete-appointment` with an `occurrenceDate` now take a
   `confirm` parameter and are refused without `confirm=true`. So is any item delete whose target is
@@ -198,6 +249,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sent - not the Drafts folder.
 
 ### Fixed
+
+- **A failed `mail send` is no longer replayed from the idempotency cache** (#9, #29). The
+  `operationId` cache existed to stop a retry duplicating a message the first attempt may already
+  have sent. It cached *every* outcome, including ones that definitively sent nothing - so a send
+  refused by the new recipient policy, whose own error text invites a retry once the recipients or
+  the allow-list are fixed, answered that retry from the stale refusal and made the fix look
+  ineffective. The same applied to "already sent" and "could not resolve". Only results where
+  `sent` or `indeterminate` is true are cached now; those are the only ones a retry could duplicate.
 
 - **The Deleted Items walk no longer final-releases the shared `NameSpace`** (#9, #19). The walk
   added above stops at a store root, whose `Parent` is the `NameSpace` rather than a folder - and

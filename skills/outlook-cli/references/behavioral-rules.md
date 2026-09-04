@@ -1,7 +1,7 @@
 # Behavioral Rules for Outlook Operations
 
 These rules apply to every Outlook operation, through both the MCP server and the `outlookcli` CLI.
-The two surfaces expose the same 5 tools and the same 30 actions with the same parameters, so this
+The two surfaces expose the same 10 tools and the same 62 actions with the same parameters, so this
 guidance is identical for both.
 
 ## Rule 1: Check Outlook availability before anything else

@@ -177,8 +177,13 @@ public class McpToolGenerator : IIncrementalGenerator
         sb.Append($"    public static string {methodName}(");
         sb.AppendLine();
 
-        // Action parameter (nullable to prevent SDK-level exception on missing param)
-        sb.AppendLine($"        [Description(\"The action to perform\"), DefaultValue(null)] {enumTypeName}? action,");
+        // Action parameter (nullable to prevent SDK-level exception on missing param).
+        // The trailing comma is only emitted when at least one more parameter (an exposed parameter
+        // or the DI-injected progress) follows; otherwise a tool whose actions take no parameters
+        // would produce a dangling comma before the closing parenthesis and fail to compile.
+        bool actionFollowedByMore = mcpParams.Count > 0 || hasProgress;
+        sb.Append($"        [Description(\"The action to perform\"), DefaultValue(null)] {enumTypeName}? action");
+        sb.AppendLine(actionFollowedByMore ? "," : string.Empty);
 
 
         // Exposed parameters with [Description] and [DefaultValue]

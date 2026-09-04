@@ -8,6 +8,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Send/Receive (sync) operations** (#15): a new `sync` tool exposes `list-groups` and
+  `send-receive`, backed by `Namespace.SyncObjects`, so a caller can force a synchronisation before a
+  critical read or flush a queued message from the Outbox. `Namespace.SyncObjects` was entirely
+  unused before this.
+
+  `send-receive` is deliberately **asynchronous and honest about it**. `SyncObject.Start()` returns
+  immediately and Outlook completes the synchronisation on a background thread; the action therefore
+  reports that a sync was *started*, never that the mailbox is now current, and the result's `note`
+  says so. It cannot block for completion: the only thread it could wait on is the single
+  process-wide STA dispatcher, and blocking that would wedge every other Outlook operation in the
+  process (see ADR-002). In pure Online (non-cached) Exchange mode there are usually no Send/Receive
+  groups and nothing to synchronise; that is reported through `count`/`started`/`note` rather than
+  silently doing nothing. `send-receive` carries the `Destructive` annotation because it can flush
+  the Outbox.
+
+- **Signature read operations** (#15): a new `signature` tool exposes `list` and `read`. Outlook does
+  not expose signatures through its COM object model — they are files under
+  `%APPDATA%\Microsoft\Signatures` — so these two actions read that folder directly and are the one
+  filesystem-backed, non-COM corner of the surface. They are strictly read-only: they never create,
+  edit, delete, or apply a signature, and cannot set which signature Outlook uses for new mail (a
+  per-account setting the object model does not expose). Their intended use is to fetch a signature's
+  text so a caller can append it to a draft. If the folder does not exist, `list` succeeds with an
+  empty list and `folderExists=false` rather than failing.
+
+- **Out-of-office status (read-only)** (#15): a new `oof` tool exposes `get-status`, reporting whether
+  the mailbox's automatic replies are currently on or off. Classic Outlook does not expose OOF as a
+  first-class object-model property, but the on/off **state** is reachable as the store property
+  `PR_OOF_STATE` (`PidTagOutOfOfficeState`, DASL tag
+  `http://schemas.microsoft.com/mapi/proptag/0x661D000B`, a boolean) read through
+  `Store.PropertyAccessor`. This was verified against a live `olPrimaryExchangeMailbox`, where the tag
+  returns a real `System.Boolean`. On a non-Exchange (POP/IMAP) store the feature does not apply and
+  the action returns `isSupported=false` rather than failing; in Cached Exchange mode the flag can lag
+  the server until the next Send/Receive. The action is strictly read-only and partial — see the
+  narrowed decline below for what still needs EWS or Graph.
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the
@@ -97,7 +132,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   saved item. Note that such an item's parent folder reports as the Outbox - where it *would* be
   sent - not the Drafts folder.
 
+### Not done (declined with evidence)
+
+- **Out-of-office write, message bodies, and schedule** (#15): the on/off status is now readable (see
+  `oof get-status` above), but the rest of out-of-office is declined. `PR_OOF_STATE` carries only the
+  boolean on/off bit; it does not carry the automatic-reply message text, the separate internal and
+  external replies, or the scheduled start/end window, and Outlook COM exposes no other member that
+  does. Turning OOF on or off is likewise not exposed. Those facets genuinely require a route outside
+  pure Outlook COM: EWS (`GetUserOofSettings`/`SetUserOofSettings`) or Microsoft Graph
+  (`mailboxSettings/automaticRepliesSetting`), each a separate protocol with its own auth. Per Rule 2
+  this repository ships no placeholder, so they are declined rather than faked; taking them on later
+  should be a conscious decision to add an EWS or Graph dependency, tracked separately. See FEATURES.md
+  "Out-of-office / automatic replies Operations".
+
 ### Fixed
+
+- **Signature reader could be steered outside the signatures folder** (#15 review). `signature read`
+  built its path with `Path.Combine(signaturesFolder, name + extension)` on an unvalidated `name`.
+  Because `Path.Combine` discards the base when the second argument is rooted, a `signatureName` such
+  as an absolute path read an arbitrary `.htm`/`.html`/`.txt`/`.rtf` file, and `..\` traversal worked
+  too. Since this server reads e-mail and an MCP client can be fed untrusted message content, that was
+  a realistic path from a crafted message to an arbitrary file read. `ResolveSignatureFile` now rejects
+  a rooted name or any name containing a directory separator up front, then canonicalises the candidate
+  with `Path.GetFullPath` and refuses it unless it still sits directly under the canonicalised
+  signatures folder. Covered by new refusal tests for rooted, traversal, and separator names.
+
+- **`sync send-receive` with an unknown group name could falsely succeed** (#15 review). On a profile
+  with zero Send/Receive groups, the empty-collection "nothing to synchronise" success was returned
+  before the requested group name was validated, so asking for a group that does not exist reported
+  `Success = true`, contradicting the action's documented unknown-group contract. Group validation now
+  runs first: a specifically requested group that is absent is always the unknown-group failure,
+  regardless of how many groups the profile has.
+
+- **A partially started multi-group `sync send-receive` reported that nothing started** (#15 review).
+  Groups start sequentially and asynchronously; if a later group threw, the failure result reported
+  `Started = false` even though earlier groups were already running, which could invite a retry that
+  double-flushes the Outbox. The started-group list is now hoisted into method state that the
+  `onException` delegate can see, so a mid-loop failure reports the groups that did start (Rule 1b: no
+  catch was added inside the `Execute` action lambda).
+
+- **MCP tool generator emitted a dangling comma for a parameterless tool** (#15 review). The generator
+  always appended a trailing comma after the `action` parameter; a tool whose actions take no other
+  parameters (the new `oof` tool) therefore produced `action,` immediately before `)` and failed to
+  compile. The comma is now emitted only when another parameter (an exposed parameter or the injected
+  progress) follows.
 
 - **The test suite intermittently crashed the test host** (#116). Thirteen sites across ten
   integration test files released the shared `Outlook.Application` with

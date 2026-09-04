@@ -439,6 +439,8 @@ to make it run, the test is prohibited. Write an integration test instead, or wr
 | `StreamJsonRpcTests` | Real in-process duplex streams; no COM in the RPC layer |
 | `OutlookMcpServiceErrorTests` | Error-message formatting regression guard |
 | `ConfigurationReloadTests` | `reloadOnChange` configuration regression guard |
+| `SignatureFileScannerTests` | Pure filesystem grouping/format resolution over a temp folder; no COM (#15) |
+| `SignatureCommandsTests` | Signature listing/reading over a temp folder via the internal test constructor; no COM (#15) |
 
 Two entries deserve their caveats stated rather than buried:
 

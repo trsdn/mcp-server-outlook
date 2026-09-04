@@ -68,6 +68,9 @@ public class Program
         typeof(OutlookMcp.McpServer.Tools.OutlookFolderTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookMailTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookTaskTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookSyncTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookSignatureTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookOofTool),
     };
 
     public static async Task<int> Main(string[] args)
@@ -136,7 +139,8 @@ public class Program
                 // Server-wide instructions for LLMs - helps with tool selection and workflow understanding
                 options.ServerInstructions = """
                     OutlookMcp automates classic Outlook for Windows desktop via COM. It exposes
-                    five tools: application, folder, mail, attachment, and calendar.
+                    these tools: application, folder, mail, calendar, contact, task, attachment,
+                    sync, signature, and oof.
 
                     Identity model: Outlook items are addressed by entryId (optionally paired with
                     storeId for multi-store mailboxes), not by a file path or session handle. There

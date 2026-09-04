@@ -8,6 +8,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Confirmation gates on the irreversible destructive actions** (#9): `folder delete`,
+  `attachment remove` and `calendar delete-appointment` with an `occurrenceDate` now take a
+  `confirm` parameter and are refused without `confirm=true`. So is any item delete whose target is
+  **already in Deleted Items** - `mail delete`, `contact delete`, `task delete` and
+  `calendar delete-appointment` - because there is no second recycle bin and that delete destroys
+  the item.
+
+  Until now `mail send` was the only gated action, which the #9 audit called out: the remaining
+  destructive actions had no gate and no stated reason for not having one.
+
+  **The line is drawn at recoverability, and the decision is now explicit rather than implicit.**
+  `mail delete`, `contact delete`, `task delete`, `calendar delete-appointment` (whole appointment or
+  series) and `mail move` remain **ungated on purpose**, because Outlook moves the item to Deleted
+  Items or the move can simply be undone. Gating those would train a caller to pass `confirm=true`
+  reflexively, which is exactly how the gate on the irreversible action stops being read. That
+  rationale is documented in `ConfirmationGate`, in each action's tool description, in `FEATURES.md`
+  and in `skills/shared/behavioral-rules.md` instead of being left to inference.
+
+  Two things worth stating plainly:
+
+  - **`attachment remove` was the worst case in the surface and was not on the original list.** An
+    attachment has no Deleted Items of its own, so removing one destroys the only copy the message
+    holds - a harder delete than `mail delete`, which was the action everyone worried about. It is
+    gated.
+
+  - **"Soft delete is recoverable" was only true until it wasn't.** Deleting an item that already
+    sits in Deleted Items is a permanent delete, and nothing in the entry id tells a caller which
+    case they are in. `OutlookInteropRunner.IsInDeletedItems` walks the item's parent chain against
+    its *own* store's Deleted Items folder (archives and shared mailboxes each have one, per #38).
+    It deliberately **fails open**: a store that cannot be inspected answers "not in Deleted Items",
+    because failing closed would refuse ordinary deletes on any store this cannot read and turn a
+    safety feature into an outage.
+
+### Changed
+
+- **BREAKING (Core API only): `folder delete`, `attachment remove` and
+  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
+  that relied on an unconfirmed call succeeding must add `confirm: true` (CLI: `--confirm`; MCP:
+  `"confirm": true`). No action was removed and no parameter was renamed, so the operation count is
+  unchanged at 7 tools / 57 operations.
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the

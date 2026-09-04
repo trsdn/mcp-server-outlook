@@ -146,6 +146,11 @@ do not describe the schedule from the pattern without saying so.
 The response reports `scope` as `series` or `occurrence`, so you can confirm what was actually
 touched rather than inferring it from an entry id that is the same either way.
 
+Cancelling a single occurrence requires `confirm: true` and is refused without it. Deleting the
+whole series does not: the series goes to Deleted Items and the user can restore it, whereas a
+cancelled occurrence is only an exception written into the recurrence pattern and there is nothing
+left to put back.
+
 `occurrenceDate` may be a bare date (`2026-03-12`); the time of day is then taken from the series, so
 you do not need to know that the stand-up starts at 09:17. Give a full date and time only when you
 mean a specific instance that may already have been moved.
@@ -453,8 +458,10 @@ than the item and is not worth relaying.
 3. calendar.create-appointment / update-appointment / delete-appointment
 ```
 
-Confirm before `delete-appointment`, and before an `update-appointment` that changes the time of a
-meeting with other attendees.
+Ask the user before `delete-appointment`, and before an `update-appointment` that changes the time
+of a meeting with other attendees. Deleting a whole appointment is recoverable from Deleted Items
+and takes no `confirm` flag; cancelling one occurrence of a series is not, and requires
+`confirm: true`.
 
 ## Walk a folder tree
 
@@ -542,8 +549,9 @@ the rest.
 ```
 
 **`delete` takes the folder's contents with it.** Everything filed in it, and every subfolder, goes
-too. There is no undo beyond whatever Deleted Items happens to retain. Say what will be deleted
-before deleting it.
+too. There is no undo beyond whatever Deleted Items happens to retain. It therefore requires
+`confirm: true` and is refused without it. List the folder's children and say what will be deleted
+before you pass it.
 
 **Default folders and store roots are refused** for `rename`, `move` and `delete` - Inbox, Sent
 Items, Drafts, Deleted Items, Calendar, Contacts, Tasks, Notes, Junk, Outbox, in *every* store, not
@@ -555,6 +563,10 @@ A folder merely *named* "Inbox" that is not the default Inbox is an ordinary fol
 deleted normally - the check compares identity, not names.
 
 Not covered: emptying a folder in place. Delete the items with `mail.delete`, or delete the folder.
+
+Note that `mail.delete` on an item **already in Deleted Items** is a permanent delete and requires
+`confirm: true`. That is the one case where deleting mail is not recoverable, so emptying Deleted
+Items item by item is a confirmed operation whether or not the first delete was.
 
 ## What this surface does not do
 

@@ -379,7 +379,8 @@ public class AttachmentCommands : IAttachmentCommands
         int attachmentIndex,
         string? mailEntryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = true,
+        bool confirm = false)
     {
         if (attachmentIndex < 1)
         {
@@ -387,6 +388,18 @@ public class AttachmentCommands : IAttachmentCommands
             {
                 Success = false,
                 ErrorMessage = "attachmentIndex must be 1 or greater for attachment.remove."
+            };
+        }
+
+        // Checked after the index, and before Outlook is reached at all: an index of 0 is a caller
+        // mistake worth naming on its own, and answering it with "pass confirm=true" would send the
+        // caller to fix the wrong thing. See #9.
+        if (!confirm)
+        {
+            return new AttachmentMutationResult
+            {
+                Success = false,
+                ErrorMessage = ConfirmationGate.AttachmentRemove()
             };
         }
 

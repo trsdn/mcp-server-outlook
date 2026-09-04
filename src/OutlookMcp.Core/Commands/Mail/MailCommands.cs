@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.OutlookInterop;
+using OutlookMcp.Core.Commands.Rules;
 using OutlookMcp.Core.Models;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
@@ -1674,6 +1675,13 @@ public partial class MailCommands : IMailCommands
     /// Enumerates the mailbox's inbox rules.
     ///
     /// <para>
+    /// Kept on the <c>mail</c> tool because "why is nothing arriving from this sender?" is a mail
+    /// question whose answer is a rule. It delegates to the <c>rule</c> category so there is one
+    /// implementation; use <c>rule list</c> to read another store's rules, and the rest of that
+    /// category to change them.
+    /// </para>
+    ///
+    /// <para>
     /// <paramref name="includeDetail"/> is off by default because gathering it is roughly forty
     /// times the COM work: Outlook's <c>Conditions</c> and <c>Actions</c> collections have a fixed
     /// length covering every clause it supports, so detail means walking ~59 slots per rule and
@@ -1681,240 +1689,8 @@ public partial class MailCommands : IMailCommands
     /// between a quarter of a second and eleven.
     /// </para>
     /// </summary>
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public MailRuleListResult ListRules(bool includeDetail = false)
-    {
-        return OutlookInteropRunner.Execute(
-            "OutlookMailListRules",
-            (application, session) =>
-            {
-                Outlook.Store? store = null;
-                Outlook.Rules? rules = null;
-
-                try
-                {
-                    var result = new MailRuleListResult { Success = true };
-
-                    store = session.DefaultStore;
-                    rules = store.GetRules();
-                    int count = rules.Count;
-
-                    for (int index = 1; index <= count; index++)
-                    {
-                        Outlook.Rule? rule = null;
-
-                        try
-                        {
-                            rule = rules[index];
-
-                            string? name = SafeGet(() => rule.Name);
-                            if (string.IsNullOrWhiteSpace(name))
-                            {
-                                continue;
-                            }
-
-                            var info = new MailRuleInfo
-                            {
-                                Name = name,
-                                Enabled = SafeGetBool(() => rule.Enabled),
-                                ExecutionOrder = SafeGetInt(() => rule.ExecutionOrder),
-                                RuleType = SafeGetInt(() => (int)rule.RuleType) == (int)Outlook.OlRuleType.olRuleSend
-                                    ? "send"
-                                    : "receive",
-                                IsLocalRule = SafeGetBool(() => rule.IsLocalRule)
-                            };
-
-                            if (includeDetail)
-                            {
-                                ReadRuleConditions(rule, info);
-                                ReadRuleActions(rule, info);
-                            }
-
-                            result.Rules.Add(info);
-                        }
-                        finally
-                        {
-                            OutlookInteropRunner.ReleaseComObject(ref rule);
-                        }
-                    }
-
-                    return result;
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref rules);
-                    OutlookInteropRunner.ReleaseComObject(ref store);
-                }
-            },
-            ex => new MailRuleListResult
-            {
-                Success = false,
-                ErrorMessage = $"Failed to read the Outlook rule list: {ex.Message}"
-            });
-    }
-
-    /// <summary>
-    /// Walks a rule's fixed condition slots and keeps only the ones switched on, plus the sender
-    /// addresses of a from-condition.
-    /// </summary>
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static void ReadRuleConditions(Outlook.Rule rule, MailRuleInfo info)
-    {
-        Outlook.RuleConditions? conditions = null;
-
-        try
-        {
-            conditions = rule.Conditions;
-            int count = SafeGetInt(() => conditions.Count);
-
-            for (int index = 1; index <= count; index++)
-            {
-                Outlook.RuleCondition? condition = null;
-
-                try
-                {
-                    condition = conditions[index];
-
-                    if (!SafeGetBool(() => condition.Enabled))
-                    {
-                        continue;
-                    }
-
-                    int conditionType = SafeGetInt(() => (int)condition.ConditionType);
-                    string? conditionName = StripEnumPrefix(
-                        Enum.GetName(typeof(Outlook.OlRuleConditionType), conditionType),
-                        "olCondition");
-
-                    if (conditionName == null)
-                    {
-                        continue;
-                    }
-
-                    info.Conditions.Add(conditionName);
-
-                    if (condition is Outlook.ToOrFromRuleCondition addressCondition)
-                    {
-                        ReadRuleRecipients(addressCondition, info.FromAddresses);
-                    }
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref condition);
-                }
-            }
-        }
-        finally
-        {
-            OutlookInteropRunner.ReleaseComObject(ref conditions);
-        }
-    }
-
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static void ReadRuleActions(Outlook.Rule rule, MailRuleInfo info)
-    {
-        Outlook.RuleActions? actions = null;
-
-        try
-        {
-            actions = rule.Actions;
-            int count = SafeGetInt(() => actions.Count);
-
-            for (int index = 1; index <= count; index++)
-            {
-                Outlook.RuleAction? action = null;
-
-                try
-                {
-                    action = actions[index];
-
-                    if (!SafeGetBool(() => action.Enabled))
-                    {
-                        continue;
-                    }
-
-                    int actionType = SafeGetInt(() => (int)action.ActionType);
-                    string? actionName = StripEnumPrefix(
-                        Enum.GetName(typeof(Outlook.OlRuleActionType), actionType),
-                        "olRuleAction");
-
-                    if (actionName == null)
-                    {
-                        continue;
-                    }
-
-                    info.Actions.Add(actionName);
-
-                    if (action is Outlook.MoveOrCopyRuleAction moveAction)
-                    {
-                        Outlook.MAPIFolder? folder = null;
-
-                        try
-                        {
-                            folder = SafeGetComObject(() => moveAction.Folder);
-                            if (folder != null)
-                            {
-                                info.MoveToFolderPath ??= SafeGet(() => OutlookInteropRunner.GetFolderPath(folder));
-                            }
-                        }
-                        finally
-                        {
-                            OutlookInteropRunner.ReleaseComObject(ref folder);
-                        }
-                    }
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref action);
-                }
-            }
-        }
-        finally
-        {
-            OutlookInteropRunner.ReleaseComObject(ref actions);
-        }
-    }
-
-    /// <summary>
-    /// Rule recipients are stored unresolved, so Outlook leaves <c>Address</c> blank and puts the
-    /// address in <c>Name</c>. Reading only <c>Address</c> reports a from-rule as matching nobody.
-    /// </summary>
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static void ReadRuleRecipients(Outlook.ToOrFromRuleCondition condition, List<string> addresses)
-    {
-        Outlook.Recipients? recipients = null;
-
-        try
-        {
-            recipients = condition.Recipients;
-            int count = SafeGetInt(() => recipients.Count);
-
-            for (int index = 1; index <= count; index++)
-            {
-                Outlook.Recipient? recipient = null;
-
-                try
-                {
-                    recipient = recipients[index];
-
-                    string? address = NullIfBlank(SafeGet(() => recipient.Address))
-                        ?? NullIfBlank(SafeGet(() => recipient.Name));
-
-                    if (address != null && !addresses.Contains(address, StringComparer.OrdinalIgnoreCase))
-                    {
-                        addresses.Add(address);
-                    }
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref recipient);
-                }
-            }
-        }
-        finally
-        {
-            OutlookInteropRunner.ReleaseComObject(ref recipients);
-        }
-    }
+    public MailRuleListResult ListRules(bool includeDetail = false) =>
+        new RuleCommands().List(includeDetail);
 
     /// <summary>
     /// Enumerates the mailbox's master category list.

@@ -59,7 +59,7 @@ producing, say, a binary `.msg` under a `.txt` name.
 |---|---|
 | `list` | List appointments in a date range |
 | `read` | Read an appointment by entry ID |
-| `create-appointment` | Create an appointment |
+| `create-appointment` | Create an appointment, or a meeting with attendees and room resources |
 | `update-appointment` | Update an existing appointment |
 | `delete-appointment` | Delete an appointment |
 | `get-free-busy` | Read the free/busy availability of a recipient |
@@ -69,6 +69,11 @@ producing, say, a binary `.msg` under a `.txt` name.
 Outlook answers it with "Value does not fall within the expected range" - a message that reads like
 an argument bug rather than "mail is not a calendar entry". The same absolute-path, overwrite and
 format/extension rules as `mail export` apply.
+
+**Rooms are booked with `resourceAttendees`, not `location`.** `location` is a free-text label that
+reserves nothing, and a room named in `requiredAttendees` is invited like a person rather than
+booked. Note that resolution is a weak existence check: any SMTP-shaped address resolves as a one-off
+whether or not the mailbox exists, so a successful create is not proof that the room is real.
 
 ---
 

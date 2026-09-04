@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
+  alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
+  all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the
+  room like a person and reserves nothing, or put it in `location`, which is a free-text label. The
+  read side already reported `olResource` recipients as `"resource"`, so this closes the write half
+  of a gap that was only ever half implemented.
+
+  Two things were measured against a live mailbox rather than assumed:
+
+  - **`AppointmentItem.Resources` does not work through the embedded interop types.** Assigning it
+    attached no recipient at all, while the identical late-bound assignment attached one every time.
+    `RequiredAttendees` and `OptionalAttendees` are unaffected, so the failure is silent and specific
+    to resources: the meeting saves, reports success, and has no room on it. Resources are now added
+    as recipients explicitly and typed `olResource`, which does not depend on that property.
+
+    This was caught only by exercising both surfaces. The in-process test went green first, and the
+    CLI run against the same code returned `"attendees": []`. Another instance of the project's
+    characteristic failure mode, and the first one that a single-surface check would have shipped.
+
+  - **Resolution is a weak existence check.** Anything SMTP-shaped resolves as a one-off external
+    address whether or not the mailbox exists, so an invented room address is accepted. Only a bare
+    name absent from the address book fails to resolve. The refusal path still guards that case, and
+    the limit is now documented rather than left to be discovered.
+
 - **Item export** (#14): `mail export` and `calendar export` save an item to disk via `SaveAs`.
   Mail writes `.msg`, `.txt`, `.html`, `.mht` or `.rtf`; appointments add `.ics`. This was the last
   unchecked acceptance criterion on the item-coverage epic.

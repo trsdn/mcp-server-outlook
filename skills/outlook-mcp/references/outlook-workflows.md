@@ -179,17 +179,27 @@ leaves the invitation unanswered.
 
 ## Inviting people is a separate step from creating the entry
 
-`calendar.create-appointment` with `requiredAttendees` or `optionalAttendees` (semicolon-separated)
-creates a **meeting** rather than a private appointment. It is saved to the user's own calendar and
-**nobody is told**. Only `sendInvitation: true` mails the attendees.
+`calendar.create-appointment` with `requiredAttendees`, `optionalAttendees` or `resourceAttendees`
+(semicolon-separated) creates a **meeting** rather than a private appointment. It is saved to the
+user's own calendar and **nobody is told**. Only `sendInvitation: true` mails the attendees.
 
 So: say which one you did. "I've put it in your calendar" and "I've invited them" are different
 claims, and only the second one requires `sendInvitation`.
+
+Book a room with `resourceAttendees`, not by naming it in `requiredAttendees`. A room listed as a
+required attendee is invited like a person and is never actually booked, and `location` is only a
+label - it reserves nothing.
 
 If Outlook cannot resolve an attendee, the meeting is **not** created and `unresolvedAttendees` names
 them. That is deliberate - an unresolved attendee never receives the invitation, so creating the
 meeting anyway would look like success while leaving the person uninvited. Ask the user for a full
 SMTP address rather than retrying the same name.
+
+Resolution is a weaker check than it looks: **anything shaped like an SMTP address always resolves**,
+as a one-off external address, whether or not the mailbox exists. So a room named
+`meeting-room-4@example.com` will resolve and be attached even if there is no such room. Only a bare
+name absent from the address book fails. Where it matters, confirm the room exists rather than
+treating a successful create as proof.
 
 `calendar.read` reports `isMeeting` and an `attendees` list with each person's `responseStatus`
 (`none`, `organizer`, `tentative`, `accepted`, `declined`, `notResponded`). `none` means the item is

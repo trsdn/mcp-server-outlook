@@ -237,6 +237,7 @@ public partial class CalendarCommands : ICalendarCommands
         bool display = false,
         string? requiredAttendees = null,
         string? optionalAttendees = null,
+        string? resourceAttendees = null,
         bool sendInvitation = false,
         string? recurrenceType = null,
         int recurrenceInterval = 1,
@@ -266,7 +267,9 @@ public partial class CalendarCommands : ICalendarCommands
             };
         }
 
-        bool wantsMeeting = !string.IsNullOrWhiteSpace(requiredAttendees) || !string.IsNullOrWhiteSpace(optionalAttendees);
+        bool wantsMeeting = !string.IsNullOrWhiteSpace(requiredAttendees)
+            || !string.IsNullOrWhiteSpace(optionalAttendees)
+            || !string.IsNullOrWhiteSpace(resourceAttendees);
 
         if (sendInvitation && !wantsMeeting)
         {
@@ -276,7 +279,7 @@ public partial class CalendarCommands : ICalendarCommands
                 Saved = false,
                 Displayed = false,
                 ErrorMessage = "sendInvitation was requested but no attendees were named, so there is nobody to invite. "
-                    + "Pass requiredAttendees or optionalAttendees."
+                    + "Pass requiredAttendees, optionalAttendees or resourceAttendees."
             };
         }
 
@@ -410,6 +413,19 @@ public partial class CalendarCommands : ICalendarCommands
                         if (!string.IsNullOrWhiteSpace(optionalAttendees))
                         {
                             appointment.OptionalAttendees = optionalAttendees;
+                        }
+
+                        // Rooms and equipment are olResource recipients. The obvious route -
+                        // assigning AppointmentItem.Resources - is not reliable through the embedded
+                        // interop types: measured against a live mailbox it attached nothing, while
+                        // the identical late-bound assignment attached the recipient every time.
+                        // RequiredAttendees and OptionalAttendees do not suffer from this, so the
+                        // failure is silent and specific to resources: the meeting saves, reports
+                        // success, and has no room on it. Adding the recipients explicitly and
+                        // typing them olResource does not depend on that property at all.
+                        if (!string.IsNullOrWhiteSpace(resourceAttendees))
+                        {
+                            AddResourceRecipients(appointment, resourceAttendees);
                         }
 
                         attendees = ReadAttendees(appointment, resolveFirst: true);
@@ -1236,6 +1252,41 @@ public partial class CalendarCommands : ICalendarCommands
     }
 
     /// <summary>
+    /// Attaches each entry in a semicolon-separated resource list as an <c>olResource</c> recipient.
+    /// Outlook's own convention for the attendee string properties is semicolon-separated, so the
+    /// caller-facing format is unchanged; only the mechanism differs.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static void AddResourceRecipients(Outlook.AppointmentItem appointment, string resourceAttendees)
+    {
+        Outlook.Recipients? recipients = null;
+
+        try
+        {
+            recipients = appointment.Recipients;
+
+            foreach (string entry in resourceAttendees.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                Outlook.Recipient? recipient = null;
+
+                try
+                {
+                    recipient = recipients.Add(entry);
+                    recipient.Type = (int)Outlook.OlMeetingRecipientType.olResource;
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref recipient);
+                }
+            }
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref recipients);
+        }
+    }
+
+    /// <summary>
     /// Reads the invitee list off an appointment.
     /// </summary>
     /// <remarks>
@@ -1251,7 +1302,6 @@ public partial class CalendarCommands : ICalendarCommands
     /// that failed is the whole point.
     /// </para>
     /// </remarks>
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static List<MeetingAttendeeInfo> ReadAttendees(Outlook.AppointmentItem appointment, bool resolveFirst)
     {
         var attendees = new List<MeetingAttendeeInfo>();

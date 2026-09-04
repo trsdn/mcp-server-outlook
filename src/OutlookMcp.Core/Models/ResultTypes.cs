@@ -1712,3 +1712,185 @@ public class OutlookInspectorContextResult : ResultBase
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Caption { get; set; }
 }
+/// <summary>
+/// A page of tasks from a Tasks folder.
+///
+/// <para>
+/// The counts are an accounting identity, not decoration: returned tasks plus
+/// <see cref="SkippedItemCount"/> equals <see cref="ScannedItemCount"/>, so a caller can always
+/// tell the difference between "this folder holds no open tasks" and "this listing dropped rows".
+/// </para>
+/// </summary>
+public class TaskListResult : ResultBase
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderName { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
+
+    /// <summary>Items in the folder, whether or not this call looked at them.</summary>
+    public int TotalItemCount { get; set; }
+
+    /// <summary>Items this call actually examined. Below <see cref="TotalItemCount"/> when truncated.</summary>
+    public int ScannedItemCount { get; set; }
+
+    /// <summary>Tasks returned, equal to the <see cref="Tasks"/> count.</summary>
+    public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Scanned items that were not returned: completed tasks filtered out by the default, items
+    /// that are not tasks at all, and rows that could not be read. Never silently zero.
+    /// </summary>
+    public int SkippedItemCount { get; set; }
+
+    /// <summary>
+    /// Completed tasks that this listing filtered out. Reported separately so "nothing to do" is
+    /// distinguishable from "everything here is already done", which on a real task list is the
+    /// overwhelmingly common case.
+    /// </summary>
+    public int CompletedItemCount { get; set; }
+
+    /// <summary>Whether completed tasks were included. False is the default.</summary>
+    public bool IncludedCompleted { get; set; }
+
+    public bool Truncated { get; set; }
+
+    public List<TaskSummaryInfo> Tasks { get; set; } = [];
+}
+
+/// <summary>
+/// One task in a listing.
+///
+/// <para>
+/// Every date here is absent rather than present-and-wrong when Outlook has no value for it.
+/// Outlook stores 1 January 4501 for an unset task date, which on a real task list is the majority
+/// of due dates; passing that through would date most of a listing to the 46th century.
+/// </para>
+/// </summary>
+public class TaskSummaryInfo
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    /// <summary>Never blank. A task saved with no subject is labelled as such rather than shown empty.</summary>
+    public string Subject { get; set; } = string.Empty;
+
+    /// <summary>One of not-started, in-progress, complete, waiting or deferred.</summary>
+    public string Status { get; set; } = string.Empty;
+
+    public int PercentComplete { get; set; }
+
+    public bool Complete { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? DueDate { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? StartDate { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? DateCompleted { get; set; }
+
+    /// <summary>low, normal or high.</summary>
+    public string Importance { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Owner { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Categories { get; set; }
+
+    public bool ReminderSet { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? ReminderTime { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BodyPreview { get; set; }
+}
+
+public class TaskItemResult : ResultBase
+{
+    /// <summary>
+    /// False when no task could be resolved. This is not an error: asking for the active task when
+    /// none is open is a legitimate question with the answer "none".
+    /// </summary>
+    public bool HasItem { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    public string Subject { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public int PercentComplete { get; set; }
+
+    public bool Complete { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? DueDate { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? StartDate { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? DateCompleted { get; set; }
+
+    public string Importance { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Owner { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Categories { get; set; }
+
+    public bool ReminderSet { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? ReminderTime { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BodyPreview { get; set; }
+}
+
+public class TaskMutationResult : ResultBase
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Status { get; set; }
+
+    public int PercentComplete { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? DueDate { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FolderPath { get; set; }
+
+    public bool Saved { get; set; }
+    public bool Displayed { get; set; }
+    public bool Updated { get; set; }
+    public bool Deleted { get; set; }
+}

@@ -40,6 +40,36 @@ public class Program
         _testOutputPipe = null;
     }
 
+    /// <summary>
+    /// The exact set of generated MCP tool types registered with the server (#23). This is an
+    /// explicit allow-list rather than an assembly scan, so that a newly generated tool has to be
+    /// added here on purpose instead of silently appearing and spending LLM context.
+    ///
+    /// The cost of that choice is that a genuinely new tool can be *forgotten* here and then be
+    /// missing from tools/list while the CLI exposes it perfectly - which is exactly what happened
+    /// to `contact`. <c>RegisteredToolsMatchGeneratedTools</c> exists to make that impossible to
+    /// ship again, so this list must stay in sync with the generated <c>[McpServerToolType]</c>
+    /// classes in this assembly.
+    ///
+    /// Declared as <see cref="IEnumerable{T}"/> deliberately. <c>WithTools</c> also has a generic
+    /// <c>WithTools&lt;TToolType&gt;(builder, TToolType instance, ...)</c> overload, and passing a
+    /// <c>Type[]</c> or <c>IReadOnlyList&lt;Type&gt;</c> binds to *that* by exact generic inference
+    /// - registering the list object itself as a single tool instance and leaving the server with
+    /// no tools at all, with no compiler error and no startup error. tools/list then answers
+    /// "Method 'tools/list' is not available". Typing this as IEnumerable&lt;Type&gt; makes the
+    /// non-generic overload win the tie-break.
+    /// </summary>
+    public static IEnumerable<Type> RegisteredToolTypes { get; } = new[]
+    {
+        typeof(OutlookMcp.McpServer.Tools.OutlookApplicationTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookAttachmentTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookCalendarTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookContactTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookFolderTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookMailTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookTaskTool),
+    };
+
     public static async Task<int> Main(string[] args)
     {
         // Register assembly resolver for office.dll (Microsoft.Office.Core), which is a
@@ -133,16 +163,11 @@ public class Program
             // silently appearing and wasting LLM context. The generic WithTools<T>/WithPrompts<T>
             // overloads require a non-static T, but the generated tool/prompt classes are static,
             // so the non-generic Type-list overloads are used instead.
+            // The list lives on RegisteredToolTypes so a test can assert it covers every generated
+            // tool; see the comment there.
             // OutlookSkillPrompts.g.cs is itself narrowed to only Outlook-relevant prompts (see
             // GenerateSkillPrompts target in the .csproj), so registering the whole type is safe.
-            .WithTools(
-            [
-                typeof(OutlookMcp.McpServer.Tools.OutlookApplicationTool),
-                typeof(OutlookMcp.McpServer.Tools.OutlookAttachmentTool),
-                typeof(OutlookMcp.McpServer.Tools.OutlookCalendarTool),
-                typeof(OutlookMcp.McpServer.Tools.OutlookFolderTool),
-                typeof(OutlookMcp.McpServer.Tools.OutlookMailTool),
-            ])
+            .WithTools(RegisteredToolTypes)
             .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.OutlookSkillPrompts)]);
 
         if (_testInputPipe != null && _testOutputPipe != null)

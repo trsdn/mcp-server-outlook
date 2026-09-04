@@ -19,14 +19,14 @@ document-session layer that backed them - has been removed; what remains is Outl
 What is true right now:
 
 - the copied architecture is mature and reusable: `Core`, `Service`, `ComInterop`, generators, CLI, MCP server, VS Code extension, skills, and tests
-- the semantic surface is Outlook-only: 6 tools, 50 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
+- the semantic surface is Outlook-only: 7 tools, 55 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
 - there is no session or batch concept: every COM call is marshalled onto a single STA thread owned by `OutlookDispatcher` (see [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md))
 - **no Outlook behaviour is verified by CI, and none ever will be.** There is no self-hosted Windows runner with classic Outlook and there is no plan to provide one (#31, closed as not planned), so every correctness claim about Outlook rests on a local run against a real profile
 - this repo should be treated as an Outlook rebuild on top of reusable plumbing, not as a large search-and-replace exercise
 
 ## Implemented Outlook surface
 
-The repository exposes **6 tools with 50 operations**, generated into both the MCP server and the
+The repository exposes **7 tools with 55 operations**, generated into both the MCP server and the
 CLI from the same `[ServiceCategory]` interfaces:
 
 | Tool | Operations |
@@ -35,6 +35,7 @@ CLI from the same `[ServiceCategory]` interfaces:
 | `folder` | 10 |
 | `calendar` | 6 |
 | `contact` | 5 |
+| `task` | 5 |
 | `attachment` | 4 |
 | `application` | 3 |
 
@@ -42,12 +43,11 @@ See [FEATURES.md](FEATURES.md) for the full action list.
 
 ## Planned next Outlook slice
 
-The seed has since been extended to attachments, calendar, folder mutation and contacts. The
+The seed has since been extended to attachments, calendar, folder mutation, contacts and tasks. The
 remaining gaps are:
 
 - richer server-side mail search, replacing the current client-side scan (#42)
 - a paging cursor for large result sets (#43)
-- tasks (`TaskItem`)
 
 The single most important gap is not a feature: it is verification, and it is a permanent one.
 Nothing enforces that Outlook behaviour was checked before a merge, because no CI job can check it.

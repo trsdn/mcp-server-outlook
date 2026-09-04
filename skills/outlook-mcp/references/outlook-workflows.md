@@ -522,8 +522,30 @@ Not covered: emptying a folder in place. Delete the items with `mail.delete`, or
 ## What this surface does not do
 
 There is no window, visibility, or "watch me work" control. Outlook stays as the user left it.
-Tasks are not exposed. If a user asks for one, say so plainly rather than approximating it with
-mail operations.
+
+## Task dates are 4501, not null
+
+`task.list` and `task.read` are the Outlook Tasks folder. Two things about real task folders will
+mislead you if you do not know them.
+
+**Outlook stores 1 January 4501 for a date that was never set.** The tools strip that sentinel, so a
+task with no `dueDate` simply has no `dueDate` field - it does not have a due date in the 46th
+century. If you ever see a 4501 date reach a user, that is a bug worth reporting, not a real date.
+Do not invent a due date for a task that has none: "no due date" is a normal and common state. On the
+mailbox this was built against, 260 of 274 tasks had no due date at all.
+
+**Most tasks in a real folder are already finished**, so `list` omits completed ones by default. That
+is a filter, and it is reported: `completedItemCount` says how many were hidden and
+`includedCompleted` echoes the flag back. If a user asks *what have I completed?* or *show me
+everything*, pass `includeCompleted: true` - otherwise you will answer "you have three tasks" about a
+folder holding 274.
+
+`status` is `not-started`, `in-progress`, `complete`, `waiting` or `deferred`. To mark something
+done, set `status` to `complete`; Outlook fills in `percentComplete` and `dateCompleted` itself, so
+do not set them by hand as well. `subject` is not unique - `entryId` is the only reliable handle,
+exactly as with contacts.
+
+Not covered: task requests (assigning a task to someone else), and task recurrence.
 
 ## A Contacts folder is not all contacts
 

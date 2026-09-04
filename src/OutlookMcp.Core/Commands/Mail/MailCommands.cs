@@ -1024,19 +1024,28 @@ public partial class MailCommands : IMailCommands
                         var policy = RecipientPolicy.FromEnvironment();
                         if (policy.IsEnabled)
                         {
-                            var rejected = CollectDisallowedRecipients(mail, policy);
-                            if (rejected.Count > 0)
+                            Outlook.Recipients? recipients = null;
+                            try
                             {
-                                return new MailSendResult
+                                recipients = mail.Recipients;
+                                var rejected = policy.CollectDisallowed(recipients);
+                                if (rejected.Count > 0)
                                 {
-                                    Success = false,
-                                    Sent = false,
-                                    EntryId = resolvedEntryId,
-                                    StoreId = resolvedStoreId,
-                                    Subject = subject,
-                                    To = recipientTo,
-                                    ErrorMessage = policy.BuildRefusal(rejected)
-                                };
+                                    return new MailSendResult
+                                    {
+                                        Success = false,
+                                        Sent = false,
+                                        EntryId = resolvedEntryId,
+                                        StoreId = resolvedStoreId,
+                                        Subject = subject,
+                                        To = recipientTo,
+                                        ErrorMessage = policy.BuildRefusal(rejected)
+                                    };
+                                }
+                            }
+                            finally
+                            {
+                                OutlookInteropRunner.ReleaseComObject(ref recipients);
                             }
                         }
 
@@ -1089,100 +1098,19 @@ public partial class MailCommands : IMailCommands
             };
         }
 
-        if (!string.IsNullOrEmpty(operationId))
+        // Only outcomes a retry could actually duplicate are cached. The cache exists to stop a
+        // second attempt re-sending a message the first one may already have sent (#29); a result
+        // that definitively did not send has nothing to protect and caching it is actively harmful.
+        // The recipient-policy refusal is the case that exposed this: the refusal text tells the
+        // caller to fix the recipients or widen OUTLOOKMCP_ALLOWED_RECIPIENTS and try again, and a
+        // cached refusal would answer that retry from the stale result - so the fix would appear
+        // not to have worked. The same reasoning covers "already sent" and "could not resolve".
+        if (!string.IsNullOrEmpty(operationId) && (result.Sent || result.Indeterminate))
         {
             SendResultCache.TryAdd(operationId, result);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// The recipients on <paramref name="mail"/> that <paramref name="policy"/> does not permit.
-    ///
-    /// <para>
-    /// <c>Recipient.Address</c> is SMTP for an external recipient and an X500 path
-    /// (<c>/o=ExchangeLabs/...</c>) for an internal Exchange one, so an Exchange recipient is
-    /// resolved through <c>AddressEntry.GetExchangeUser().PrimarySmtpAddress</c> first. Anything
-    /// still not SMTP-shaped is rejected by the policy rather than guessed at.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Nothing here catches.</b> <c>Recipients</c> and <c>AddressEntry.Address</c> are Object
-    /// Model Guard protected, and a denial must reach <c>OutlookInteropRunner</c>'s classifier so the
-    /// caller is told the guard blocked it - not told, falsely, that their recipients failed a
-    /// policy check. Rule 1b. A draft with no recipients yields an empty list and the send proceeds
-    /// to Outlook, which refuses it for its own reasons.
-    /// </para>
-    /// </summary>
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static List<string> CollectDisallowedRecipients(Outlook.MailItem mail, RecipientPolicy policy)
-    {
-        var rejected = new List<string>();
-
-        Outlook.Recipients? recipients = null;
-        try
-        {
-            recipients = mail.Recipients;
-            int count = recipients.Count;
-
-            for (int index = 1; index <= count; index++)
-            {
-                Outlook.Recipient? recipient = null;
-                try
-                {
-                    recipient = recipients[index];
-                    string? address = ResolveSmtpAddress(recipient);
-
-                    if (!policy.IsAllowed(address))
-                    {
-                        rejected.Add(string.IsNullOrWhiteSpace(address)
-                            ? SafeGet(() => recipient.Name) ?? $"recipient {index}"
-                            : address!);
-                    }
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref recipient);
-                }
-            }
-        }
-        finally
-        {
-            OutlookInteropRunner.ReleaseComObject(ref recipients);
-        }
-
-        return rejected;
-    }
-
-    /// <summary>
-    /// The SMTP address of a recipient, or null when Outlook holds no SMTP form of it.
-    /// </summary>
-    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static string? ResolveSmtpAddress(Outlook.Recipient recipient)
-    {
-        string? address = recipient.Address;
-
-        if (!string.IsNullOrWhiteSpace(address) && address!.Contains('@'))
-        {
-            return address;
-        }
-
-        // An internal Exchange recipient: Address is an X500 path, and the SMTP address lives on
-        // the ExchangeUser behind the AddressEntry.
-        Outlook.AddressEntry? entry = null;
-        Outlook.ExchangeUser? exchangeUser = null;
-        try
-        {
-            entry = recipient.AddressEntry;
-            exchangeUser = entry?.GetExchangeUser();
-            return exchangeUser?.PrimarySmtpAddress ?? address;
-        }
-        finally
-        {
-            OutlookInteropRunner.ReleaseComObject(ref exchangeUser);
-            OutlookInteropRunner.ReleaseComObject(ref entry);
-        }
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]

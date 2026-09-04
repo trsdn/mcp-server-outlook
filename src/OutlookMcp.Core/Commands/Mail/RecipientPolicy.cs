@@ -1,7 +1,20 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
+using OutlookMcp.Core.Commands.OutlookInterop;
+using Outlook = Microsoft.Office.Interop.Outlook;
+
 namespace OutlookMcp.Core.Commands.Mail;
 
 /// <summary>
-/// An opt-in allow-list of the recipients <c>mail.send</c> is permitted to send to (#9).
+/// An opt-in allow-list of the recipients Outlook may be asked to send to (#9).
+///
+/// <para>
+/// It covers both outbound paths: <c>mail.send</c>, and <c>calendar.create-appointment</c> with
+/// <c>sendInvitation</c>. Those are the two places this surface puts a message addressed to
+/// caller-chosen recipients outside the mailbox, and enforcing on only one would be worse than not
+/// enforcing at all - the user would believe nothing could leave for an unlisted address while a
+/// second route stayed open.
+/// </para>
 ///
 /// <para>
 /// <b>Off unless configured.</b> With nothing set, <see cref="IsAllowed"/> answers true for
@@ -162,5 +175,107 @@ public sealed class RecipientPolicy
             + "This is an opt-in allow-list (#9); an address that cannot be read as SMTP is refused "
             + "rather than assumed safe. Change the recipients, or ask the user to update "
             + $"{EnvironmentVariableName} - do not work around it.";
+    }
+
+    /// <summary>
+    /// The recipients in <paramref name="recipients"/> this policy does not permit.
+    ///
+    /// <para>
+    /// Shared by <c>mail.send</c> and <c>calendar.create-appointment</c> with
+    /// <c>sendInvitation</c>, which are the two paths that put a message addressed to
+    /// caller-chosen recipients outside the mailbox. Enforcing on only one of them would be worse
+    /// than not enforcing at all: the user would believe the server could not mail outside the list
+    /// while a second route stayed open.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>Recipient.Address</c> is SMTP for an external recipient and an X500 path
+    /// (<c>/o=ExchangeLabs/...</c>) for an internal Exchange one, so an Exchange recipient is
+    /// resolved through <c>AddressEntry.GetExchangeUser().PrimarySmtpAddress</c> first. Anything
+    /// still not SMTP-shaped is rejected rather than guessed at.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Nothing here catches.</b> <c>Recipients</c> and <c>AddressEntry</c> are Object Model Guard
+    /// protected, and a denial must reach <c>OutlookInteropRunner</c>'s classifier so the caller is
+    /// told the guard blocked it - not told, falsely, that their recipients failed a policy check.
+    /// Rule 1b.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public List<string> CollectDisallowed(Outlook.Recipients recipients)
+    {
+        var rejected = new List<string>();
+        int count = recipients.Count;
+
+        for (int index = 1; index <= count; index++)
+        {
+            Outlook.Recipient? recipient = null;
+            try
+            {
+                recipient = recipients[index];
+                string? address = ResolveSmtpAddress(recipient);
+
+                if (!IsAllowed(address))
+                {
+                    rejected.Add(string.IsNullOrWhiteSpace(address)
+                        ? TryGetName(recipient) ?? $"recipient {index}"
+                        : address!);
+                }
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref recipient);
+            }
+        }
+
+        return rejected;
+    }
+
+    /// <summary>
+    /// The SMTP address of a recipient, or null when Outlook holds no SMTP form of it.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? ResolveSmtpAddress(Outlook.Recipient recipient)
+    {
+        string? address = recipient.Address;
+
+        if (!string.IsNullOrWhiteSpace(address) && address!.Contains('@'))
+        {
+            return address;
+        }
+
+        // An internal Exchange recipient: Address is an X500 path, and the SMTP address lives on
+        // the ExchangeUser behind the AddressEntry.
+        Outlook.AddressEntry? entry = null;
+        Outlook.ExchangeUser? exchangeUser = null;
+        try
+        {
+            entry = recipient.AddressEntry;
+            exchangeUser = entry?.GetExchangeUser();
+            return exchangeUser?.PrimarySmtpAddress ?? address;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref exchangeUser);
+            OutlookInteropRunner.ReleaseComObject(ref entry);
+        }
+    }
+
+    /// <summary>
+    /// The recipient's display name, purely to make a refusal readable when no address could be
+    /// read. Absence is meaningful and handled: the refusal falls back to the ordinal.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? TryGetName(Outlook.Recipient recipient)
+    {
+        try
+        {
+            return recipient.Name;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
     }
 }

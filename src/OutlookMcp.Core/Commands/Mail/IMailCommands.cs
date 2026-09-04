@@ -91,8 +91,11 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "active item, because they only read the mailbox or produce a draft that nothing sends on its own. "
     + "RECIPIENT POLICY: if the server is configured with OUTLOOKMCP_ALLOWED_RECIPIENTS, send additionally "
     + "refuses any recipient outside that allow-list, naming what was refused and what is permitted. "
-    + "It is off unless the user set it. When it refuses, report that - do not retry with a different "
-    + "address or split the recipients across several sends to get round it.")]
+    + "It is off unless the user set it, and it covers calendar create-appointment with sendInvitation too. "
+    + "When it refuses, report that - do not retry with a different address, split the recipients across "
+    + "several sends, or invite someone to a meeting instead, to get round it. A refusal is safe to retry "
+    + "with the same operationId once the recipients or the allow-list have changed: nothing was sent, so "
+    + "nothing was cached.")]
 public interface IMailCommands
 {
     [ServiceAction("read-active", Destructive = false)]

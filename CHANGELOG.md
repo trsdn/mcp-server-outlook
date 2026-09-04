@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   Three decisions worth stating rather than leaving to be discovered:
 
+  - **It covers both outbound paths.** `mail send`, and `calendar create-appointment` with
+    `sendInvitation`. Those are the only two places this surface mails caller-chosen addresses, and
+    an allow-list guarding one of them would be worse than none: the user would believe nothing
+    could reach an unlisted address while a second route stayed open. A refused invitation still
+    saves the appointment to the user's own calendar, and says so, so a caller does not create it
+    twice.
+
   - **Configured through the environment, not a config file.** It is the one mechanism the two
     entry points genuinely share: an MCP client sets `env` on the server definition, and the CLI
     daemon inherits the shell's environment. Neither has a configuration file the other reads, and
@@ -231,6 +238,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sent - not the Drafts folder.
 
 ### Fixed
+
+- **A failed `mail send` is no longer replayed from the idempotency cache** (#9, #29). The
+  `operationId` cache existed to stop a retry duplicating a message the first attempt may already
+  have sent. It cached *every* outcome, including ones that definitively sent nothing - so a send
+  refused by the new recipient policy, whose own error text invites a retry once the recipients or
+  the allow-list are fixed, answered that retry from the stale refusal and made the fix look
+  ineffective. The same applied to "already sent" and "could not resolve". Only results where
+  `sent` or `indeterminate` is true are cached now; those are the only ones a retry could duplicate.
 
 - **The Deleted Items walk no longer final-releases the shared `NameSpace`** (#9, #19). The walk
   added above stops at a store root, whose `Parent` is the `NameSpace` rather than a folder - and

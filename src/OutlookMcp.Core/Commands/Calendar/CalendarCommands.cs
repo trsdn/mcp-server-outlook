@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using OutlookMcp.Core.Commands.Mail;
 using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Core.Models;
 using Outlook = Microsoft.Office.Interop.Outlook;
@@ -509,6 +510,47 @@ public partial class CalendarCommands : ICalendarCommands
 
                     if (sendInvitation)
                     {
+                        // The recipient allow-list covers this path as well as mail.send: an
+                        // invitation is a message to caller-chosen addresses leaving the mailbox,
+                        // and an allow-list that guarded only one of the two routes would be worse
+                        // than none - the user would believe nothing could reach an unlisted
+                        // address. Off unless configured. See RecipientPolicy and #9.
+                        var policy = RecipientPolicy.FromEnvironment();
+                        if (policy.IsEnabled)
+                        {
+                            Outlook.Recipients? invitees = null;
+                            try
+                            {
+                                invitees = appointment.Recipients;
+                                var rejected = policy.CollectDisallowed(invitees);
+                                if (rejected.Count > 0)
+                                {
+                                    // The appointment itself is already saved to the caller's own
+                                    // calendar, which is not the part being refused. Say so, so the
+                                    // caller does not conclude nothing happened and create it twice.
+                                    return new CalendarAppointmentResult
+                                    {
+                                        Success = false,
+                                        Saved = true,
+                                        Displayed = false,
+                                        IsMeeting = wantsMeeting,
+                                        InvitationSent = false,
+                                        Attendees = attendees,
+                                        EntryId = SafeGet(() => appointment.EntryID),
+                                        StoreId = SafeGet(() => appointment.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                                        Subject = SafeGet(() => appointment.Subject),
+                                        ErrorMessage = policy.BuildRefusal(rejected)
+                                            + " The meeting is saved to your own calendar and nobody"
+                                            + " has been invited; do not create it again."
+                                    };
+                                }
+                            }
+                            finally
+                            {
+                                OutlookInteropRunner.ReleaseComObject(ref invitees);
+                            }
+                        }
+
                         appointment.Send();
                         invitationSent = true;
                     }

@@ -61,7 +61,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   Object Model Guard exposure is documented on every action: `PropertyAccessor` is itself a
   protected member on every Outlook item type, so any of these reads can be refused, and a refused
-  read reports `blocked` - which is not the same answer as `not-present`.
+  read reports `blocked` - which is not the same answer as `not-present`. `get-headers` carries the
+  same `status` vocabulary for the same reason: `headersPresent: false` alone cannot distinguish
+  "this message has no headers" from "Outlook would not say".
 
 - **Address book lookup and recipient resolution** (#15): a new `addressbook` tool with `resolve`,
   `list-address-lists` and `list-entries`. `Session.AddressLists` was previously unused, so there

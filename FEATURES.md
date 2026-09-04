@@ -233,7 +233,9 @@ Read-only. There is no way to write a property through this tool.
 
 **A draft has no transport headers.** Nothing composed locally ever traversed an SMTP transport, so
 it carries none, and the call succeeds with `headersPresent: false`. The same is often true of an
-item delivered entirely inside one organisation. That is an answer, not a failure.
+item delivered entirely inside one organisation. That is an answer, not a failure. `headersPresent`
+is also false when Outlook refused the read, so check `status` before concluding a message has no
+headers: "there are none" and "Outlook would not say" are different claims.
 
 **Headers are unfolded.** An RFC 5322 continuation line begins with whitespace and continues the
 header above it, so a line-by-line split invents nameless entries and truncates exactly the headers

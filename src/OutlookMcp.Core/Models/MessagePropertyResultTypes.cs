@@ -27,8 +27,21 @@ public class MessageHeaderResult : ResultBase
     /// <summary>
     /// False when the item carries no transport headers. This is the ordinary answer for anything
     /// that never left the client, and it is not an error.
+    ///
+    /// <para>
+    /// Check <see cref="Status"/> before concluding a message has no headers: this is also false
+    /// when Outlook refused the read, and "there are none" is a different claim from "Outlook
+    /// would not say".
+    /// </para>
     /// </summary>
     public bool HeadersPresent { get; set; }
+
+    /// <summary>
+    /// Why <see cref="HeadersPresent"/> has the value it has: <c>ok</c>, <c>empty</c>,
+    /// <c>not-present</c>, <c>blocked</c>, <c>unsupported-or-blocked</c> or <c>error</c>. The same
+    /// vocabulary the property actions use, so the two cannot drift apart.
+    /// </summary>
+    public string Status { get; set; } = string.Empty;
 
     /// <summary>
     /// Headers in the order the transport wrote them, duplicates preserved. <c>Received</c> appears

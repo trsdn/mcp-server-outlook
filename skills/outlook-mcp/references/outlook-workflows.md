@@ -373,6 +373,11 @@ transport, so it carries none - `headersPresent` is false on a successful call. 
 true of a message delivered entirely inside one organisation. Do not report that as an error, and do
 not retry it.
 
+`headersPresent` is also false when Outlook **refused** the read, so check `status` before telling a
+user a message has no headers. `ok` means they are there; `not-present` and `empty` mean there are
+genuinely none; `blocked` and `unsupported-or-blocked` mean Outlook withheld them, which is a
+different thing and must be reported as such.
+
 Continuation lines are already folded back in, so a long `Authentication-Results` arrives whole
 rather than split across entries.
 

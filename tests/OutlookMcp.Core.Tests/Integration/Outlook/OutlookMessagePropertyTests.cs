@@ -67,6 +67,7 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
         Assert.True(result.Success, result.ErrorMessage);
         Assert.Null(result.ErrorMessage);
         Assert.True(result.HeadersPresent, $"'{subject}' reported no transport headers.");
+        Assert.Equal("ok", result.Status);
         Assert.NotEmpty(result.Headers);
         Assert.Equal(result.Headers.Count, result.HeaderCount);
 
@@ -169,7 +170,15 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
             Assert.Empty(result.Headers);
             Assert.False(string.IsNullOrWhiteSpace(result.Note), "No explanation was given for the absent headers.");
 
-            output.WriteLine($"Draft note: {result.Note}");
+            // headersPresent false covers both "there are none" and "Outlook refused to say", and
+            // those are different claims. The status is what separates them, so it must never be
+            // blank on the absent path.
+            Assert.False(string.IsNullOrWhiteSpace(result.Status), "No status was given for the absent headers.");
+            Assert.NotEqual("ok", result.Status);
+            Assert.NotEqual("blocked", result.Status);
+            Assert.NotEqual("unsupported-or-blocked", result.Status);
+
+            output.WriteLine($"Draft status: {result.Status}; note: {result.Note}");
         }
         finally
         {

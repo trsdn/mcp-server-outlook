@@ -124,6 +124,7 @@ public class PropertyCommands : IPropertyCommands
 
                         if (accessor == null)
                         {
+                            result.Status = "unsupported-or-blocked";
                             result.Note = $"An item of type {result.ItemType} exposes no property "
                                 + "accessor, so its headers cannot be read.";
                             return result;
@@ -139,6 +140,7 @@ public class PropertyCommands : IPropertyCommands
                         }
 
                         string? raw = read.Value as string;
+                        result.Status = read.Status;
 
                         if (read.Status != "ok" || string.IsNullOrWhiteSpace(raw))
                         {
@@ -146,7 +148,9 @@ public class PropertyCommands : IPropertyCommands
                             result.Note = read.Status switch
                             {
                                 "blocked" or "unsupported-or-blocked" =>
-                                    "Outlook's security prompt refused the transport headers on this item.",
+                                    "Outlook refused to return the transport headers on this item. "
+                                    + "This is not evidence that it has none - the value was withheld, "
+                                    + "not found to be absent.",
                                 _ =>
                                     "This item carries no internet message headers. Anything composed "
                                     + "locally - a draft, a saved copy, an item delivered entirely inside "
@@ -947,7 +951,8 @@ public class PropertyCommands : IPropertyCommands
             // property still exists and is worth listing; only its value is missing.
             info.Note = OutlookInteropRunner.IsObjectModelGuardDenial(ex)
                 ? "Outlook's security prompt refused this property's value."
-                : $"This property's value could not be read: {ex.Message}";
+                : $"This property's value could not be read - a formula or combination field that "
+                  + $"cannot be evaluated is the usual cause, but Outlook may also have refused it: {ex.Message}";
             return info;
         }
 

@@ -140,6 +140,41 @@ If an operation legitimately cannot run without Outlook, skip the test explicitl
 softening the assertion. A test that cannot fail is worse than no test, because it reports
 green.
 
+### Assert a property of the code, not of the mailbox
+
+The subtler version of the same failure. The assertion is binary, the test executes, it passes —
+and it is testing the fixture rather than the behaviour.
+
+```csharp
+// WRONG: asserts a property of the data. True of most received mail, not all.
+Assert.Contains(result.Headers, h => h.Name == "Received");
+```
+
+That one passed review and passed on the mailbox, then failed later when the first inbox message
+carrying transport headers turned out to be an internal notification with twenty headers and no
+`Received` line. Nothing about the parser had changed.
+
+Three ways this shows up here, all found in real work:
+
+- **Naming data you did not create.** If the test needs a specific header, category, sender or
+  folder, either create it or derive it from what the mailbox actually returned. Do not name it.
+- **A fixture that quietly sidesteps the logic.** A paging test built on freshly created drafts
+  gets *distinct* `ReceivedTime` values, so it never enters the tied-timestamp band it was written
+  to cover, and passes having exercised none of it. Ask what the fixture would have to look like
+  for the test to be meaningful, and assert that it does.
+- **Reusing the implementation to check the implementation.** A test that parses with the parser's
+  own helper proves only that the parser agrees with itself.
+
+The technique that works: **verify by an independent, deliberately simpler route.** Rather than
+asserting which headers came back, count the header-start lines in the raw block with a second
+naive implementation written in the test, and assert the parsed count matches. That assumes nothing
+about which headers exist, and still fails if the block comes back unsplit or if continuation lines
+leak through. Where a filter is involved, assert the filtered count equals the count of that name in
+the unfiltered set — which catches dropped duplicates as well as extras.
+
+And check the numbers are non-trivial. "20 headers from 1767 characters" is evidence the test did
+something; `0 == 0` is not.
+
 ---
 
 ## Common Mistakes
@@ -148,10 +183,26 @@ green.
 |---------|-----|
 | Only asserting the success flag | Verify actual Outlook state |
 | "Accept both" assertions | Binary assertions only |
+| Asserting a property of the mailbox's data | Create the data, or derive the expectation from what was returned |
+| Verifying a parser with the parser's own helper | Check by an independent, simpler route |
 | Mocking `Outlook.Application` or `NameSpace` | See ADR-001 - mocked COM proves nothing |
 | Mutating the user's real mailbox in a test | Operate on drafts you created, and clean up |
 | Missing `Feature` trait | Add one from the list above |
 | Leaving an integration test undeclared | Mark `[Trait("Category", "Integration")]` |
+
+---
+
+## A red test on a sending surface really does send
+
+Rule 29 requires watching the test fail before implementing. On `send`, `forward`, `reply-all` or
+anything that books a meeting, "watch it fail" means the guard is not there yet and **the action
+happens** — from the user's real mailbox. That is inherent to TDD here, not carelessness, but it
+has to be planned for rather than discovered.
+
+Address anything a red test might send to the reserved `.invalid` TLD, which can never be
+delivered. Expect it to reach Sent Items anyway, and clean up afterwards. This has already happened
+once during work on #9; the message was undeliverable and was removed, but only because it had been
+addressed defensively in advance.
 
 ---
 

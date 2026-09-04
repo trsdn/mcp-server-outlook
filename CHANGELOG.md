@@ -53,16 +53,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `storeDisplayName`, so a rule's clauses can be read rather than only counted - which is also what
   makes an `update` verifiable as replacing a term rather than appending to it.
 
-### Fixed
-
-- **Use-after-free crash in rule mutation**: everything below a `Rules` collection - the `Rule`
-  objects, their `Conditions`/`Actions` collections and the clause slots inside them - is a cached
-  child that Outlook hands back by the same pointer on every access, so `Rules.Item(3)` twice is one
-  object, as are `Conditions.Subject` and the `Conditions[n]` reporting the subject slot.
-  Final-releasing them dropped the refcount on an object Outlook was still handing out, and the next
-  access took the test host process down rather than throwing. They are now released with
-  `ReleaseSharedComObject`, for the same reason #19 requires it for the shared `Application`.
-
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the
@@ -153,6 +143,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sent - not the Drafts folder.
 
 ### Fixed
+
+- **Use-after-free crash in rule mutation**: everything below a `Rules` collection - the `Rule`
+  objects, their `Conditions`/`Actions` collections and the clause slots inside them - is a cached
+  child that Outlook hands back by the same pointer on every access, so `Rules.Item(3)` twice is one
+  object, as are `Conditions.Subject` and the `Conditions[n]` reporting the subject slot.
+  Final-releasing them dropped the refcount on an object Outlook was still handing out, and the next
+  access took the test host process down rather than throwing. They are now released with
+  `ReleaseSharedComObject`, for the same reason #19 requires it for the shared `Application`.
+
+  That is the fourth instance of this hazard in the migration - the shared `Application` (#19),
+  thirteen sites in the test suite (#116), a parent `MAPIFolder` read from `item.Parent` in a
+  listing loop (#122), and now the rule object graph - so the general rule is recorded in
+  `.github/instructions/outlook-com-interop.instructions.md`: final-release is only safe for an
+  object your call navigated to and nobody else holds, and anything Outlook hands back from a
+  cache needs the decrementing release.
 
 - **The test suite intermittently crashed the test host** (#116). Thirteen sites across ten
   integration test files released the shared `Outlook.Application` with

@@ -6,11 +6,14 @@
 
 - **Mail** - read the message you have open, search and list messages, draft, reply, reply-all, forward, send, move, delete, and set read state, categories, subject, body or recipients
 - **Calendar** - list and read appointments, create, update and delete them
-- **Folders** - list default folders, walk child folders, resolve a folder path, list items
+- **Contacts** - list and read contacts, create, update and delete them
+- **Tasks** - list and read tasks, create, update and delete them
+- **Rules** - list the inbox rules that decide what happens to mail before you read it, and create, change, switch off or remove them
+- **Folders** - list default folders, walk child folders, resolve a folder path, list items, and create, rename, move or delete folders
 - **Attachments** - list, save to disk, add and remove
 - **Application** - check Outlook availability before doing anything else
 
-**$18 tools with 62 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
+**8 tools with 62 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
 
 ## Requirements
 

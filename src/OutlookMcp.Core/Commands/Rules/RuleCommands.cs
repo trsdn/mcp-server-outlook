@@ -57,18 +57,28 @@ public class RuleCommands : IRuleCommands
     /// </summary>
     private const Outlook.OlRuleType CreatedRuleType = Outlook.OlRuleType.olRuleReceive;
 
+    /// <summary>
+    /// The folder aliases a move destination accepts, kept identical to the <c>mail</c> category's
+    /// set so the same folder string means the same folder in both. Notably there is no
+    /// <c>archive</c> alias: <c>OlDefaultFolders</c> has no archive role, and mapping it to the
+    /// Inbox would silently file mail somewhere the caller did not ask for. Name an archive folder
+    /// by its full path instead.
+    /// </summary>
     private static readonly Dictionary<string, Outlook.OlDefaultFolders> FolderAliases =
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["inbox"] = Outlook.OlDefaultFolders.olFolderInbox,
             ["drafts"] = Outlook.OlDefaultFolders.olFolderDrafts,
             ["sent"] = Outlook.OlDefaultFolders.olFolderSentMail,
-            ["sentitems"] = Outlook.OlDefaultFolders.olFolderSentMail,
+            ["sent-mail"] = Outlook.OlDefaultFolders.olFolderSentMail,
             ["outbox"] = Outlook.OlDefaultFolders.olFolderOutbox,
             ["deleted"] = Outlook.OlDefaultFolders.olFolderDeletedItems,
-            ["deleteditems"] = Outlook.OlDefaultFolders.olFolderDeletedItems,
-            ["junk"] = Outlook.OlDefaultFolders.olFolderJunk,
-            ["archive"] = Outlook.OlDefaultFolders.olFolderInbox
+            ["deleted-items"] = Outlook.OlDefaultFolders.olFolderDeletedItems,
+            ["calendar"] = Outlook.OlDefaultFolders.olFolderCalendar,
+            ["contacts"] = Outlook.OlDefaultFolders.olFolderContacts,
+            ["tasks"] = Outlook.OlDefaultFolders.olFolderTasks,
+            ["notes"] = Outlook.OlDefaultFolders.olFolderNotes,
+            ["junk"] = Outlook.OlDefaultFolders.olFolderJunk
         };
 
     /// <inheritdoc/>

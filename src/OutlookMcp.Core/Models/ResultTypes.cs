@@ -372,8 +372,9 @@ public class MailRuleMutationResult : ResultBase
     public bool? Enabled { get; set; }
 
     /// <summary>
-    /// Where the rule sits in the evaluation order. A new rule goes last, so an earlier rule that
-    /// stops processing can prevent it from ever running.
+    /// Where the rule sits in the evaluation order. Outlook inserts a new rule <em>first</em>, not
+    /// last, so a freshly created rule reports 1 and runs before every rule the mailbox already
+    /// had - and if it also stops processing, none of them run at all.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ExecutionOrder { get; set; }

@@ -89,6 +89,91 @@ internal static class MailRestrictFilter
         bool flaggedOnly = false,
         string? fullTextQuery = null)
     {
+        List<string> clauses = BuildStructuredClauses(
+            unreadOnly, fromAddress, subjectContains, receivedAfter, receivedBefore, hasAttachment, flaggedOnly);
+
+        // Content-index full-text (#42). Deliberately last so the cheap structured predicates are
+        // written first; Outlook is free to reorder, but the emitted string reads the way a human
+        // would debug it.
+        if (!string.IsNullOrWhiteSpace(fullTextQuery))
+        {
+            string escaped = EscapeLiteral(fullTextQuery.Trim());
+            clauses.Add(
+                "(" + string.Join(
+                    " OR ",
+                    FullTextProperties.Select(property => $"{Quote(property)} ci_phrasematch '{escaped}'"))
+                + ")");
+        }
+
+        return clauses.Count == 0
+            ? null
+            : "@SQL=" + string.Join(" AND ", clauses);
+    }
+
+    /// <summary>
+    /// Builds the filter for <c>Application.AdvancedSearch</c> (#13).
+    ///
+    /// <para>
+    /// Two things differ from <see cref="Build"/>, and both are load bearing.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>No <c>@SQL=</c> prefix.</b> <c>Items.Restrict</c> requires it to select the DASL dialect;
+    /// <c>AdvancedSearch</c> is DASL-only and rejects the prefixed form outright with a bare
+    /// "The operation failed." - verified against a live mailbox, not inferred.
+    /// </para>
+    ///
+    /// <para>
+    /// <b><c>LIKE</c> rather than <c>ci_phrasematch</c> for the free-text clause.</b> This is the
+    /// engine that replaces the client-side scan, so it has to answer the same question the scan
+    /// did: substring matching. <c>ci_phrasematch</c> asks the content index, which matches whole
+    /// words - swapping one for the other would silently stop finding every mid-word match while the
+    /// response still said the search succeeded. Callers who want the index ask for it by name.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns <see langword="null"/> when the free-text term cannot be expressed exactly - a
+    /// wildcard the caller supplied, since DASL has no <c>ESCAPE</c> clause. The caller falls back to
+    /// an engine that can answer it rather than running a quietly widened search.
+    /// </para>
+    /// </summary>
+    public static string? BuildAdvancedSearch(
+        string freeTextQuery,
+        bool unreadOnly = false,
+        string? fromAddress = null,
+        string? subjectContains = null,
+        DateTimeOffset? receivedAfter = null,
+        DateTimeOffset? receivedBefore = null,
+        bool? hasAttachment = null,
+        bool flaggedOnly = false)
+    {
+        if (!IsUsableLikeValue(freeTextQuery))
+        {
+            return null;
+        }
+
+        List<string> clauses = BuildStructuredClauses(
+            unreadOnly, fromAddress, subjectContains, receivedAfter, receivedBefore, hasAttachment, flaggedOnly);
+
+        string escaped = EscapeLiteral(freeTextQuery.Trim());
+        clauses.Add(
+            "(" + string.Join(
+                " OR ",
+                FullTextProperties.Select(property => $"{Quote(property)} LIKE '%{escaped}%'"))
+            + ")");
+
+        return string.Join(" AND ", clauses);
+    }
+
+    private static List<string> BuildStructuredClauses(
+        bool unreadOnly,
+        string? fromAddress,
+        string? subjectContains,
+        DateTimeOffset? receivedAfter,
+        DateTimeOffset? receivedBefore,
+        bool? hasAttachment,
+        bool flaggedOnly)
+    {
         var clauses = new List<string>();
 
         if (unreadOnly)
@@ -133,22 +218,7 @@ internal static class MailRestrictFilter
             clauses.Add($"{Quote(HasAttachmentProperty)} = {(hasAttachment.Value ? 1 : 0)}");
         }
 
-        // Content-index full-text (#42). Deliberately last so the cheap structured predicates are
-        // written first; Outlook is free to reorder, but the emitted string reads the way a human
-        // would debug it.
-        if (!string.IsNullOrWhiteSpace(fullTextQuery))
-        {
-            string escaped = EscapeLiteral(fullTextQuery.Trim());
-            clauses.Add(
-                "(" + string.Join(
-                    " OR ",
-                    FullTextProperties.Select(property => $"{Quote(property)} ci_phrasematch '{escaped}'"))
-                + ")");
-        }
-
-        return clauses.Count == 0
-            ? null
-            : "@SQL=" + string.Join(" AND ", clauses);
+        return clauses;
     }
 
     private static bool TryBuildContains(string property, string? value, out string clause)

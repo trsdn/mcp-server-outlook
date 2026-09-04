@@ -31,31 +31,39 @@ mail.list(folder: <inbox>, subjectContains: "invoice", hasAttachment: true)
 Dates are ISO 8601 (`2024-03-07` or `2024-03-07T14:30`). A bare date means local midnight. All the
 filters combine with AND.
 
-`query` is different: it is a free-text match over subject, sender and the **full** body, applied
-after the structured filters. By default it is exhaustive rather than indexed, so it will not miss a
-term buried deep in a long message - but reaching the body means opening every candidate item, which
-is slow, and the scan stops at a safety limit. Pair `query` with structured filters whenever you can:
-they decide how many items have to be opened.
+`query` is different: it is a free-text match over subject, sender, recipients and the **full** body,
+applied after the structured filters. Pair `query` with structured filters whenever you can: they
+decide how much Outlook has to look at.
 
-### Two search engines, and why the response says which one answered
+### Three search engines, and why the response says which one answered
 
 `mail.search` takes `searchMode`:
 
-- `clientScan` (**default**) - each candidate is opened and checked. **Substring** matching, so `foo`
-  matches inside `foobar`. Exact, but bounded: in a folder larger than the scan limit a genuine match
-  further back is never reached.
+- `advancedSearch` (**default**) - Outlook runs the search itself, over subject, sender, recipients
+  and body. **Substring** matching, so `foo` matches inside `foobar`. Nothing is opened by this
+  server and there is **no scan horizon**, so a match arbitrarily far back in a large folder is still
+  found.
+- `clientScan` - each candidate is opened here and checked. **Substring** matching, exact, but
+  **bounded**: in a folder larger than the scan limit a genuine match further back is never reached
+  and comes back as "no such mail".
 - `fullText` - Outlook's content index answers the query. **Whole-word** matching, so `foo` matches
-  "a foo arrived" but *not* `foobar`. Nothing is opened client-side and there is no scan horizon, so
-  it finds matches arbitrarily far back.
+  "a foo arrived" but *not* `foobar`. No scan horizon.
 
-These are different questions, not fast and slow versions of the same one. Use `fullText` for a large
-folder or a term you expect to be a real word; use the default when you need substring matching or a
-short, exact answer.
+These are different questions, not fast and slow versions of the same one. The default is the one to
+want in almost every case: it answers the same question `clientScan` does, without the horizon. Use
+`fullText` when whole-word matching is what you actually mean. Use `clientScan` only when you need
+this server to do the matching itself.
 
-Every search response reports `searchEngine` as `clientScan` or `contentIndex`. **Read it before you
-conclude anything from an empty result** - the two engines disagree about what "no matches" means. If
-you asked for `fullText` and the store could not serve it, `searchEngine` comes back `clientScan` and
-`message` says why, rather than the tool pretending the index answered.
+Every search response reports `searchEngine` as `advancedSearch`, `clientScan` or `contentIndex`.
+**Read it before you conclude anything from an empty result** - the engines disagree about what "no
+matches" means. If the engine you asked for could not serve the query, the response says which one
+actually ran and `message` says why, rather than pretending. Two cases do that today: a query
+containing `%` or `_`, which DASL cannot escape and so cannot be pushed down without widening the
+search, and a store that will not run the search at all. Both fall back to `clientScan`.
+
+A search that Outlook started but did not finish in time comes back with `truncated: true`, the
+matches found so far, and a `message` saying so. Do not read that as the complete answer - narrow it
+with structured filters and ask again.
 
 
 ## Read past the first page

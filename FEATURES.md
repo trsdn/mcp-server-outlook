@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**9 tools with 61 operations for Outlook automation**
+**10 tools with 62 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -202,24 +202,40 @@ is composing. If the folder does not exist, `list` succeeds with an empty list a
 
 ---
 
-## Out-of-office / automatic replies (not supported)
+## Out-of-office / automatic replies Operations (1 operation)
 
-There is deliberately no OOF tool. Classic Outlook's COM object model exposes **no** property for
-reading or setting automatic replies (out-of-office): there is no member on `Application`,
-`NameSpace`, `Account` or `Store` that returns the OOF state or message. The routes that can reach
-OOF all leave pure Outlook COM:
+| Action | Description |
+|--------|-------------|
+| `get-status` | Report whether the mailbox's automatic replies (out-of-office) are currently on or off |
 
-- **EWS** — `Account.AutoDiscoverXml` yields autodiscover XML containing the EWS endpoint, but not
-  the OOF state itself. Reading or setting OOF then requires authenticated EWS
-  (`GetUserOofSettings`/`SetUserOofSettings`) calls, which are a separate protocol and credential
-  surface, not COM automation of the running client.
-- **Microsoft Graph** — `mailboxSettings/automaticRepliesSetting` exposes OOF cleanly, but Graph is
-  an HTTP API with its own auth, again outside this server's "drive the running Outlook via COM"
-  remit.
+Classic Outlook's COM object model does not expose out-of-office as a first-class property, but the
+on/off **state** is reachable as a store property. `oof get-status` reads `PR_OOF_STATE`
+(`PidTagOutOfOfficeState`, DASL tag `http://schemas.microsoft.com/mapi/proptag/0x661D000B`, a
+boolean) from `Session.DefaultStore.PropertyAccessor`. This was verified against a live
+`olPrimaryExchangeMailbox`, where the tag returns a real `System.Boolean`. On a non-Exchange
+(POP/IMAP) store the feature does not apply and the action returns `isSupported=false` rather than
+failing. In Cached Exchange mode the flag can lag the server until the next Send/Receive.
 
-Per Rule 2 this repository ships no placeholder or `NotImplementedException`. Rather than pretend,
-OOF is declined with the evidence above. If OOF support is wanted later it should be a conscious
-decision to take on an EWS or Graph dependency, tracked separately.
+The action is **strictly read-only and partial**. `PR_OOF_STATE` carries only the on/off bit. It
+does **not** carry, and Outlook COM does not otherwise expose:
+
+- the automatic-reply message bodies;
+- the separate internal-audience and external-audience replies;
+- the scheduled start/end window for a time-bounded OOF.
+
+Those facets require a route that leaves pure Outlook COM:
+
+- **EWS** — `GetUserOofSettings`/`SetUserOofSettings` return the full OOF settings including the
+  message bodies and the scheduled window, but EWS is a separate protocol and credential surface,
+  not COM automation of the running client. `Account.AutoDiscoverXml` yields only the autodiscover
+  XML (the EWS endpoint), not the OOF state.
+- **Microsoft Graph** — `mailboxSettings/automaticRepliesSetting` exposes OOF cleanly including the
+  bodies and schedule, but Graph is an HTTP API with its own auth, again outside this server's
+  "drive the running Outlook via COM" remit.
+
+Turning OOF on or off, and reading or setting the message bodies or the scheduled window, are
+therefore **declined** — they genuinely require EWS or Graph. Adding them later should be a
+conscious decision to take on that dependency, tracked separately.
 
 ---
 

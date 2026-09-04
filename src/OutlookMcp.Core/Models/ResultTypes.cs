@@ -1992,6 +1992,48 @@ public class OutlookSyncStartResult : ResultBase
 }
 
 
+
+// ── Out-of-office (automatic replies) status ─────────────────────────
+
+/// <summary>
+/// The read-only out-of-office (automatic replies) state of the default Exchange mailbox. Classic
+/// Outlook exposes only the on/off flag (the <c>PR_OOF_STATE</c> store property) through COM; the
+/// reply message text, the separate internal and external replies, and any scheduled start/end
+/// window are not reachable without EWS or Microsoft Graph. This result therefore reports the
+/// on/off state and nothing more.
+/// </summary>
+public class OutlookOofStatusResult : ResultBase
+{
+    /// <summary>
+    /// True if automatic replies are switched on, false if off, or null when the state could not be
+    /// determined or does not apply (see <see cref="IsSupported"/>).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsOutOfOfficeEnabled { get; set; }
+
+    /// <summary>
+    /// False when the default store is not an Exchange mailbox (e.g. POP/IMAP), in which case
+    /// out-of-office does not apply. This is not an error; <see cref="ResultBase.Success"/> stays true.
+    /// </summary>
+    public bool IsSupported { get; set; }
+
+    /// <summary>The display name of the default store that was inspected.</summary>
+    public string StoreDisplayName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The store type from <c>Store.ExchangeStoreType</c> (e.g. <c>olPrimaryExchangeMailbox</c>),
+    /// or <c>none</c>/<c>unknown</c> when it could not be read.
+    /// </summary>
+    public string ExchangeStoreType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Human-readable context that is not an error: for example, that only the on/off flag is
+    /// available, or that the store is not an Exchange mailbox.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Note { get; set; }
+}
+
 // ── Signature (files under %APPDATA%\Microsoft\Signatures) ───────────
 
 /// <summary>

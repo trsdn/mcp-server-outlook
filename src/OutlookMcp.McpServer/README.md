@@ -8,7 +8,7 @@ identical actions, parameters, defaults, and validation.
 
 ## Tool families
 
-9 tools, 61 operations:
+10 tools, 62 operations:
 
 | Tool | Operations |
 |---|---|
@@ -21,6 +21,7 @@ identical actions, parameters, defaults, and validation.
 | `application` | 3 |
 | `sync` | 2 |
 | `signature` | 2 |
+| `oof` | 1 |
 
 See [FEATURES.md](../../FEATURES.md) for the full action list.
 

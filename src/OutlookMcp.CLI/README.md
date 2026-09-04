@@ -8,7 +8,7 @@ parameters, defaults, and validation.
 
 ## Surface
 
-9 tools, 61 actions:
+10 tools, 62 actions:
 
 | Tool | Actions |
 |---|---|
@@ -21,6 +21,7 @@ parameters, defaults, and validation.
 | `application` | `get-status`, `get-active-explorer`, `get-active-inspector` |
 | `sync` | `list-groups`, `send-receive` |
 | `signature` | `list`, `read` |
+| `oof` | `get-status` |
 
 See [FEATURES.md](../../FEATURES.md) for descriptions.
 

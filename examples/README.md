@@ -23,7 +23,7 @@ environment before anything else.
 
 ## CLI usage
 
-The CLI exposes the same 9 tools and 61 actions as the MCP server, with the same parameters:
+The CLI exposes the same 10 tools and 62 actions as the MCP server, with the same parameters:
 
 ```powershell
 outlookcli application get-status

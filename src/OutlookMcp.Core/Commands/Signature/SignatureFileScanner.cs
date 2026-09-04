@@ -80,6 +80,21 @@ public static class SignatureFileScanner
             return null;
         }
 
+        // Security: a signature name is a bare file base name and nothing more. Reject anything that
+        // could escape the signatures folder before it ever reaches the filesystem. This matters
+        // because this server reads e-mail, and an MCP client can be fed untrusted content from a
+        // message body; without this guard a crafted signatureName is a path to an arbitrary
+        // .htm/.html/.txt/.rtf file read.
+        //   - A ROOTED name is the nastiest case: Path.Combine(base, rooted) discards base entirely
+        //     and returns the rooted path, so "C:\some\secret" would read C:\some\secret.txt.
+        //   - A name containing a directory separator (e.g. "..\..\etc") enables classic traversal.
+        if (Path.IsPathRooted(name) ||
+            name.Contains(Path.DirectorySeparatorChar) ||
+            name.Contains(Path.AltDirectorySeparatorChar))
+        {
+            return null;
+        }
+
         var extensions = format switch
         {
             "html" => new[] { ".htm", ".html" },
@@ -88,9 +103,23 @@ public static class SignatureFileScanner
             _ => System.Array.Empty<string>()
         };
 
+        // Canonicalise the folder once so the candidate can be verified to live directly under it.
+        string folderFull = Path.GetFullPath(folderPath);
+        string folderPrefix = folderFull.EndsWith(Path.DirectorySeparatorChar)
+            ? folderFull
+            : folderFull + Path.DirectorySeparatorChar;
+
         foreach (var extension in extensions)
         {
-            var candidate = Path.Combine(folderPath, name + extension);
+            string candidate = Path.GetFullPath(Path.Combine(folderFull, name + extension));
+
+            // Belt-and-braces: even if some exotic name slipped past the checks above, the resolved
+            // path must still sit inside the signatures folder, or it is refused.
+            if (!candidate.StartsWith(folderPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (File.Exists(candidate))
             {
                 return candidate;

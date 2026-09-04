@@ -115,4 +115,29 @@ public class SignatureCommandsTests : IDisposable
         Assert.False(result.Success);
         Assert.NotNull(result.ErrorMessage);
     }
+
+    [Fact]
+    public void ReadSignature_RootedName_DoesNotEscapeTheSignaturesFolder()
+    {
+        // Prove the command does not read a file outside the signatures folder via a rooted name
+        // (Path.Combine would otherwise honour the rooted path and discard the base folder).
+        var outsideDir = Path.Combine(
+            AppContext.BaseDirectory, "sig-command-outside", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outsideDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(outsideDir, "secret.txt"), "top secret");
+            var rootedName = Path.Combine(outsideDir, "secret");
+
+            var result = new SignatureCommands(_folder).ReadSignature(rootedName, "text");
+
+            Assert.False(result.Success);
+            Assert.Null(result.Content);
+            Assert.DoesNotContain("top secret", result.Content ?? string.Empty);
+        }
+        finally
+        {
+            Directory.Delete(outsideDir, recursive: true);
+        }
+    }
 }

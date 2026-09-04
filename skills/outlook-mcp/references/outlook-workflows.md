@@ -674,10 +674,17 @@ and fails, listing the available formats, if you ask for one that signature does
 user has no signatures the folder may not exist, and `list` returns an empty list with
 `folderExists=false` rather than an error.
 
-## Out-of-office is not available
+## Out-of-office status is read-only and partial
 
-There is no automatic-replies / out-of-office action, by deliberate decision. Classic Outlook's COM
-object model exposes no property for reading or setting OOF; reaching it requires EWS or Microsoft
-Graph, which are separate protocols outside this server's "automate the running Outlook via COM"
-remit. If a user asks to check or set their out-of-office, tell them plainly that it is not
-supported here and why, rather than attempting a workaround.
+`oof get-status` reports whether the mailbox's automatic replies are currently **on or off**, and
+nothing more. It reads the `PR_OOF_STATE` store property through `Store.PropertyAccessor`, which is
+the only out-of-office facet classic Outlook exposes through COM. On a non-Exchange (POP/IMAP) store
+it returns `isSupported=false` rather than failing; in Cached Exchange mode the flag can lag the
+server until the next `sync send-receive`.
+
+What it deliberately does **not** do: it cannot turn OOF on or off, and it cannot read or set the
+reply message text, the separate internal and external replies, or a scheduled start/end window.
+Those require EWS or Microsoft Graph, which are separate protocols outside this server's "automate
+the running Outlook via COM" remit. If a user asks to change their out-of-office, or to see the
+reply message or its schedule, tell them plainly that only the on/off status is available here and
+why, rather than attempting a workaround.

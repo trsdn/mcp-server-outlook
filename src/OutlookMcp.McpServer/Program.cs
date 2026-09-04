@@ -70,6 +70,7 @@ public class Program
         typeof(OutlookMcp.McpServer.Tools.OutlookTaskTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookSyncTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookSignatureTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookOofTool),
     };
 
     public static async Task<int> Main(string[] args)
@@ -139,7 +140,7 @@ public class Program
                 options.ServerInstructions = """
                     OutlookMcp automates classic Outlook for Windows desktop via COM. It exposes
                     these tools: application, folder, mail, calendar, contact, task, attachment,
-                    sync, and signature.
+                    sync, signature, and oof.
 
                     Identity model: Outlook items are addressed by entryId (optionally paired with
                     storeId for multi-store mailboxes), not by a file path or session handle. There

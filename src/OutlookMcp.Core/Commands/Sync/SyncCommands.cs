@@ -64,6 +64,17 @@ public class SyncCommands : ISyncCommands
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public OutlookSyncStartResult SendReceive(string? groupName = null)
     {
+        bool targetSpecificGroup = !string.IsNullOrWhiteSpace(groupName);
+
+        // Declared out here so the onException delegate can still report which groups were already
+        // started if a later group throws mid-loop. Start() is asynchronous and fire-and-forget, so
+        // by the time an exception surfaces the earlier groups are genuinely running; a failure result
+        // that claimed nothing started would deny side effects that have happened and could invite a
+        // retry that double-flushes the Outbox. (Rule 1b: we do NOT catch inside the action lambda to
+        // build an error result — we let the exception reach onException, which reads this state.)
+        var started = new List<string>();
+        string connectionMode = "unknown";
+
         return OutlookInteropRunner.Execute(
             "OutlookSyncSendReceive",
             (application, session) =>
@@ -71,25 +82,10 @@ public class SyncCommands : ISyncCommands
                 Outlook.SyncObjects? syncObjects = null;
                 try
                 {
-                    string connectionMode = GetConnectionMode(session, out _);
+                    connectionMode = GetConnectionMode(session, out _);
 
                     syncObjects = session.SyncObjects;
                     int count = syncObjects?.Count ?? 0;
-
-                    if (count == 0)
-                    {
-                        // Nothing to synchronise. Not an error: report it plainly so an Online-mode
-                        // caller is not misled into thinking a sync happened.
-                        return new OutlookSyncStartResult
-                        {
-                            Success = true,
-                            Started = false,
-                            ExchangeConnectionMode = connectionMode,
-                            Note = "No Send/Receive groups are defined in this profile, so there is "
-                                + "nothing to synchronise. This is normal for a pure Online (non-cached) "
-                                + "Exchange connection."
-                        };
-                    }
 
                     // Collect the names first so an unknown-group error can list what is available
                     // without starting anything.
@@ -108,9 +104,42 @@ public class SyncCommands : ISyncCommands
                         }
                     }
 
-                    var started = new List<string>();
-                    bool targetSpecificGroup = !string.IsNullOrWhiteSpace(groupName);
-                    bool matchedRequested = false;
+                    // Validate a requested group BEFORE the empty-collection shortcut. A named group
+                    // that does not exist is an error regardless of how many groups the profile has —
+                    // including zero. Doing this first stops "send-receive <unknown>" from spuriously
+                    // succeeding on a profile that exposes no Send/Receive groups.
+                    if (targetSpecificGroup &&
+                        !available.Any(n => string.Equals(n, groupName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return new OutlookSyncStartResult
+                        {
+                            Success = false,
+                            Started = false,
+                            ExchangeConnectionMode = connectionMode,
+                            ErrorMessage = available.Count == 0
+                                ? $"No Send/Receive group named '{groupName}' was found; this profile has "
+                                    + "no Send/Receive groups (this is normal for a pure Online, non-cached "
+                                    + "Exchange connection)."
+                                : $"No Send/Receive group named '{groupName}' was found. "
+                                    + $"Available groups: {string.Join(", ", available)}."
+                        };
+                    }
+
+                    if (count == 0)
+                    {
+                        // No group was requested and none exist. Nothing to synchronise. Not an error:
+                        // report it plainly so an Online-mode caller is not misled into thinking a sync
+                        // happened.
+                        return new OutlookSyncStartResult
+                        {
+                            Success = true,
+                            Started = false,
+                            ExchangeConnectionMode = connectionMode,
+                            Note = "No Send/Receive groups are defined in this profile, so there is "
+                                + "nothing to synchronise. This is normal for a pure Online (non-cached) "
+                                + "Exchange connection."
+                        };
+                    }
 
                     for (int i = 1; i <= count; i++)
                     {
@@ -126,8 +155,6 @@ public class SyncCommands : ISyncCommands
                                 continue;
                             }
 
-                            matchedRequested = true;
-
                             // Start() is asynchronous: it returns immediately and Outlook performs the
                             // synchronisation on a background thread. We deliberately do NOT wait on the
                             // SyncStart/Progress/SyncEnd events, because the only thread we could wait on
@@ -140,18 +167,6 @@ public class SyncCommands : ISyncCommands
                         {
                             OutlookInteropRunner.ReleaseComObject(ref syncObject);
                         }
-                    }
-
-                    if (targetSpecificGroup && !matchedRequested)
-                    {
-                        return new OutlookSyncStartResult
-                        {
-                            Success = false,
-                            Started = false,
-                            ExchangeConnectionMode = connectionMode,
-                            ErrorMessage = $"No Send/Receive group named '{groupName}' was found. "
-                                + $"Available groups: {string.Join(", ", available)}."
-                        };
                     }
 
                     return new OutlookSyncStartResult
@@ -172,8 +187,14 @@ public class SyncCommands : ISyncCommands
             ex => new OutlookSyncStartResult
             {
                 Success = false,
-                Started = false,
-                ErrorMessage = $"Failed to start Outlook Send/Receive: {ex.Message}"
+                // Report the groups that were already started before the failure. They are running
+                // asynchronously and cannot be un-started; hiding them would invite a double-flush retry.
+                Started = started.Count > 0,
+                StartedGroups = started,
+                ExchangeConnectionMode = connectionMode,
+                ErrorMessage = started.Count > 0
+                    ? $"Send/Receive partially started ({string.Join(", ", started)}) before failing: {ex.Message}"
+                    : $"Failed to start Outlook Send/Receive: {ex.Message}"
             });
     }
 

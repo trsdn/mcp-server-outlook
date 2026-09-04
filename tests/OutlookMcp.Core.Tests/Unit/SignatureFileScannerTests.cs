@@ -130,4 +130,60 @@ public class SignatureFileScannerTests : IDisposable
 
         Assert.Null(resolved);
     }
+
+    [Fact]
+    public void ResolveSignatureFile_RootedName_IsRefused()
+    {
+        // A rooted second argument makes Path.Combine discard the signatures folder entirely, so a
+        // naive resolver would read a file anywhere on disk. Create a real target OUTSIDE the folder
+        // and prove it is NOT returned.
+        var outsideDir = Path.Combine(
+            AppContext.BaseDirectory, "sig-scanner-outside", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outsideDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(outsideDir, "secret.txt"), "top secret");
+            var rootedName = Path.Combine(outsideDir, "secret"); // rooted, extension appended by resolver
+
+            var resolved = SignatureFileScanner.ResolveSignatureFile(_folder, rootedName, "text");
+
+            Assert.Null(resolved);
+        }
+        finally
+        {
+            Directory.Delete(outsideDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveSignatureFile_TraversalName_IsRefused()
+    {
+        // Put a real file one level above the signatures folder and try to reach it with "..\".
+        var parent = Directory.GetParent(_folder)!.FullName;
+        var escape = Path.Combine(parent, "escape.txt");
+        File.WriteAllText(escape, "x");
+        try
+        {
+            var resolved = SignatureFileScanner.ResolveSignatureFile(
+                _folder, ".." + Path.DirectorySeparatorChar + "escape", "text");
+
+            Assert.Null(resolved);
+        }
+        finally
+        {
+            File.Delete(escape);
+        }
+    }
+
+    [Fact]
+    public void ResolveSignatureFile_SeparatorInName_IsRefused()
+    {
+        Directory.CreateDirectory(Path.Combine(_folder, "sub"));
+        File.WriteAllText(Path.Combine(_folder, "sub", "inner.txt"), "x");
+
+        var resolved = SignatureFileScanner.ResolveSignatureFile(
+            _folder, "sub" + Path.DirectorySeparatorChar + "inner", "text");
+
+        Assert.Null(resolved);
+    }
 }

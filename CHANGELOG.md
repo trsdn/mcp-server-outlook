@@ -43,8 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **BREAKING (Core API only): `folder delete`, `attachment remove` and
-  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
+- **BREAKING (Core API only): `folder delete`, `attachment remove` and  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
   that relied on an unconfirmed call succeeding must add `confirm: true` (CLI: `--confirm`; MCP:
   `"confirm": true`). No action was removed and no parameter was renamed, so the operation count is
   unchanged at 7 tools / 57 operations.
@@ -139,6 +138,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sent - not the Drafts folder.
 
 ### Fixed
+
+- **The Deleted Items walk no longer final-releases the shared `NameSpace`** (#9, #19). The walk
+  added above stops at a store root, whose `Parent` is the `NameSpace` rather than a folder - and
+  the CLR caches exactly one `NameSpace` RCW per process, the same instance
+  `OutlookInteropRunner.Execute` holds as `session`. Final-releasing it detached it for every holder
+  in the process, so the remainder of that operation would have been left with a disconnected RCW.
+  It reached the store root on every *ungated* delete, which is the common path.
+
+  Verified live rather than inferred: `inbox.Parent.Parent` is reference-identical to
+  `GetNamespace("MAPI")`, and final-releasing it makes the next `session.GetDefaultFolder` throw
+  `InvalidComObjectException`. Nothing misbehaved yet only because no call site reads `session`
+  after the gate - a latent fault that the first one to do so would have turned into "COM object
+  that has been separated from its underlying RCW cannot be used" on every ordinary delete.
+  `TryGetParentFolder` now uses `ReleaseSharedComObject`: #19's rule applied to the `NameSpace`
+  rather than the `Application`, and the same defect as #116 in a new place.
 
 - **The test suite intermittently crashed the test host** (#116). Thirteen sites across ten
   integration test files released the shared `Outlook.Application` with

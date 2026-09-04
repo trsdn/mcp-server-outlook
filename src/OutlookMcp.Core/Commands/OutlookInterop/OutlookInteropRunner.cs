@@ -730,7 +730,13 @@ internal static class OutlookInteropRunner
         }
         finally
         {
-            ReleaseComObject(ref parent);
+            // ReleaseSharedComObject, not ReleaseComObject. A store root's parent is the NameSpace,
+            // and the CLR caches exactly one RCW for it per process - the same instance Execute is
+            // holding as `session` and will release itself. Final-releasing it here would detach it
+            // for every holder in the process, so the rest of this very operation would get a
+            // disconnected RCW. That is #19's rule applied to the NameSpace rather than the
+            // Application; a plain decrement leaves other holders intact.
+            ReleaseSharedComObject(ref parent);
         }
     }
 

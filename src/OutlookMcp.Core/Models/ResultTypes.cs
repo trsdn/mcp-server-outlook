@@ -668,6 +668,22 @@ public class MailListResult : ResultBase
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; set; }
 
+    /// <summary>
+    /// How the rows in <see cref="Messages"/> were built: <c>table</c> (projected from an Outlook
+    /// <c>Table</c> rowset, without opening any message) or <c>item</c> (each message opened and
+    /// read).
+    ///
+    /// <para>
+    /// Reported because the two projections do not carry identical fields, and a caller must not have
+    /// to infer which one answered from a field's absence. The table projection is roughly twenty
+    /// times faster and is used whenever nothing in the request needs a message body; it cannot
+    /// supply <c>bodyPreview</c> or an exact <c>attachmentCount</c>, so those are absent rather than
+    /// invented. See #27.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Projection { get; set; }
+
     public List<MailSummaryInfo> Messages { get; set; } = [];
 }
 
@@ -859,7 +875,32 @@ public class MailSummaryInfo
     public bool Unread { get; set; }
     public bool IsDraft { get; set; }
     public int Importance { get; set; }
-    public int AttachmentCount { get; set; }
+
+    /// <summary>
+    /// True when the message carries at least one attachment.
+    ///
+    /// <para>
+    /// Always populated, on every projection, which is why it exists. <see cref="AttachmentCount"/>
+    /// is only available when a listing hydrated each message, and a caller that read a missing count
+    /// as "no attachments" would be confidently wrong about the one thing it asked. See #27.
+    /// </para>
+    /// </summary>
+    public bool HasAttachment { get; set; }
+
+    /// <summary>
+    /// Exact number of attachments, or <see langword="null"/> when this listing did not open each
+    /// message and therefore cannot count them.
+    ///
+    /// <para>
+    /// A folder listing is projected from an Outlook <c>Table</c>, a rowset that reports
+    /// <i>whether</i> a message has attachments but not how many. Reporting <c>0</c> there would be a
+    /// silent lie, so the field is absent instead and <see cref="HasAttachment"/> answers the
+    /// question the rowset can actually answer. Ask for <c>includeBodyPreview</c>, or use
+    /// <c>mail.read</c> / <c>attachment.list</c>, when the exact count matters. See #27.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AttachmentCount { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public DateTimeOffset? ReceivedTime { get; set; }

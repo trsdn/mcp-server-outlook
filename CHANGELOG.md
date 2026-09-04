@@ -8,6 +8,116 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`mail.search` is answered by `Application.AdvancedSearch`** (#13, #27): a new `advancedSearch`
+  engine, and the **default** whenever a free-text `query` is present. `Items.Restrict` cannot filter
+  on `Body` at all, so a body match previously meant opening every candidate message here and giving
+  up at a scan limit - and in a large folder that limit is not a performance detail, because a match
+  past it was reported to the caller as "no such mail". Outlook now runs the same substring question
+  itself, over the whole folder, with no client-side scan and no horizon.
+
+  `searchMode` is now `advancedSearch` (default), `clientScan` or `fullText`; the previous two keep
+  their exact meanings and `searchEngine` on every response says which one actually ran. Substring
+  semantics are preserved deliberately - the filter uses `LIKE`, not `ci_phrasematch`, because
+  swapping in the content index would have silently stopped finding every mid-word match while still
+  reporting success.
+
+  **How the asynchronous completion is handled.** `AdvancedSearch` is the only asynchronous call this
+  server makes: it returns a `Search` object before the results exist and signals completion by
+  raising `AdvancedSearchComplete` on the apartment that registered the handler - the single
+  process-wide STA dispatcher thread (ADR-002). Out-of-process COM events reach an STA as window
+  messages, and that thread blocks on its work-item channel rather than pumping, so waiting for the
+  event on it would block the very thread the event has to be delivered on until the operation
+  timeout expired. A new `StaMessagePump` pumps the queue while waiting. It cannot re-enter another
+  Outlook operation, because the dispatcher's queue is a `Channel` and not a window message queue -
+  draining window messages delivers Outlook's callbacks and nothing else, and the next work item
+  stays queued behind the current one. The handler is matched on the search's `Tag` (Outlook raises
+  the event for every search in the process, including one a person started in the Outlook window)
+  and unhooked in a `finally`, since a sink left on the shared `Application` would fire into a dead
+  closure for the life of the process. Measured: a 2,400-item folder completed in 2.7 seconds with an
+  explicit pump against 8.2 with managed waits, which is the second reason not to rely on the CLR's
+  implicit STA pumping.
+
+  The wait is bounded at 60 seconds, far inside the dispatcher's own five-minute timeout, so a slow
+  search degrades into a described partial answer rather than wedging the dispatcher. A search that
+  ran but did not finish returns its matches with `truncated: true` and a message saying the set is
+  partial - and deliberately no `nextCursor`, which would imply a completeness the search never
+  established. A search Outlook refuses to run at all, or a query carrying a `%` or `_` that DASL has
+  no `ESCAPE` clause for, falls back to `clientScan` and says so rather than running a quietly
+  widened search under the same label.
+
+### Changed
+
+- **`mail.list` and `mail.search` are projected from an Outlook table rowset** (#27, #13): an
+  ordinary listing no longer opens a `MailItem` per result. Measured on the reference mailbox,
+  fifteen rows went from about 8 seconds to under 1. Same messages, same order, same paging,
+  `truncated` / `hasMore` / `nextCursor` and every filter unchanged.
+
+  Two fields cannot come from a rowset, and both are reported rather than invented:
+
+  - `attachmentCount` is now **absent** on the fast path instead of being reported as `0`, and a new
+    `hasAttachment` boolean is always present. A rowset knows whether a message has attachments, not
+    how many; reporting `0` for a message with three, under `success: true`, is the failure mode this
+    change was specifically shaped to avoid. Pass `includeBodyPreview: true`, or use `mail.read` /
+    `attachment.list`, when the exact count matters.
+  - `bodyPreview` still requires `includeBodyPreview`, which forces the message to be opened.
+
+  Every response now reports `projection` (`table` or `item`) so a caller never has to infer which
+  one answered from a field's absence. A free-text `query` in the default `clientScan` mode still
+  opens each candidate, because a rowset cannot read a message body - so search lost nothing.
+
+  Three things were established against a live mailbox rather than assumed, each of which would
+  otherwise have shipped a listing that looked correct and was not:
+
+  - **The table's `EntryID` column is not the entry id the rest of the surface uses.** It returns the
+    provider's short-term id (24 bytes) while `MailItem.EntryID` returns the long-term one (70
+    bytes). Both resolve through `GetItemFromID`, which is what makes it dangerous - the listing works
+    perfectly while handing back ids that never compare equal to the ones `mail.read` and
+    `get-conversation` report. The long-term id is now taken from `PR_LONGTERM_ENTRYID_FROM_TABLE`
+    (`0x66700102`), verified byte-for-byte equal. A store that does not publish it falls back to
+    opening items rather than returning ids that do not match.
+  - **DASL date tags return UTC; the Outlook property names return local wall clock.** Using
+    `urn:schemas:httpmail:datereceived` would have shifted every timestamp by the machine's UTC offset
+    and silently corrupted the paging cursor, which is a keyset walk over exactly that value.
+  - **Categories cannot be read through the DASL keywords property at all** (`Columns.Add` refuses
+    it), but the Outlook name `Categories` returns the same string `MailItem.Categories` does. A
+    column that can be *added* is not thereby a column that returns data.
+
+### Fixed
+
+- **Paging over messages that share a received time no longer loops forever** (#135): the cursor
+  excludes already-served messages by identity rather than by timestamp, which is only correct if it
+  carries every id served at that instant across every page that shared it. Both listing paths
+  accumulated those ids in a list local to a single call and cleared it the moment the frontier
+  timestamp was first seen - which on a resumed page is immediately - so each cursor forgot the
+  previous page's ids. With three messages sharing an instant and a page size of one, the walk went
+  A, B, A, B, … forever: the third message was never reached, `hasMore` never went false, and every
+  individual response was well-formed and reported success, so a caller looping until the cursor ran
+  out did not terminate.
+
+  Pre-existing in the item path, and faithfully reproduced by the rowset path above, so it briefly
+  existed twice. Both now share one `MailPageBoundary` - a second copy of this reasoning is what
+  produced the defect in the first place. The regression test drives the exact A/B/C walk and fails
+  against the previous accumulation, returning `["A", "B", "A", "B", "A", …]`.
+
+  It is tested directly rather than through a folder, and the reason is the trap that let it survive:
+  three messages must share a received time **to the tick**, which cannot be arranged in a real
+  mailbox. A draft a test creates takes its own creation instant, so a folder-based test compares
+  *distinct* timestamps, never enters the tied band, and passes green having executed none of the
+  logic under test.
+
+- **`Table.Columns` is released** (#27): `MailTableProjection.Configure` dereferenced the COM
+  `Columns` collection once per projected column and never released any of them - nineteen leaked
+  RCWs on the hottest path in a long-lived server process. `scripts/check-com-leaks.ps1` reported the
+  file clean because it never examined it at all (#136).
+
+- **An unsent draft no longer reports being sent in the year 4501** (#27): `mail.read`, `mail.list`
+  and `mail.search` passed Outlook's "no date" sentinel straight through as `sentOn`. It looks like an
+  ordinary date, so a caller sorting or filtering by it was acting on a fabricated value rather than
+  merely missing one. The sentinel was already stripped from flag and task due dates; the same rule
+  now applies to message dates. Found by the projection-parity test, not by inspection.
+
+### Added
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the

@@ -31,31 +31,39 @@ mail.list(folder: <inbox>, subjectContains: "invoice", hasAttachment: true)
 Dates are ISO 8601 (`2024-03-07` or `2024-03-07T14:30`). A bare date means local midnight. All the
 filters combine with AND.
 
-`query` is different: it is a free-text match over subject, sender and the **full** body, applied
-after the structured filters. By default it is exhaustive rather than indexed, so it will not miss a
-term buried deep in a long message - but reaching the body means opening every candidate item, which
-is slow, and the scan stops at a safety limit. Pair `query` with structured filters whenever you can:
-they decide how many items have to be opened.
+`query` is different: it is a free-text match over subject, sender, recipients and the **full** body,
+applied after the structured filters. Pair `query` with structured filters whenever you can: they
+decide how much Outlook has to look at.
 
-### Two search engines, and why the response says which one answered
+### Three search engines, and why the response says which one answered
 
 `mail.search` takes `searchMode`:
 
-- `clientScan` (**default**) - each candidate is opened and checked. **Substring** matching, so `foo`
-  matches inside `foobar`. Exact, but bounded: in a folder larger than the scan limit a genuine match
-  further back is never reached.
+- `advancedSearch` (**default**) - Outlook runs the search itself, over subject, sender, recipients
+  and body. **Substring** matching, so `foo` matches inside `foobar`. Nothing is opened by this
+  server and there is **no scan horizon**, so a match arbitrarily far back in a large folder is still
+  found.
+- `clientScan` - each candidate is opened here and checked. **Substring** matching, exact, but
+  **bounded**: in a folder larger than the scan limit a genuine match further back is never reached
+  and comes back as "no such mail".
 - `fullText` - Outlook's content index answers the query. **Whole-word** matching, so `foo` matches
-  "a foo arrived" but *not* `foobar`. Nothing is opened client-side and there is no scan horizon, so
-  it finds matches arbitrarily far back.
+  "a foo arrived" but *not* `foobar`. No scan horizon.
 
-These are different questions, not fast and slow versions of the same one. Use `fullText` for a large
-folder or a term you expect to be a real word; use the default when you need substring matching or a
-short, exact answer.
+These are different questions, not fast and slow versions of the same one. The default is the one to
+want in almost every case: it answers the same question `clientScan` does, without the horizon. Use
+`fullText` when whole-word matching is what you actually mean. Use `clientScan` only when you need
+this server to do the matching itself.
 
-Every search response reports `searchEngine` as `clientScan` or `contentIndex`. **Read it before you
-conclude anything from an empty result** - the two engines disagree about what "no matches" means. If
-you asked for `fullText` and the store could not serve it, `searchEngine` comes back `clientScan` and
-`message` says why, rather than the tool pretending the index answered.
+Every search response reports `searchEngine` as `advancedSearch`, `clientScan` or `contentIndex`.
+**Read it before you conclude anything from an empty result** - the engines disagree about what "no
+matches" means. If the engine you asked for could not serve the query, the response says which one
+actually ran and `message` says why, rather than pretending. Two cases do that today: a query
+containing `%` or `_`, which DASL cannot escape and so cannot be pushed down without widening the
+search, and a store that will not run the search at all. Both fall back to `clientScan`.
+
+A search that Outlook started but did not finish in time comes back with `truncated: true`, the
+matches found so far, and a `message` saying so. Do not read that as the complete answer - narrow it
+with structured filters and ask again.
 
 
 ## Read past the first page
@@ -82,6 +90,30 @@ Two rules make this safe:
 Do not try to build your own paging out of `receivedBefore`. Results are ordered by `receivedTime`
 descending (`sortedBy` and `sortDirection` say so explicitly), and the cursor already handles
 messages that share a received time; a hand-rolled date window silently drops them.
+
+## A listing does not open the messages, and says so
+
+Every `mail.list` / `mail.search` response reports `projection`:
+
+- `table` - the rows were read straight out of an Outlook rowset. Nothing was opened, which is why
+  an ordinary listing is roughly twenty times faster than it used to be.
+- `item` - each message was opened and read. This happens when the request needs a message body:
+  `includeBodyPreview: true`, or a `query` in the default `clientScan` mode.
+
+The two carry the same fields with two exceptions, and the exceptions are reported rather than
+guessed at:
+
+- **`hasAttachment` is always present.** Use it.
+- **`attachmentCount` is only present on the `item` projection.** A rowset knows *whether* a message
+  has attachments, never how many, so on a `table` projection the field is **absent** rather than
+  reported as `0`. Never read a missing `attachmentCount` as "no attachments" - that is what
+  `hasAttachment` is for. When you genuinely need the number, use `attachment.list`, `mail.read`, or
+  pass `includeBodyPreview: true`.
+- **`bodyPreview` likewise only comes back when you asked for it**, which is what forces the `item`
+  projection in the first place.
+
+If a store cannot serve a listing from a rowset, the call still succeeds on the `item` projection and
+`message` explains that it was slower. The results are the same either way.
 
 ## Not everything in a folder is a message
 
@@ -570,6 +602,9 @@ task with no `dueDate` simply has no `dueDate` field - it does not have a due da
 century. If you ever see a 4501 date reach a user, that is a bug worth reporting, not a real date.
 Do not invent a due date for a task that has none: "no due date" is a normal and common state. On the
 mailbox this was built against, 260 of 274 tasks had no due date at all.
+
+The same sentinel is stripped from message dates: an unsent draft has no `sentOn` field at all rather
+than one claiming it was sent in 4501.
 
 **Most tasks in a real folder are already finished**, so `list` omits completed ones by default. That
 is a filter, and it is reported: `completedItemCount` says how many were hidden and

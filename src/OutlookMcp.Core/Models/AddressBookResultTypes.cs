@@ -225,4 +225,11 @@ public class AddressBookEntryInfo
     public string? EntryType { get; set; }
 
     public bool IsDistributionList { get; set; }
+
+    /// <summary>
+    /// Properties Outlook's Object Model Guard refused for this entry, by name. An empty list
+    /// means nothing was blocked; a name here means the value is missing because it was denied,
+    /// not because the directory does not hold it.
+    /// </summary>
+    public List<string> AccessDenied { get; set; } = [];
 }

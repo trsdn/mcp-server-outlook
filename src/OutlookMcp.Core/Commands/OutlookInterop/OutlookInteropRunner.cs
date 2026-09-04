@@ -268,28 +268,27 @@ internal static class OutlookInteropRunner
 
     /// <summary>
     /// Identifies COMExceptions consistent with an Outlook Object Model Guard (OMG) denial: a
-    /// dismissed or unanswered "an application is trying to..." security prompt.
+    /// dismissed or unanswered "an application is trying to..." security prompt. OMG-triggered
+    /// failures surface as <c>E_ABORT</c> (0x80004004, "Operation aborted") from the Outlook
+    /// automation surface, since OMG aborts the call rather than returning a normal error result.
+    /// This is a heuristic (Outlook does not expose a dedicated "OMG denied" HRESULT) but is
+    /// specific enough in practice to distinguish from generic COM failures. See #30.
     ///
     /// <para>
-    /// Two HRESULTs are treated as a denial. <c>E_ABORT</c> (0x80004004) is what the automation
-    /// surface returns when the guard aborts an in-flight call rather than returning a normal error
-    /// result. <c>MAPI_E_NOT_SUPPORTED</c> (0x80040102) is what Microsoft documents the guard
-    /// returning when it refuses a protected member outright - which is the shape the address book
-    /// and recipient surface hits, since <c>Recipient</c> is protected in its entirety (#15).
-    /// </para>
-    ///
-    /// <para>
-    /// This is a heuristic: Outlook exposes no dedicated "OMG denied" HRESULT. Note in particular
-    /// that <c>PropertyAccessor</c> also returns <c>MAPI_E_NOT_SUPPORTED</c> for a property type it
-    /// genuinely cannot handle (<c>PT_OBJECT</c>), so code reading arbitrary MAPI properties must
-    /// triage that case itself rather than relying on this. See #30.
+    /// Deliberately <em>not</em> widened to <c>MAPI_E_NOT_SUPPORTED</c> (0x80040102). Microsoft
+    /// documents the guard returning that HRESULT for a protected member refused outright, but it
+    /// is also the ordinary MAPI "this provider, store or property type does not support that"
+    /// error - <c>PropertyAccessor</c> returns it for a <c>PT_OBJECT</c> property, and a computed
+    /// user property returns it when it cannot be evaluated. Treating it as a denial here would
+    /// make every such failure tell the caller to look for a security dialog that does not exist.
+    /// Code that needs the distinction should triage the HRESULT itself and report the ambiguity
+    /// rather than resolving it - see <c>PropertyCommands.ReadProperty</c>.
     /// </para>
     /// </summary>
     internal static bool IsObjectModelGuardDenial(COMException ex)
     {
         const int E_ABORT = unchecked((int)0x80004004);
-        const int MAPI_E_NOT_SUPPORTED = unchecked((int)0x80040102);
-        return ex.HResult is E_ABORT or MAPI_E_NOT_SUPPORTED;
+        return ex.HResult == E_ABORT;
     }
 
     private static Outlook.MAPIFolder? FindFolderByPath(Outlook.NameSpace session, string folderPath)

@@ -523,6 +523,7 @@ public class AddressBookCommands : IAddressBookCommands
 
         info.SmtpAddress = resolved.SmtpAddress;
         info.SmtpAddressSource = resolved.SmtpAddressSource;
+        info.AccessDenied = denied;
         return info;
     }
 
@@ -617,37 +618,51 @@ public class AddressBookCommands : IAddressBookCommands
 
             Outlook.AddressList? fallback = null;
 
-            for (int index = 1; index <= count; index++)
+            try
             {
-                Outlook.AddressList? list = null;
-                bool keep = false;
-
-                try
+                for (int index = 1; index <= count; index++)
                 {
-                    list = lists[index];
+                    Outlook.AddressList? list = null;
+                    bool keep = false;
 
-                    if (Matches(list, requested))
+                    try
                     {
-                        keep = true;
-                        return list;
+                        list = lists[index];
+
+                        if (Matches(list, requested))
+                        {
+                            keep = true;
+                            return list;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(requested) && index == 1)
+                        {
+                            // The first book stands in for "no book is marked as the initial one",
+                            // which some profiles are. It is held rather than released, and the
+                            // outer finally lets it go again if a later book turns out to match.
+                            keep = true;
+                            fallback = list;
+                        }
                     }
-
-                    if (fallback == null && string.IsNullOrWhiteSpace(requested) && index == 1)
+                    finally
                     {
-                        keep = true;
-                        fallback = list;
+                        if (!keep)
+                        {
+                            OutlookInteropRunner.ReleaseComObject(ref list);
+                        }
                     }
                 }
-                finally
-                {
-                    if (!keep)
-                    {
-                        OutlookInteropRunner.ReleaseComObject(ref list);
-                    }
-                }
+
+                Outlook.AddressList? matched = fallback;
+                fallback = null;
+                return matched;
             }
-
-            return fallback;
+            finally
+            {
+                // Non-null only when an earlier iteration parked the first book and a later one
+                // matched, in which case the parked book is nobody's to release but ours.
+                OutlookInteropRunner.ReleaseComObject(ref fallback);
+            }
         }
         finally
         {
@@ -770,8 +785,7 @@ public class AddressBookCommands : IAddressBookCommands
             return false;
         }
 
-        if (value.StartsWith("/o=", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("/O=", StringComparison.Ordinal))
+        if (value.StartsWith("/o=", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

@@ -46,15 +46,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   answer, and a property refused while the rest of the call succeeded is named in `accessDenied` so a
   missing value is never confused with a value the directory does not hold.
 
-### Changed
-
-- **Object Model Guard denials are now recognised by `MAPI_E_NOT_SUPPORTED` as well as `E_ABORT`.**
-  `OutlookInteropRunner.IsObjectModelGuardDenial` only tested `E_ABORT` (0x80004004), which is what
-  the guard returns when it aborts a call in flight. Microsoft documents 0x80040102 for a protected
-  member refused outright, which is the shape the recipient and address book surface hits, and which
-  previously fell through to a generic COM failure. Note that `PropertyAccessor` also returns
-  `MAPI_E_NOT_SUPPORTED` for a property type it genuinely cannot handle, so code reading arbitrary
-  MAPI properties has to triage that case itself.
+  `IsObjectModelGuardDenial` was deliberately left testing `E_ABORT` only. Microsoft documents the
+  guard returning `MAPI_E_NOT_SUPPORTED` (0x80040102) for a protected member refused outright, so
+  widening it was tried - and reverted, because 0x80040102 is also the ordinary MAPI "this provider
+  or property type does not support that" error. Treating it as a denial would make every such
+  failure across the existing mail and folder surface tell the caller to look for a security dialog
+  that does not exist.
 
 ### Added
 

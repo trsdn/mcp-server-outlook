@@ -7,7 +7,7 @@ using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookMcp.Core.Commands.Mail;
 
-public class MailCommands : IMailCommands
+public partial class MailCommands : IMailCommands
 {
     /// <summary>
     /// Upper bound on how many entries of one conversation are enumerated. A safety net for a

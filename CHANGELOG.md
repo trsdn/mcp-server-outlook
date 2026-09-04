@@ -8,6 +8,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Item export** (#14): `mail export` and `calendar export` save an item to disk via `SaveAs`.
+  Mail writes `.msg`, `.txt`, `.html`, `.mht` or `.rtf`; appointments add `.ics`. This was the last
+  unchecked acceptance criterion on the item-coverage epic.
+
+  `SaveAs` looks trivial and is not. Four behaviours were measured against real Outlook first, and
+  each one hands a caller a confidently wrong result if passed straight through:
+
+  - **The ANSI `.msg` format silently destroys text.** A subject reading
+    `probe Grüsse äöü тест €` saved with `olMSG` and reopened comes back as
+    `probe Grüsse äöü ???? €` - no error, no warning. `olMSGUnicode` round-trips it exactly, so
+    `msg` always means the Unicode variant here and the ANSI constant is never used. Note that
+    German umlauts and `€` survive ANSI on a CP1252 machine, so a careless test would miss this
+    entirely; only characters outside the machine's code page are lost.
+  - **The extension is ignored.** `SaveAs("x.txt", olMSGUnicode)` succeeds and writes an OLE
+    compound file under a `.txt` name. A `format` that contradicts the extension is now refused,
+    without writing anything.
+  - **A relative path succeeds and lands elsewhere.** Outlook resolves it against its own working
+    directory rather than the caller's, so the file exists somewhere nobody will look. `filePath`
+    must now be absolute.
+  - **A missing directory reports "The operation failed."**, which names nothing. The directory is
+    now checked and named before any COM object is touched.
+
+  Overwriting is also silent in Outlook, so an existing file is never replaced unless `overwrite`
+  is passed, and the result reports whether it was.
+
+  Verified live against classic Outlook: 12 integration tests, none skipped, plus a round trip
+  through the CLI and through a real MCP stdio session. The Unicode mapping and the overwrite guard
+  were both sabotage-proved - reverting `msg` to `olMSG` fails the round-trip assertion on the
+  Cyrillic, and disabling the guard fails the overwrite test.
+
 - **`task` tool** (#14): `list`, `read`, `create`, `update` and `delete` over Outlook's Tasks folder,
   the last item type in the mailbox with no coverage at all. Available identically through the MCP
   server and the CLI.

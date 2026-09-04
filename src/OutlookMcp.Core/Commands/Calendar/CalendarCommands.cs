@@ -6,7 +6,7 @@ using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookMcp.Core.Commands.Calendar;
 
-public class CalendarCommands : ICalendarCommands
+public partial class CalendarCommands : ICalendarCommands
 {
     private static readonly Dictionary<string, Outlook.OlDefaultFolders> FolderAliases = new(StringComparer.OrdinalIgnoreCase)
     {

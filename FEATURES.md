@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**7 tools with 55 operations for Outlook automation**
+**7 tools with 57 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -13,7 +13,7 @@ bug (see Rule 24, post-change sync).
 
 ---
 
-## Mail Operations (22 operations)
+## Mail Operations (23 operations)
 
 | Action | Description |
 |---|---|
@@ -39,13 +39,21 @@ bug (see Rule 24, post-change sync).
 | `set-subject` | Set the subject of a draft |
 | `set-body` | Set the body of a draft |
 | `set-recipients` | Set the recipients of a draft |
+| `export` | Save a message to disk as `.msg`, `.txt`, `.html`, `.mht` or `.rtf` |
 
 **`send` is the one irreversible operation in this surface.** It refuses to run without explicit
 confirmation, and repeated calls carrying the same operation ID will not send twice. See #29.
 
+**`export` writes Unicode `.msg`, never the ANSI variant.** Outlook's `olMSG` silently replaces any
+character outside the machine's code page with `?` and reports success, so `msg` always means
+`olMSGUnicode` here. `filePath` must be absolute: Outlook accepts a relative path and resolves it
+against its own working directory rather than the caller's. An existing file is never replaced
+unless `overwrite` is set, and a format that contradicts the file extension is refused rather than
+producing, say, a binary `.msg` under a `.txt` name.
+
 ---
 
-## Calendar Operations (6 operations)
+## Calendar Operations (7 operations)
 
 | Action | Description |
 |---|---|
@@ -55,6 +63,12 @@ confirmation, and repeated calls carrying the same operation ID will not send tw
 | `update-appointment` | Update an existing appointment |
 | `delete-appointment` | Delete an appointment |
 | `get-free-busy` | Read the free/busy availability of a recipient |
+| `export` | Save an appointment to disk, including as iCalendar (`.ics`) |
+
+**`.ics` is the calendar half of item export.** A mail item asked for iCalendar is refused, because
+Outlook answers it with "Value does not fall within the expected range" - a message that reads like
+an argument bug rather than "mail is not a calendar entry". The same absolute-path, overwrite and
+format/extension rules as `mail export` apply.
 
 ---
 

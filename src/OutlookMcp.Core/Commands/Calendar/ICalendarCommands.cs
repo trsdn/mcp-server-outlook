@@ -83,4 +83,24 @@ public interface ICalendarCommands
         string? start = null,
         int days = 7,
         int intervalMinutes = 30);
+
+    /// <summary>
+    /// Saves an appointment to disk with <c>AppointmentItem.SaveAs</c>.
+    ///
+    /// <para>
+    /// This is the half of item export that can produce iCalendar: a mail item asked for
+    /// <c>.ics</c> is refused, because Outlook answers it with "Value does not fall within the
+    /// expected range". <paramref name="filePath"/> must be absolute - Outlook resolves a relative
+    /// path against its own working directory - and an existing file is never replaced unless
+    /// <paramref name="overwrite"/> is set.
+    /// </para>
+    /// </summary>
+    [ServiceAction("export", Destructive = false)]
+    ItemExportResult Export(
+        string filePath,
+        string? format = null,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveAppointment = true,
+        bool overwrite = false);
 }

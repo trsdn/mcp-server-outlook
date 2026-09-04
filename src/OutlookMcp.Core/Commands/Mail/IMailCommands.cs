@@ -192,6 +192,26 @@ public interface IMailCommands
         string? storeId = null,
         bool useActiveMail = true);
 
+    /// <summary>
+    /// Saves a mail item to disk with <c>MailItem.SaveAs</c>.
+    ///
+    /// <para>
+    /// <paramref name="filePath"/> must be absolute: Outlook accepts a relative path and resolves it
+    /// against its own working directory, so the file would land somewhere the caller never looks.
+    /// The format defaults to whatever the extension names, and <c>msg</c> always means the Unicode
+    /// variant - the ANSI one silently replaces any character outside the machine's code page with
+    /// <c>?</c>. An existing file is never replaced unless <paramref name="overwrite"/> is set.
+    /// </para>
+    /// </summary>
+    [ServiceAction("export")]
+    ItemExportResult Export(
+        string filePath,
+        string? format = null,
+        string? entryId = null,
+        string? storeId = null,
+        bool useActiveMail = true,
+        bool overwrite = false);
+
     [ServiceAction("delete")]
     MailMutationResult Delete(
         string? entryId = null,

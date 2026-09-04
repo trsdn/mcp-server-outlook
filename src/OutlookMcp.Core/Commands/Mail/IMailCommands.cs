@@ -53,7 +53,10 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "before writing any. Outlook does not validate the string set-categories writes: a name that is not "
     + "in the mailbox's list is accepted and reported as a success, then turns out to be uncolourable and "
     + "unfilterable, so discover names rather than guessing them. Colours come back as names such as "
-    + "'yellow', never as raw enum numbers. "
+    + "'yellow', never as raw enum numbers. Use create-category to add a category to the master list with "
+    + "a colour before assigning it, update-category to recolour, rename or reshortcut one, and "
+    + "delete-category to remove one; colours are passed as friendly names too, and an omitted or "
+    + "unrecognised colour creates the category with no colour and says so. "
     + "Use list-reminders to see what Outlook is set to remind the user about, earliest first, across "
     + "appointments, tasks and flagged mail. Overdue reminders are excluded by default because on a "
     + "long-lived mailbox they are usually the large majority and bury the ones still to come; the "
@@ -258,6 +261,65 @@ public interface IMailCommands
 
     [ServiceAction("list-categories")]
     MailCategoryListResult ListCategories();
+
+    /// <summary>
+    /// Creates a category in the mailbox's master category list - the same list <c>list-categories</c>
+    /// reads and <c>set-categories</c> writes names from.
+    ///
+    /// <para>
+    /// This is what makes <c>set-categories</c> safe. Outlook does not validate the string
+    /// <c>set-categories</c> writes, so assigning a name that is not in the list quietly produces a
+    /// category with no colour that the user cannot filter by. Create it first, with a colour, and
+    /// the label is real.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Colour</b> is a friendly name - <c>red</c>, <c>yellow</c>, <c>darkTeal</c> and so on, exactly
+    /// the names <c>list-categories</c> reports - not a raw enum ordinal. Omitting it, or naming a
+    /// colour Outlook does not know, creates the category with no colour (<c>none</c>); the result
+    /// reports the colour actually applied so the caller is never left guessing. A name already in the
+    /// list is refused rather than duplicated.
+    /// </para>
+    /// </summary>
+    /// <param name="name">The category name. This is how the category is addressed everywhere else, so it must not be blank.</param>
+    /// <param name="color">A friendly colour name such as <c>blue</c> or <c>darkOlive</c>. Omit for no colour. An unrecognised name is treated as no colour and reported as such rather than failing.</param>
+    /// <param name="shortcutKey">An optional Outlook shortcut such as <c>ctrlF2</c> through <c>ctrlF12</c>. Omit for none.</param>
+    [ServiceAction("create-category", Destructive = true)]
+    MailCategoryResult CreateCategory(string name, string? color = null, string? shortcutKey = null);
+
+    /// <summary>
+    /// Changes a category in the master category list: its name, its colour, its shortcut, or any
+    /// combination. Addresses the category by its current name.
+    ///
+    /// <para>
+    /// Renaming a category here does not retag the messages already carrying it - they keep the old
+    /// string and lose their colour, exactly as they would in Outlook's own category manager. Prefer
+    /// changing only the colour or shortcut unless the user really means to rename.
+    /// </para>
+    /// </summary>
+    /// <param name="name">The current name of the category to change. Refused if no category by this name exists.</param>
+    /// <param name="newName">A new name for the category. Omit to leave the name unchanged. Refused if another category already has this name.</param>
+    /// <param name="color">A friendly colour name to apply, or <c>none</c> to clear the colour. Omit to leave the colour unchanged.</param>
+    /// <param name="shortcutKey">A shortcut such as <c>ctrlF2</c>, or <c>none</c> to clear it. Omit to leave the shortcut unchanged.</param>
+    [ServiceAction("update-category", Destructive = true)]
+    MailCategoryResult UpdateCategory(
+        string name,
+        string? newName = null,
+        string? color = null,
+        string? shortcutKey = null);
+
+    /// <summary>
+    /// Removes a category from the master category list.
+    ///
+    /// <para>
+    /// This is not confirmation-gated and does not touch any message: the messages already tagged
+    /// with the category keep the string, they simply lose the colour and the entry in the manager.
+    /// Recreate the category to restore it.
+    /// </para>
+    /// </summary>
+    /// <param name="name">The name of the category to remove. Refused if no category by this name exists, so a caller can tell a real removal from a no-op.</param>
+    [ServiceAction("delete-category", Destructive = true)]
+    MailCategoryResult DeleteCategory(string name);
 
     [ServiceAction("list-rules")]
     MailRuleListResult ListRules(bool includeDetail = false);

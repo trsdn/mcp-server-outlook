@@ -2080,6 +2080,446 @@ public partial class MailCommands : IMailCommands
             });
     }
 
+    /// <summary>
+    /// Adds a category to the mailbox's master category list.
+    ///
+    /// <para>
+    /// This is the missing half of <c>set-categories</c>. Outlook accepts any string
+    /// <c>set-categories</c> writes, so a name not in the list becomes an uncolourable, unfilterable
+    /// dead label. Creating it first - with a colour - is what makes the label real. The colour is a
+    /// friendly name; an omitted or unrecognised one produces a category with no colour, reported as
+    /// such rather than guessed at. A name already present is refused, not duplicated.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailCategoryResult CreateCategory(string name, string? color = null, string? shortcutKey = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return CategoryRefusal("A category name is required, and it cannot be blank.");
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailCreateCategory",
+            (application, session) =>
+            {
+                Outlook.Categories? categories = null;
+                Outlook.Category? created = null;
+
+                try
+                {
+                    categories = session.Categories;
+
+                    // Refuse a duplicate rather than let Outlook add a second entry with the same
+                    // name: a caller that believed it now had a fresh category would be filing
+                    // against the wrong colour. Names match case-insensitively, as Outlook treats
+                    // them.
+                    if (FindCategoryIndex(categories, name, out _))
+                    {
+                        return CategoryRefusal(
+                            $"A category named '{name}' already exists in the master category list. "
+                            + "Use update-category to change its colour or shortcut, or delete-category first.");
+                    }
+
+                    var parsedColor = ParseCategoryColor(color);
+                    var parsedShortcut = ParseCategoryShortcut(shortcutKey);
+
+                    // A shortcut the caller misspelled is refused rather than silently created with
+                    // none: unlike a colour, a shortcut has no visible "none" the user would notice.
+                    if (!parsedShortcut.Recognized)
+                    {
+                        return CategoryRefusal(UnknownShortcutMessage(shortcutKey!));
+                    }
+
+                    created = categories.Add(name, parsedColor.Color, parsedShortcut.Key);
+
+                    return new MailCategoryResult
+                    {
+                        Success = true,
+                        Category = DescribeCategory(created),
+                        Message = $"Created the category '{name}' {ColorPhrase(color, parsedColor)}."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref created);
+                    OutlookInteropRunner.ReleaseComObject(ref categories);
+                }
+            },
+            ex => new MailCategoryResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to create the Outlook category: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Changes a category already in the master list - its name, colour, shortcut, or a combination.
+    ///
+    /// <para>
+    /// Only the arguments supplied are touched; the rest are left as they were. A colour or shortcut
+    /// the caller misspells is refused rather than applied as "none", because in an update that would
+    /// silently clear the very thing the caller was trying to set. Pass the literal <c>none</c> to
+    /// clear a colour or shortcut deliberately.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailCategoryResult UpdateCategory(
+        string name,
+        string? newName = null,
+        string? color = null,
+        string? shortcutKey = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return CategoryRefusal("A category name is required, and it cannot be blank.");
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailUpdateCategory",
+            (application, session) =>
+            {
+                Outlook.Categories? categories = null;
+                Outlook.Category? target = null;
+
+                try
+                {
+                    categories = session.Categories;
+
+                    // Snapshot the names in one pass while holding no Category RCW. Outlook shares one
+                    // RCW per underlying category, so a second scan taken WHILE a target is held would
+                    // final-release that target out from under us. Resolve existence and the rename
+                    // collision from the snapshot, then acquire the target fresh by its ordinal.
+                    List<string> names = SnapshotCategoryNames(categories);
+                    int zeroBased = names.FindIndex(
+                        n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+
+                    if (zeroBased < 0)
+                    {
+                        return CategoryRefusal(UnknownCategoryMessage(name, "update"));
+                    }
+
+                    bool renaming = !string.IsNullOrWhiteSpace(newName)
+                        && !string.Equals(newName, name, StringComparison.OrdinalIgnoreCase);
+                    if (renaming && names.Any(
+                        n => string.Equals(n, newName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return CategoryRefusal(
+                            $"A category named '{newName}' already exists in the master category list, "
+                            + "so renaming would collide with it. Choose a different name.");
+                    }
+
+                    // Colour and shortcut are only touched when supplied. An unrecognised value is
+                    // refused before anything is written, so a partial update never lands.
+                    (OlColorParse Color, bool Apply) colorChange = default;
+                    if (!string.IsNullOrWhiteSpace(color))
+                    {
+                        var parsed = ParseCategoryColor(color);
+                        if (!parsed.Recognized)
+                        {
+                            return CategoryRefusal(UnknownColorMessage(color!));
+                        }
+
+                        colorChange = (parsed, true);
+                    }
+
+                    (CategoryShortcutParse Shortcut, bool Apply) shortcutChange = default;
+                    if (!string.IsNullOrWhiteSpace(shortcutKey))
+                    {
+                        var parsed = ParseCategoryShortcut(shortcutKey);
+                        if (!parsed.Recognized)
+                        {
+                            return CategoryRefusal(UnknownShortcutMessage(shortcutKey!));
+                        }
+
+                        shortcutChange = (parsed, true);
+                    }
+
+                    if (renaming)
+                    {
+                        target = categories[zeroBased + 1];
+                        target.Name = newName!;
+                    }
+                    else if (colorChange.Apply || shortcutChange.Apply)
+                    {
+                        target = categories[zeroBased + 1];
+                    }
+
+                    if (target != null && colorChange.Apply)
+                    {
+                        target.Color = colorChange.Color.Color;
+                    }
+
+                    if (target != null && shortcutChange.Apply)
+                    {
+                        target.ShortcutKey = shortcutChange.Shortcut.Key;
+                    }
+
+                    if (target == null)
+                    {
+                        // Nothing to change was supplied; re-acquire only to report current state.
+                        target = categories[zeroBased + 1];
+                    }
+
+                    return new MailCategoryResult
+                    {
+                        Success = true,
+                        Category = DescribeCategory(target),
+                        Message = $"Updated the category '{(renaming ? newName : name)}'."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref target);
+                    OutlookInteropRunner.ReleaseComObject(ref categories);
+                }
+            },
+            ex => new MailCategoryResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to update the Outlook category: {ex.Message}"
+            });
+    }
+
+    /// <summary>
+    /// Removes a category from the master list. Not confirmation-gated and touches no message: an
+    /// item already tagged keeps the string and loses only the colour, so the action is recoverable
+    /// by recreating the category.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public MailCategoryResult DeleteCategory(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return CategoryRefusal("A category name is required, and it cannot be blank.");
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookMailDeleteCategory",
+            (application, session) =>
+            {
+                Outlook.Categories? categories = null;
+                Outlook.Category? target = null;
+
+                try
+                {
+                    categories = session.Categories;
+                    target = FindCategory(categories, name, out int index);
+
+                    if (target == null)
+                    {
+                        // Refused, not a silent no-op: a caller must be able to tell a real removal
+                        // from a name that was never there.
+                        return CategoryRefusal(UnknownCategoryMessage(name, "delete"));
+                    }
+
+                    string actualName = SafeGet(() => target.Name) ?? name;
+                    categories.Remove(index);
+
+                    return new MailCategoryResult
+                    {
+                        Success = true,
+                        Message = $"Deleted the category '{actualName}' from the master category list. "
+                            + "Messages already tagged with it keep the name but lose the colour."
+                    };
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref target);
+                    OutlookInteropRunner.ReleaseComObject(ref categories);
+                }
+            },
+            ex => new MailCategoryResult
+            {
+                Success = false,
+                ErrorMessage = $"Failed to delete the Outlook category: {ex.Message}"
+            });
+    }
+
+    private readonly record struct OlColorParse(Outlook.OlCategoryColor Color, string AppliedName, bool Recognized);
+
+    private readonly record struct CategoryShortcutParse(Outlook.OlCategoryShortcutKey Key, bool Recognized);
+
+    private static MailCategoryResult CategoryRefusal(string message) => new()
+    {
+        Success = false,
+        ErrorMessage = message
+    };
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static MailCategoryInfo DescribeCategory(Outlook.Category category) => new()
+    {
+        Name = SafeGet(() => category.Name) ?? string.Empty,
+        Color = MapCategoryColor(SafeGetInt(() => (int)category.Color)),
+        CategoryId = NullIfBlank(SafeGet(() => category.CategoryID)),
+        ShortcutKey = MapCategoryShortcut(SafeGetInt(() => (int)category.ShortcutKey))
+    };
+
+    /// <summary>
+    /// Reads every category name in one pass, holding no <c>Category</c> RCW across iterations.
+    /// Outlook hands back a shared RCW per underlying category, so a scan that releases each entry
+    /// must not run while the caller holds one of those same entries - it would final-release it.
+    /// Callers use the returned snapshot to decide existence and ordinals, then re-acquire the one
+    /// category they need.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static List<string> SnapshotCategoryNames(Outlook.Categories categories)
+    {
+        var names = new List<string>();
+        int count = categories.Count;
+
+        for (int i = 1; i <= count; i++)
+        {
+            Outlook.Category? candidate = null;
+            try
+            {
+                candidate = categories[i];
+                names.Add(SafeGet(() => candidate.Name) ?? string.Empty);
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref candidate);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Locates a category by name and returns it for the caller to mutate and release. The 1-based
+    /// index is handed back too, because <c>Categories.Remove</c> works in ordinals.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.Category? FindCategory(Outlook.Categories categories, string name, out int index)
+    {
+        index = 0;
+        int count = categories.Count;
+
+        for (int i = 1; i <= count; i++)
+        {
+            Outlook.Category? candidate = null;
+            bool keep = false;
+
+            try
+            {
+                candidate = categories[i];
+                if (string.Equals(SafeGet(() => candidate.Name), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    index = i;
+                    keep = true;
+                    return candidate;
+                }
+            }
+            finally
+            {
+                if (!keep)
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref candidate);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether a category of this name exists, without handing back the object - used where only the
+    /// yes/no answer matters, so nothing has to be released by the caller.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool FindCategoryIndex(Outlook.Categories categories, string name, out int index)
+    {
+        Outlook.Category? found = FindCategory(categories, name, out index);
+        try
+        {
+            return found != null;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref found);
+        }
+    }
+
+    /// <summary>
+    /// Turns a friendly colour name such as <c>darkTeal</c> back into its <c>OlCategoryColor</c>. The
+    /// inverse of <see cref="MapCategoryColor"/>, and derived from the same enum so the two never
+    /// drift. A blank name is the deliberate "no colour" default; an unrecognised name is reported as
+    /// unrecognised rather than silently defaulted.
+    /// </summary>
+    private static OlColorParse ParseCategoryColor(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color))
+        {
+            return new OlColorParse(Outlook.OlCategoryColor.olCategoryColorNone, "none", true);
+        }
+
+        string target = color.Trim();
+
+        foreach (Outlook.OlCategoryColor value in Enum.GetValues<Outlook.OlCategoryColor>())
+        {
+            string friendly = StripEnumPrefix(
+                Enum.GetName(value), "olCategoryColor") ?? "none";
+
+            if (string.Equals(friendly, target, StringComparison.OrdinalIgnoreCase))
+            {
+                return new OlColorParse(value, friendly, true);
+            }
+        }
+
+        return new OlColorParse(Outlook.OlCategoryColor.olCategoryColorNone, "none", false);
+    }
+
+    private static CategoryShortcutParse ParseCategoryShortcut(string? shortcutKey)
+    {
+        if (string.IsNullOrWhiteSpace(shortcutKey))
+        {
+            return new CategoryShortcutParse(Outlook.OlCategoryShortcutKey.olCategoryShortcutKeyNone, true);
+        }
+
+        string target = shortcutKey.Trim();
+
+        foreach (Outlook.OlCategoryShortcutKey value in Enum.GetValues<Outlook.OlCategoryShortcutKey>())
+        {
+            string? friendly = StripEnumPrefix(
+                Enum.GetName(value), "olCategoryShortcutKey");
+
+            if (friendly != null && string.Equals(friendly, target, StringComparison.OrdinalIgnoreCase))
+            {
+                return new CategoryShortcutParse(value, true);
+            }
+        }
+
+        return new CategoryShortcutParse(Outlook.OlCategoryShortcutKey.olCategoryShortcutKeyNone, false);
+    }
+
+    private static string ColorPhrase(string? requested, OlColorParse parsed)
+    {
+        if (!parsed.Recognized)
+        {
+            return $"but the colour '{requested}' was not recognised, so it has no colour "
+                + $"(valid colours: {KnownCategoryColorNames()})";
+        }
+
+        return string.Equals(parsed.AppliedName, "none", StringComparison.Ordinal)
+            ? "with no colour"
+            : $"in {parsed.AppliedName}";
+    }
+
+    private static string UnknownColorMessage(string color) =>
+        $"'{color}' is not a colour Outlook recognises. Valid colours: {KnownCategoryColorNames()}.";
+
+    private static string UnknownShortcutMessage(string shortcutKey) =>
+        $"'{shortcutKey}' is not a valid category shortcut. Valid shortcuts: none, ctrlF2 through ctrlF12.";
+
+    private static string UnknownCategoryMessage(string name, string verb) =>
+        $"No category named '{name}' exists in the master category list, so there is nothing to {verb}. "
+        + "Use list-categories to see the current names.";
+
+    private static string KnownCategoryColorNames() =>
+        string.Join(", ", Enum.GetValues<Outlook.OlCategoryColor>()
+            .Select(v => StripEnumPrefix(Enum.GetName(v), "olCategoryColor"))
+            .Where(n => !string.IsNullOrEmpty(n)));
+
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     public MailMutationResult SetSubject(
         string subject,

@@ -796,6 +796,108 @@ public class FolderCommands : IFolderCommands
     }
 
     /// <summary>
+    /// Empties a folder's items while keeping the folder. See <see cref="IFolderCommands.Empty"/> for
+    /// the semantics an agent relies on; the guard and the confirm gate are the substance here.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    public OutlookFolderResolveResult Empty(string? folder = null, bool confirm = false)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return Refuse(
+                "A folder is required. Empty has no default target: falling back to the current "
+                + "folder here would clear the contents of whatever the user happens to have selected.");
+        }
+
+        return OutlookInteropRunner.Execute(
+            "OutlookFolderEmpty",
+            (application, session) =>
+            {
+                Outlook.Explorer? explorer = null;
+                Outlook.MAPIFolder? target = null;
+
+                try
+                {
+                    target = OutlookInteropRunner.ResolveFolder(
+                        application, session, folder, DefaultFolderAliases, ref explorer);
+
+                    if (target == null)
+                    {
+                        return Refuse($"The folder '{folder}' could not be resolved.");
+                    }
+
+                    // The protected-folder guard runs before the confirm gate on purpose: refusing the
+                    // Inbox as protected is more useful than telling the caller to pass confirm=true for
+                    // something that will be refused regardless.
+                    var refusal = RefuseIfProtected(session, target, "emptied");
+                    if (refusal != null)
+                    {
+                        return refusal;
+                    }
+
+                    if (!confirm)
+                    {
+                        return Refuse(ConfirmationGate.FolderEmpty(folder));
+                    }
+
+                    int removed = EmptyFolderItems(target);
+
+                    var described = Describe(target, "emptied");
+                    described.ItemsRemoved = removed;
+                    return described;
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref target);
+                    OutlookInteropRunner.ReleaseComObject(ref explorer);
+                }
+            },
+            ex => Refuse($"Failed to empty the Outlook folder: {ex.Message}"));
+    }
+
+    /// <summary>
+    /// Deletes every item directly in the folder, newest index first so the earlier indices stay
+    /// valid as the collection shrinks. Subfolders are not touched - <c>Folder.Items</c> is the
+    /// folder's own items only. Each <c>Item.Delete</c> moves the item to Deleted Items. Returns how
+    /// many were removed.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static int EmptyFolderItems(Outlook.MAPIFolder folder)
+    {
+        Outlook.Items? items = null;
+        try
+        {
+            items = folder.Items;
+
+            // Count is snapshotted and the loop runs downward: Items reindexes as entries are removed,
+            // so deleting the highest index first keeps every lower index addressing the same item.
+            int count = items.Count;
+            int removed = 0;
+
+            for (int index = count; index >= 1; index--)
+            {
+                object? item = null;
+                try
+                {
+                    item = items[index];
+                    ((dynamic)item).Delete();
+                    removed++;
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref item);
+                }
+            }
+
+            return removed;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref items);
+        }
+    }
+
+    /// <summary>
     /// The guard that makes folder mutation safe to expose at all.
     ///
     /// <para>

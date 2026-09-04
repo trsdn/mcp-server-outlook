@@ -12,7 +12,7 @@ public class AttachmentCommands : IAttachmentCommands
         string filePath,
         string? mailEntryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = false)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -379,7 +379,7 @@ public class AttachmentCommands : IAttachmentCommands
         int attachmentIndex,
         string? mailEntryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         bool confirm = false)
     {
         if (attachmentIndex < 1)

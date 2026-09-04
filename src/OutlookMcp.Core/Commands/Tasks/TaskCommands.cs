@@ -323,7 +323,7 @@ public class TaskCommands : ITaskCommands
         string? importance = null,
         string? categories = null,
         string? body = null,
-        bool useActiveTask = true)
+        bool useActiveTask = false)
     {
         bool hasUpdates =
             subject != null ||

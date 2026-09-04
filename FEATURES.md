@@ -60,6 +60,17 @@ Gating a recoverable action would train a caller to pass `confirm=true` reflexiv
 the gate on the irreversible one stops being read. The ungated actions are a decision, not an
 oversight, and they still require the caller to report what was deleted and where it went.
 
+**Mutating actions require explicit targeting** (#9). `useActiveMail`, `useActiveAppointment`,
+`useActiveContact` and `useActiveTask` default to **false** on every action that changes, deletes or
+sends something, so a call without an `entryId` is refused rather than falling back to whatever the
+user has selected in Outlook. Only reads (`read`, `read-active`, `get-conversation`, `export`,
+`attachment.list`, `attachment.save`) and the draft-producing actions (`reply`, `reply-all`,
+`forward`) still default to the active item - the first change nothing, and the second produce a
+draft that nothing sends on its own.
+
+The alternative is a confused deputy: the caller chooses the verb and the human's current selection
+silently chooses the object.
+
 **`export` writes Unicode `.msg`, never the ANSI variant.** Outlook's `olMSG` silently replaces any
 character outside the machine's code page with `?` and reports success, so `msg` always means
 `olMSGUnicode` here. `filePath` must be absolute: Outlook accepts a relative path and resolves it

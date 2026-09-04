@@ -68,6 +68,27 @@ Outlook items are addressed by entry ID, not by name or index. Entry IDs:
 
 So re-read after a move rather than reusing the old ID.
 
+### Mutating actions will not use the user's selection unless you ask
+
+`useActiveMail` (and `useActiveAppointment`, `useActiveContact`, `useActiveTask`) defaults to
+**false** on every action that changes, deletes or sends something. Call one without an `entryId`
+and it is refused rather than falling back to whatever is highlighted in Outlook.
+
+That is on purpose. You choose the verb; the user's current selection would otherwise choose the
+object, and neither of you would know. "Delete that one" a moment after the user clicks a different
+message is how the wrong message gets deleted while the tool reports success.
+
+| Defaults to the active item | Requires an explicit `entryId` |
+|---|---|
+| `mail.read-active`, `mail.read`, `mail.get-conversation`, `mail.export` | `mail.send`, `mail.move`, `mail.delete`, `mail.set-read-state`, `mail.set-flag`, `mail.set-categories`, `mail.set-subject`, `mail.set-body`, `mail.set-recipients`, `mail.respond-to-meeting` |
+| `mail.reply`, `mail.reply-all`, `mail.forward` - they only produce a draft, and nothing sends it on its own | `attachment.add`, `attachment.remove` |
+| `attachment.list`, `attachment.save` | `calendar.update-appointment`, `calendar.delete-appointment` |
+| `calendar.read`, `calendar.export`, `contact.read`, `task.read` | `contact.update`, `contact.delete`, `task.update`, `task.delete` |
+
+Get the entry ID first - `mail.read-active` costs one call and tells you exactly what the user is
+looking at. Pass `useActiveMail: true` only when you have decided that the current selection really
+is the target.
+
 ## Rule 5: Drafts before edits
 
 `set-subject`, `set-body`, `set-recipients`, `attachment.add`, and `attachment.remove` target drafts.

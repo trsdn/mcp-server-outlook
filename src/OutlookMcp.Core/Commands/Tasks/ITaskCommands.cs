@@ -54,6 +54,10 @@ public interface ITaskCommands
         string? body = null,
         bool display = false);
 
+    /// <summary>
+    /// Changes named fields on an existing task. Fields that are not passed are left alone.
+    /// </summary>
+    /// <param name="useActiveTask">Off by default. A mutating action must not fall back to whatever the user has selected in Outlook: the caller chooses the verb and the selection would silently choose the object, so a mistyped id would edit a different task and report success.</param>
     [ServiceAction("update", Destructive = true)]
     TaskMutationResult Update(
         string? entryId = null,
@@ -66,7 +70,7 @@ public interface ITaskCommands
         string? importance = null,
         string? categories = null,
         string? body = null,
-        bool useActiveTask = true);
+        bool useActiveTask = false);
 
     /// <summary>
     /// Deletes a task.

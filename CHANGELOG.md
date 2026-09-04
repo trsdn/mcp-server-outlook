@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`task` tool** (#14): `list`, `read`, `create`, `update` and `delete` over Outlook's Tasks folder,
+  the last item type in the mailbox with no coverage at all. Available identically through the MCP
+  server and the CLI.
+
+  Two behaviours were measured against a real Tasks folder before being designed around, and both
+  would have made the listing actively misleading:
+
+  - **Outlook stores 1 January 4501 for a date that was never set** - not null, not the OLE zero
+    date. On the folder this was built against that sentinel is 260 of 274 due dates, so passing it
+    through would have dated 95% of a listing to the 46th century. Unset dates are now omitted.
+  - **271 of those 274 tasks were already complete**, so `list` omits completed tasks by default.
+    That filter reports itself: `completedItemCount` counts what was hidden, `includedCompleted`
+    echoes the flag, and `scannedItemCount` always equals the returned rows plus the skipped ones, so
+    a filtered listing can never be mistaken for an empty folder.
+
+  Both behaviours were confirmed load-bearing by removing them and watching the corresponding test
+  fail.
+
 - **`application get-active-explorer` and `application get-active-inspector`** (#14): report which
   folder the user is looking at, what is selected there, and which item they currently have open.
   `get-active-explorer` returns the current folder's full store path, so an agent can address the
@@ -38,6 +56,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   A new pre-commit check, `check-shared-application-release.ps1`, keeps it from coming back. It was
   confirmed to block a commit by reintroducing one of the thirteen sites.
+- **The `contact` tool was never exposed over MCP.** It was generated, implemented, routed through
+  the CLI, counted in README.md and FEATURES.md, and documented as being "identical through the MCP
+  server and the CLI" - while missing from the explicit tool allow-list in `Program.cs`, so it never
+  appeared in `tools/list` and no MCP client could call it. It has been absent for its entire life.
+
+  Nothing caught it because both sides of the check were hand-maintained copies: the allow-list in
+  `Program.cs` listed five tools, and the end-to-end `tools/list` test asserted against its own
+  separate hand-written list of the same five. The test agreed with the bug.
+
+  Both are now derived from one source. `Program.RegisteredToolTypes` is the single list, the
+  end-to-end test registers that object rather than a copy of it and derives its expectations from
+  the `[McpServerTool(Name = ...)]` attributes on it, and a new `ToolRegistrationTests` asserts that
+  every generated `[McpServerToolType]` in the assembly is in it. A tool that is generated but not
+  registered now fails the build.
+
+  Found only by driving a real MCP client over stdio and reading `tools/list` - the same lesson as
+  #81 and #82: a green suite said nothing, one live call said everything.
+
+- **Registering the tool list by reference silently registered no tools at all.** While fixing the
+  above, passing the allow-list as `Type[]` bound to the generic
+  `WithTools<TToolType>(builder, TToolType instance, ...)` overload by exact inference instead of the
+  intended `WithTools(IEnumerable<Type>)`, so the server started cleanly, advertised no tools
+  capability, and answered `tools/list` with "Method 'tools/list' is not available". No compiler
+  error, no startup error. The list is typed `IEnumerable<Type>` so the non-generic overload wins,
+  and five tests now fail if that binding regresses.
 
 - **Pre-commit staged the generated skill files before the build that generates them.** The
   auto-staging step asserted in a comment that "the Release build already ran"; it had not - the

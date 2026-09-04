@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**6 tools with 50 operations for Outlook automation**
+**7 tools with 55 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -89,6 +89,33 @@ A Contacts folder holds distribution lists as well as people. `contacts`, `distr
 `skippedItemCount` together always account for every item scanned, so nothing can be silently
 dropped. Names are not unique and some contacts have no name at all, so `entryId` is the only
 reliable handle.
+
+---
+
+## Task Operations (5 operations)
+
+| Action | Description |
+|---|---|
+| `list` | List the tasks in the default Tasks folder or an explicit folder path. Completed tasks are omitted unless `includeCompleted` is true |
+| `read` | Read a task by entry ID, or the task currently open or selected in Outlook |
+| `create` | Create a task |
+| `update` | Update named fields on an existing task. Fields that are not passed are left alone |
+| `delete` | Delete a task |
+
+Two things about real task folders shape this surface, and both were measured rather than assumed.
+
+**Outlook does not use null for "no date".** An unset `dueDate`, `startDate` or `dateCompleted`
+reads as 1 January 4501 through COM - on the mailbox this was built against, 260 of 274 due dates.
+That sentinel is never returned: a missing `dueDate` means there is no due date, not a due date in
+the 46th century.
+
+**Nearly every task is already finished** - 271 of those 274 - so `list` omits completed tasks by
+default. `completedItemCount` reports how many were filtered out, so "no open tasks" can never be
+confused with "this listing dropped rows".
+
+Set `status` to `complete` to mark a task done; Outlook then sets `percentComplete` to 100 and
+stamps `dateCompleted` itself. `status` is one of `not-started`, `in-progress`, `complete`,
+`waiting` or `deferred`.
 
 ---
 

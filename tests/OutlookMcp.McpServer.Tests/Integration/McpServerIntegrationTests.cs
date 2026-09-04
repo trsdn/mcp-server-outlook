@@ -3,11 +3,12 @@
 // Licensed under the MIT License.
 
 using System.IO.Pipelines;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
-using OutlookMcp.McpServer.Tools;
+using ModelContextProtocol.Server;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -42,19 +43,22 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
     private Task? _serverTask;
 
     /// <summary>
-    /// Expected tool names from our assembly - the source of truth.
-    /// Program.cs registers only these five Outlook tools via an explicit allow-list (#23).
-    /// Anything else appearing in tools/list means the allow-list has drifted, so this test is
-    /// the regression guard for it.
+    /// Expected tool names, derived from the same allow-list Program.cs registers.
+    ///
+    /// This used to be a hand-written list of five names, and it is why `contact` shipped absent
+    /// from tools/list without anything failing: the allow-list and the expectation were two
+    /// separate hand-maintained copies, so they drifted together and the test agreed with the bug.
+    /// Deriving both from <see cref="Program.RegisteredToolTypes"/> makes that impossible - the
+    /// expectation cannot drift from the thing it is checking, and a tool that is generated but
+    /// never registered is caught by ToolRegistrationTests instead.
     /// </summary>
     private static readonly HashSet<string> ExpectedToolNames =
-    [
-        "application",
-        "attachment",
-        "calendar",
-        "folder",
-        "mail",
-    ];
+        Program.RegisteredToolTypes
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            .Select(m => m.GetCustomAttribute<McpServerToolAttribute>()?.Name)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => n!)
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Setup: Create MCP server with DI and connect client via in-memory pipes.
@@ -76,17 +80,10 @@ public class McpServerIntegrationTests(ITestOutputHelper output) : IAsyncLifetim
             .WithStreamServerTransport(
                 _clientToServerPipe.Reader.AsStream(),
                 _serverToClientPipe.Writer.AsStream())
-            // Mirror Program.cs's explicit Outlook-only allow-list (#23) instead of
-            // WithToolsFromAssembly(), so this test genuinely exercises (and guards) the same
-            // registration surface real clients see.
-            .WithTools(
-            [
-                typeof(OutlookApplicationTool),
-                typeof(OutlookAttachmentTool),
-                typeof(OutlookCalendarTool),
-                typeof(OutlookFolderTool),
-                typeof(OutlookMailTool),
-            ])
+            // Register Program.cs's own allow-list object (#23) rather than a copy of it, so this
+            // test genuinely exercises the registration surface real clients see. A copy is exactly
+            // what let `contact` go missing.
+            .WithTools(Program.RegisteredToolTypes)
             .WithPrompts([typeof(OutlookMcp.McpServer.Prompts.OutlookSkillPrompts)]);
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);

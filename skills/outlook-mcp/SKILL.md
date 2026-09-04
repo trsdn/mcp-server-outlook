@@ -9,7 +9,7 @@ description: >
 
 # Outlook MCP Server Skill
 
-Provides 48 Outlook operations via Model Context Protocol. The MCP server forwards
+Provides 50 Outlook operations via Model Context Protocol. The MCP server forwards
 requests to the shared service layer while the repository continues its migration from inherited
 `OutlookMcp.*` internals.
 
@@ -32,6 +32,7 @@ requests to the shared service layer while the repository continues its migratio
 ## Current Outlook seed
 
 - `application.get-status`
+- `application.get-active-explorer` / `application.get-active-inspector`
 - `folder.list-default`
 - `mail.read-active`
 - `mail.list`

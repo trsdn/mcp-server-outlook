@@ -567,3 +567,20 @@ omit it.
 `skippedItemCount` means something narrower: entries the conversation still lists but the store
 could not return - deleted mid-read, or in a store this profile cannot open. It is a data-loss
 signal. If it is non-zero, say so rather than presenting the thread as complete.
+
+## Do not guess which folder the user means
+
+`application get-active-explorer` reports the folder the user is currently looking at, its full store
+path, and how many items are selected there. When a request says "this folder", "here", or "the
+messages I have selected", ask Outlook rather than guessing at a folder name - a guess that lands on
+the wrong store fails in a way that looks like an empty mailbox.
+
+`application get-active-inspector` reports the item the user has open. Two things about it are easy
+to get wrong:
+
+- An item the user is still composing has never been saved, so it has **no `entryId`**. The field is
+  omitted and `isSaved` is `false`. Without an `entryId` no other action can address that item; if
+  you need to act on it, say that the user must save or send it first. Do not invent an identifier
+  and do not fall back to matching on the subject.
+- The parent folder of an unsaved outgoing item reads as the **Outbox**, not Drafts. That is where it
+  would go, not where it is. Do not report it to the user as already being in a folder.

@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**6 tools with 48 operations for Outlook automation**
+**6 tools with 50 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -103,14 +103,20 @@ reliable handle.
 
 ---
 
-## Application Operations (1 operation)
+## Application Operations (3 operations)
 
 | Action | Description |
 |---|---|
 | `get-status` | Report Outlook availability, including whether the installed client is classic Outlook or the new Outlook (#35) |
+| `get-active-explorer` | Report which folder the user is looking at and what is selected there |
+| `get-active-inspector` | Report which item the user currently has open |
 
 `get-status` is the right first call in any workflow. The new Outlook does not expose a COM object
 model, so every other operation in this document requires classic Outlook.
+
+`get-active-explorer` and `get-active-inspector` both answer "nothing is open" as a success, not an
+error. An item the user is still composing has not been saved and therefore has no `entryId`, so it
+cannot be addressed by any other action until it is; `isSaved` says which case you are in.
 
 ---
 

@@ -1617,3 +1617,98 @@ public class ContactMutationResult : ResultBase
     public bool Updated { get; set; }
     public bool Deleted { get; set; }
 }
+
+/// <summary>
+/// What the user is looking at in the main Outlook window. Reported so an agent can act on the
+/// current context instead of guessing a folder name.
+/// </summary>
+public class OutlookExplorerContextResult : ResultBase
+{
+    /// <summary>
+    /// False when Outlook is running with no explorer window. That is not an error: it is a real
+    /// state, reached by closing every window while an add-in keeps the process alive.
+    /// </summary>
+    public bool HasExplorer { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CurrentFolderName { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CurrentFolderPath { get; set; }
+
+    /// <summary>How many items are selected. The remaining fields describe the first of them.</summary>
+    public int SelectionCount { get; set; }
+
+    /// <summary>True when the first selected item is a mail item, so mail actions apply to it.</summary>
+    public bool HasMailSelection { get; set; }
+
+    /// <summary>
+    /// A readable kind for the first selected item - "mail", "appointment", "contact" and so on -
+    /// derived from the item's Outlook object class. Deliberately not the runtime type name: the
+    /// wrapper reports itself as <c>__ComObject</c>, which tells a caller nothing.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedItemType { get; set; }
+
+    /// <summary>The raw Outlook message class, such as <c>IPM.Note</c>. Null when nothing is selected.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedItemMessageClass { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedItemSubject { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedItemEntryId { get; set; }
+}
+
+/// <summary>
+/// What is open in the foreground item window, if anything.
+/// </summary>
+public class OutlookInspectorContextResult : ResultBase
+{
+    /// <summary>
+    /// False when no item window is open. Not an error: "what is open?" has the legitimate answer
+    /// "nothing", and reporting that as a failure makes an agent think the mailbox is broken.
+    /// </summary>
+    public bool HasInspector { get; set; }
+
+    /// <summary>See <see cref="OutlookExplorerContextResult.SelectedItemType"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ItemType { get; set; }
+
+    /// <summary>The raw Outlook message class, such as <c>IPM.Note</c>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MessageClass { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject { get; set; }
+
+    /// <summary>
+    /// Null until the open item has been saved at least once. An item the user is still composing
+    /// has no entry id, so it cannot be addressed by any other action in this surface. Check
+    /// <see cref="IsSaved"/> to tell "no id yet" from "id withheld".
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+
+    /// <summary>
+    /// False for an item the user is still composing. Such an item has no entry id, so it cannot
+    /// be addressed by any other action in this surface until it is saved.
+    /// </summary>
+    public bool IsSaved { get; set; }
+
+    /// <summary>
+    /// The folder holding the item. On an unsaved compose window Outlook reports the Outbox, which
+    /// is where it would go, not where it is - so do not present this as a stored location unless
+    /// <see cref="IsSaved"/> is true.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CurrentFolderPath { get; set; }
+
+    /// <summary>The window caption, which is what the user sees in the task bar.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Caption { get; set; }
+}

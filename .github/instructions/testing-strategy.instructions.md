@@ -165,12 +165,22 @@ Three ways this shows up here, all found in real work:
 - **Reusing the implementation to check the implementation.** A test that parses with the parser's
   own helper proves only that the parser agrees with itself.
 
+The first two are the same failure from opposite directions: one over-assumes the data, the other
+over-controls it. In both, the fixture is what is really being asserted about, and the code under
+test is never pushed into the state the test exists to cover.
+
 The technique that works: **verify by an independent, deliberately simpler route.** Rather than
 asserting which headers came back, count the header-start lines in the raw block with a second
 naive implementation written in the test, and assert the parsed count matches. That assumes nothing
 about which headers exist, and still fails if the block comes back unsplit or if continuation lines
 leak through. Where a filter is involved, assert the filtered count equals the count of that name in
 the unfiltered set — which catches dropped duplicates as well as extras.
+
+**"Simpler" has to mean strictly weaker, or it is not a cross-check.** Reimplementing the parser in
+the test would reproduce the same folding bug in both places and agree with itself just as happily
+as calling the parser's own helper would. Counting header-start lines works precisely *because* it
+establishes a count and nothing about the values. If a check like this ever needs to grow toward
+the shape of the thing it is checking, it has stopped being independent.
 
 And check the numbers are non-trivial. "20 headers from 1767 characters" is evidence the test did
 something; `0 == 0` is not.

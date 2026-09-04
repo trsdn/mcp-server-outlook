@@ -1925,3 +1925,130 @@ public class TaskMutationResult : ResultBase
     public bool Updated { get; set; }
     public bool Deleted { get; set; }
 }
+
+
+// ── Sync (Namespace.SyncObjects, send/receive groups) ────────────────
+
+/// <summary>
+/// The Send/Receive groups defined in the current Outlook profile, as exposed by
+/// <c>Namespace.SyncObjects</c>. In Cached Exchange mode these are the groups Outlook runs to
+/// reconcile the local OST with the server; in pure Online mode there is typically nothing to
+/// synchronise and the collection can be empty.
+/// </summary>
+public class OutlookSyncGroupListResult : ResultBase
+{
+    public List<OutlookSyncGroupInfo> Groups { get; set; } = [];
+
+    /// <summary>Number of Send/Receive groups found. Zero is a legitimate state (see <see cref="CacheMode"/>).</summary>
+    public int Count { get; set; }
+
+    /// <summary>
+    /// The default Exchange account's connection mode (e.g. <c>olCachedConnectedFull</c>,
+    /// <c>olOnline</c>, <c>olNoExchange</c>), taken from <c>Namespace.ExchangeConnectionMode</c>.
+    /// </summary>
+    public string ExchangeConnectionMode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// A coarse interpretation of <see cref="ExchangeConnectionMode"/>: <c>cached</c> (a sync is
+    /// meaningful), <c>online</c> (nothing to sync), <c>offline</c>/<c>disconnected</c>, or
+    /// <c>none</c> (no Exchange account). Provided so a caller need not know the enum.
+    /// </summary>
+    public string CacheMode { get; set; } = string.Empty;
+}
+
+public class OutlookSyncGroupInfo
+{
+    /// <summary>The display name of the Send/Receive group (e.g. "All Accounts").</summary>
+    public string Name { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The outcome of a <c>send-receive</c> request. Starting a Send/Receive is <b>asynchronous</b>:
+/// <c>SyncObject.Start()</c> returns immediately and the actual synchronisation completes later on
+/// a background thread. This result therefore reports that a sync was <i>started</i>, never that
+/// the mailbox is now current. Do not assume freshly-synced data is available on return.
+/// </summary>
+public class OutlookSyncStartResult : ResultBase
+{
+    /// <summary>
+    /// True if at least one Send/Receive group was started. False when no groups exist
+    /// (see <see cref="Note"/>) — this is not an error, so <see cref="ResultBase.Success"/> can
+    /// still be true.
+    /// </summary>
+    public bool Started { get; set; }
+
+    /// <summary>The names of the Send/Receive groups that were started.</summary>
+    public List<string> StartedGroups { get; set; } = [];
+
+    /// <summary>The default Exchange account's connection mode at the time of the request.</summary>
+    public string ExchangeConnectionMode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Human-readable context that is not an error: for example, that the sync runs in the
+    /// background and the mailbox is not guaranteed current on return, or that no groups exist.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Note { get; set; }
+}
+
+
+// ── Signature (files under %APPDATA%\Microsoft\Signatures) ───────────
+
+/// <summary>
+/// The e-mail signatures available to the user. Outlook does not expose signatures through its COM
+/// object model at all; they are files under <c>%APPDATA%\Microsoft\Signatures</c> (one
+/// <c>.htm</c>, <c>.txt</c> and/or <c>.rtf</c> per signature). This is therefore a read-only
+/// filesystem listing, not a COM operation.
+/// </summary>
+public class OutlookSignatureListResult : ResultBase
+{
+    public List<OutlookSignatureInfo> Signatures { get; set; } = [];
+
+    /// <summary>Number of distinct signatures found.</summary>
+    public int Count { get; set; }
+
+    /// <summary>The resolved path of the signatures folder that was scanned.</summary>
+    public string SignaturesFolderPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// False when the signatures folder does not exist — which simply means the user has never
+    /// created a signature. This is not an error; <see cref="ResultBase.Success"/> stays true and
+    /// <see cref="Signatures"/> is empty.
+    /// </summary>
+    public bool FolderExists { get; set; }
+}
+
+public class OutlookSignatureInfo
+{
+    /// <summary>The signature name, i.e. the file name without its extension.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>An HTML (<c>.htm</c>) rendering of the signature is available.</summary>
+    public bool HasHtml { get; set; }
+
+    /// <summary>A plain-text (<c>.txt</c>) rendering of the signature is available.</summary>
+    public bool HasText { get; set; }
+
+    /// <summary>A rich-text (<c>.rtf</c>) rendering of the signature is available.</summary>
+    public bool HasRtf { get; set; }
+}
+
+/// <summary>
+/// The content of one signature in one format.
+/// </summary>
+public class OutlookSignatureReadResult : ResultBase
+{
+    /// <summary>The signature name that was read.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The format actually returned: <c>html</c>, <c>text</c>, or <c>rtf</c>.</summary>
+    public string Format { get; set; } = string.Empty;
+
+    /// <summary>The signature content in the requested format.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Content { get; set; }
+
+    /// <summary>The full path of the signature file that was read.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourcePath { get; set; }
+}

@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**7 tools with 57 operations for Outlook automation**
+**9 tools with 61 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -165,6 +165,64 @@ error. An item the user is still composing has not been saved and therefore has 
 cannot be addressed by any other action until it is; `isSaved` says which case you are in.
 
 ---
+
+## Sync Operations (2 operations)
+
+| Action | Description |
+|---|---|
+| `list-groups` | List the profile's Send/Receive groups and report the Exchange connection mode (cached vs online) |
+| `send-receive` | Start a Send/Receive to refresh the mailbox or flush the Outbox |
+
+`send-receive` is **asynchronous**. Outlook's `SyncObject.Start()` returns immediately and the
+synchronisation finishes later on a background thread, so this action reports that a sync was
+*started*, never that the mailbox is now current. It cannot honestly block for completion: the only
+thread it could wait on is the single process-wide STA dispatcher, and blocking that would wedge
+every other Outlook operation in the process.
+
+In pure Online (non-cached) Exchange mode there are usually no Send/Receive groups and nothing to
+synchronise. That is reported through `count`/`started`/`note` rather than silently doing nothing.
+
+---
+
+## Signature Operations (2 operations)
+
+| Action | Description |
+|---|---|
+| `list` | List the user's signatures and which formats (html/text/rtf) each has |
+| `read` | Read the content of one signature in a chosen format |
+
+Outlook does **not** expose signatures through its COM object model. They are files under
+`%APPDATA%\Microsoft\Signatures` (`Name.htm`, `Name.txt`, `Name.rtf`). These two actions read that
+folder directly, so they are the one filesystem-backed, non-COM corner of this surface. They are
+**strictly read-only**: they never create, edit, delete or apply a signature, and they cannot set
+the signature Outlook uses for new mail (that is a per-account setting the object model does not
+expose). Their intended use is to fetch a signature's text so a caller can append it to a draft it
+is composing. If the folder does not exist, `list` succeeds with an empty list and
+`folderExists=false` rather than failing.
+
+---
+
+## Out-of-office / automatic replies (not supported)
+
+There is deliberately no OOF tool. Classic Outlook's COM object model exposes **no** property for
+reading or setting automatic replies (out-of-office): there is no member on `Application`,
+`NameSpace`, `Account` or `Store` that returns the OOF state or message. The routes that can reach
+OOF all leave pure Outlook COM:
+
+- **EWS** — `Account.AutoDiscoverXml` yields autodiscover XML containing the EWS endpoint, but not
+  the OOF state itself. Reading or setting OOF then requires authenticated EWS
+  (`GetUserOofSettings`/`SetUserOofSettings`) calls, which are a separate protocol and credential
+  surface, not COM automation of the running client.
+- **Microsoft Graph** — `mailboxSettings/automaticRepliesSetting` exposes OOF cleanly, but Graph is
+  an HTTP API with its own auth, again outside this server's "drive the running Outlook via COM"
+  remit.
+
+Per Rule 2 this repository ships no placeholder or `NotImplementedException`. Rather than pretend,
+OOF is declined with the evidence above. If OOF support is wanted later it should be a conscious
+decision to take on an EWS or Graph dependency, tracked separately.
+
+---
+
 
 ## Requirements
 

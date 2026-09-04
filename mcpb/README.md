@@ -10,7 +10,7 @@
 - **Attachments** - list, save to disk, add and remove
 - **Application** - check Outlook availability before doing anything else
 
-**5 tools with 30 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
+**9 tools with 61 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
 
 ## Requirements
 

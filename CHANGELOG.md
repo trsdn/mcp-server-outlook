@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Send/Receive (sync) operations** (#15): a new `sync` tool exposes `list-groups` and
+  `send-receive`, backed by `Namespace.SyncObjects`, so a caller can force a synchronisation before a
+  critical read or flush a queued message from the Outbox. `Namespace.SyncObjects` was entirely
+  unused before this.
+
+  `send-receive` is deliberately **asynchronous and honest about it**. `SyncObject.Start()` returns
+  immediately and Outlook completes the synchronisation on a background thread; the action therefore
+  reports that a sync was *started*, never that the mailbox is now current, and the result's `note`
+  says so. It cannot block for completion: the only thread it could wait on is the single
+  process-wide STA dispatcher, and blocking that would wedge every other Outlook operation in the
+  process (see ADR-002). In pure Online (non-cached) Exchange mode there are usually no Send/Receive
+  groups and nothing to synchronise; that is reported through `count`/`started`/`note` rather than
+  silently doing nothing. `send-receive` carries the `Destructive` annotation because it can flush
+  the Outbox.
+
+- **Signature read operations** (#15): a new `signature` tool exposes `list` and `read`. Outlook does
+  not expose signatures through its COM object model — they are files under
+  `%APPDATA%\Microsoft\Signatures` — so these two actions read that folder directly and are the one
+  filesystem-backed, non-COM corner of the surface. They are strictly read-only: they never create,
+  edit, delete, or apply a signature, and cannot set which signature Outlook uses for new mail (a
+  per-account setting the object model does not expose). Their intended use is to fetch a signature's
+  text so a caller can append it to a draft. If the folder does not exist, `list` succeeds with an
+  empty list and `folderExists=false` rather than failing.
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the
@@ -96,6 +120,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   addressed by any other action; the field is omitted and `isSaved` distinguishes that case from a
   saved item. Note that such an item's parent folder reports as the Outbox - where it *would* be
   sent - not the Drafts folder.
+
+### Not done (declined with evidence)
+
+- **Out-of-office / automatic replies** (#15): declined. Classic Outlook's COM object model exposes
+  no property for reading or setting OOF on `Application`, `NameSpace`, `Account`, or `Store`. The
+  routes that can reach OOF all leave pure Outlook COM: `Account.AutoDiscoverXml` yields the EWS
+  endpoint but not the OOF state, and reading or setting OOF then requires authenticated EWS
+  (`GetUserOofSettings`/`SetUserOofSettings`); Microsoft Graph's `mailboxSettings/automaticRepliesSetting`
+  exposes it cleanly but is a separate HTTP API with its own auth. Per Rule 2 this repository ships no
+  placeholder or `NotImplementedException`, so OOF is declined with the evidence above rather than
+  faked. Taking it on later should be a conscious decision to add an EWS or Graph dependency, tracked
+  separately. See FEATURES.md "Out-of-office / automatic replies (not supported)".
 
 ### Fixed
 

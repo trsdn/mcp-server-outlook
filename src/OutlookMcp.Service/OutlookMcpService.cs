@@ -6,6 +6,8 @@ using OutlookMcp.Core.Commands.Calendar;
 using OutlookMcp.Core.Commands.Contact;
 using OutlookMcp.Core.Commands.Folder;
 using OutlookMcp.Core.Commands.Mail;
+using OutlookMcp.Core.Commands.Signature;
+using OutlookMcp.Core.Commands.Sync;
 using OutlookMcp.Core.Commands.Tasks;
 using OutlookMcp.Service.Rpc;
 using StreamJsonRpc;
@@ -36,6 +38,8 @@ public sealed class OutlookMcpService : IDisposable
     private readonly CalendarCommands _calendarCommands = new();
     private readonly ContactCommands _contactCommands = new();
     private readonly TaskCommands _taskCommands = new();
+    private readonly SyncCommands _syncCommands = new();
+    private readonly SignatureCommands _signatureCommands = new();
 
     public OutlookMcpService()
     {
@@ -186,6 +190,8 @@ public sealed class OutlookMcpService : IDisposable
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
                 "task" => DispatchTaskSessionless(action, request),
+                "sync" => DispatchSyncSessionless(action, request),
+                "signature" => DispatchSignatureSessionless(action, request),
                 _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown command category: {category}" }
             });
         }
@@ -393,6 +399,22 @@ public sealed class OutlookMcpService : IDisposable
             return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
 
         return WrapResult(ServiceRegistry.Mail.DispatchToCore(_mailCommands, action, request.Args));
+    }
+
+    private ServiceResponse DispatchSyncSessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Sync.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Sync.DispatchToCore(_syncCommands, action, request.Args));
+    }
+
+    private ServiceResponse DispatchSignatureSessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Signature.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Signature.DispatchToCore(_signatureCommands, action, request.Args));
     }
 
     public void Dispose()

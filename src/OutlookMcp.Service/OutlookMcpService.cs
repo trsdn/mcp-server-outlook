@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text.Json;
 using OutlookMcp.Core.Commands.Attachment;
+using OutlookMcp.Core.Commands.AddressBook;
 using OutlookMcp.Core.Commands.Application;
 using OutlookMcp.Core.Commands.Calendar;
 using OutlookMcp.Core.Commands.Contact;
@@ -30,6 +31,7 @@ public sealed class OutlookMcpService : IDisposable
 
     // Outlook command instances
     private readonly ApplicationCommands _applicationCommands = new();
+    private readonly AddressBookCommands _addressBookCommands = new();
     private readonly FolderCommands _folderCommands = new();
     private readonly AttachmentCommands _attachmentCommands = new();
     private readonly MailCommands _mailCommands = new();
@@ -180,6 +182,7 @@ public sealed class OutlookMcpService : IDisposable
                 "service" => HandleServiceCommand(action),
                 "diag" => HandleDiagCommand(action, request),
                 "application" => DispatchApplicationSessionless(action, request),
+                "addressbook" => DispatchAddressBookSessionless(action, request),
                 "attachment" => DispatchAttachmentSessionless(action, request),
                 "calendar" => DispatchCalendarSessionless(action, request),
                 "contact" => DispatchContactSessionless(action, request),
@@ -345,6 +348,14 @@ public sealed class OutlookMcpService : IDisposable
             return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
 
         return WrapResult(ServiceRegistry.Application.DispatchToCore(_applicationCommands, action, request.Args));
+    }
+
+    private ServiceResponse DispatchAddressBookSessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Addressbook.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Addressbook.DispatchToCore(_addressBookCommands, action, request.Args));
     }
 
     private ServiceResponse DispatchAttachmentSessionless(string actionString, ServiceRequest request)

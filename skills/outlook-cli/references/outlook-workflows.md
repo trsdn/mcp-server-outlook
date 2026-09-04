@@ -265,12 +265,78 @@ before telling a user something went wrong.
 ## Compose a new message
 
 ```
-1. mail.create-draft(...)
-2. mail.set-recipients / mail.set-subject / mail.set-body
-3. attachment.add(entryId: <draft>, path: ...)     → if needed
-4. read the draft back to the user
-5. mail.send(entryId: <draft>, confirm: true)
+1. addressbook.resolve(recipients: "...")            → check the addressees exist
+2. mail.create-draft(...)
+3. mail.set-recipients / mail.set-subject / mail.set-body
+4. attachment.add(entryId: <draft>, path: ...)     → if needed
+5. read the draft back to the user
+6. mail.send(entryId: <draft>, confirm: true)
 ```
+
+## Check an addressee before you send to one
+
+`addressbook.resolve` takes one or more display names, aliases or email addresses, separated by
+semicolons, and says which of them Outlook can actually find:
+
+```
+addressbook.resolve(recipients: "Jane Smith; someone@example.com")
+  → allResolved: false
+    unresolvedNames: ["Jane Smith"]
+```
+
+`allResolved` is the flag to check. `unresolvedNames` says which ones are wrong, so you can ask the
+user about the one bad addressee instead of sending and waiting for a bounce.
+
+An unresolved name is a **success** with `resolved: false`, not an error. "No such person" and
+"Outlook could not be reached" are different answers and must not be reported as the same thing.
+
+An ambiguous name - two Jane Smiths - also comes back unresolved. Outlook offers no way to list the
+candidates, so ask the user for the full email address rather than guessing which Jane is meant.
+
+**`smtpAddress` is the mailable address; `rawAddress` is not.** For an Exchange colleague, Outlook's
+own address property is an X500 directory name like
+`/o=ExchangeLabs/ou=Exchange Administrative Group.../cn=Recipients/cn=8a3f...`. It looks like an
+identifier because it is one, and mail sent to it goes nowhere. Always use `smtpAddress`, and never
+quote `rawAddress` to a user as their email address.
+
+`smtpAddressSource` says how the answer was obtained, and the distinction matters before sending:
+
+- `exchange-user` / `exchange-distribution-list` - the directory confirmed this person or group
+  exists
+- `contact` - it came from the user's own Contacts, which nobody validates
+- `smtp-entry` - it is a syntactically valid address that resolved as a one-off. **This is not
+  evidence the mailbox exists.** Anything shaped like an address resolves this way, including a
+  typo.
+
+So `allResolved: true` with every source `smtp-entry` means "nothing was misspelled enough to
+notice", not "these people are real". Say so if it matters.
+
+`isDistributionList` marks a group. Sending to a group is a different act from sending to one
+colleague; if the user named a person and a group came back, check before sending.
+
+**A denial is possible on any of these calls.** Recipients and address entries are exactly what
+Outlook's security prompt protects against outside callers. If a call fails saying Outlook blocked
+it, a human has to answer a dialog inside Outlook - no program can. Report that, do not retry in a
+loop. If a call succeeds but a value is listed in `accessDenied`, that value is missing because it
+was refused, not because the directory lacks it.
+
+## Find someone whose name you do not know exactly
+
+```
+addressbook.list-address-lists()                → which books exist
+addressbook.list-entries(addressList: "gal", startsWith: "Sm")
+```
+
+`list-entries` **scans**; it does not search. Outlook exposes no server-side lookup over an address
+book, so `startsWith` is applied while walking entries and the walk stops at `scanLimit`.
+
+Check `scanLimitReached`. When it is true the scan ran out before the book did, and an empty result
+is **not** evidence that nobody matches - a corporate Global Address List is far larger than any
+sensible scan limit. In that case ask the user for more of the name and use `resolve` instead, which
+asks the directory rather than reading it.
+
+`hasGlobalAddressList` is false on a profile with no Exchange account. There, colleagues cannot be
+looked up at all and the only addressees that exist are in local Contacts.
 
 ## Formatted mail, and when not to use it
 

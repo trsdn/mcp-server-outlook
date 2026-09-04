@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**7 tools with 57 operations for Outlook automation**
+**8 tools with 60 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -163,6 +163,42 @@ model, so every other operation in this document requires classic Outlook.
 `get-active-explorer` and `get-active-inspector` both answer "nothing is open" as a success, not an
 error. An item the user is still composing has not been saved and therefore has no `entryId`, so it
 cannot be addressed by any other action until it is; `isSaved` says which case you are in.
+
+---
+
+## Address Book Operations (3 operations)
+
+| Action | Description |
+|---|---|
+| `resolve` | Check one or more addressees against the address book and report their real SMTP addresses |
+| `list-address-lists` | List the address books attached to the profile: the Global Address List, Contacts, LDAP directories |
+| `list-entries` | Browse the entries in one address book |
+
+**`resolve` is the check to run before sending.** It answers per addressee, and `allResolved` is
+the single flag to test; `unresolvedNames` says which ones are wrong. A name Outlook cannot find is
+a success with `resolved: false`, not an error - "no such person" and "Outlook could not be
+reached" are different answers and must not collapse into one. An ambiguous name also comes back
+unresolved: Outlook's object model offers no way to list the candidates, so pass the full SMTP
+address to disambiguate.
+
+**`smtpAddress` is always a mailable address.** Outlook's own `AddressEntry.Address` returns an
+X500 legacyExchangeDN - `/o=ExchangeLabs/ou=.../cn=Recipients/cn=...` - for an Exchange entry. It
+is a string, it serialises cleanly, and mail sent to it goes nowhere. That value is reported
+separately as `rawAddress` and is never passed off as an email address. `smtpAddressSource` says
+which route produced the answer: the Exchange directory, a distribution list, a local contact, a
+`PR_SMTP_ADDRESS` read, or a one-off SMTP string that was never checked against anything.
+
+**`list-entries` scans; it does not search.** The Outlook object model has no `Restrict` or `Find`
+on an address book, so `startsWith` is applied while scanning and the scan stops at `scanLimit`. A
+corporate Global Address List is far larger than that, so check `scanLimitReached`: when it is
+true, an empty result is not evidence that nobody matches, and `resolve` is the right call for
+someone you can already name.
+
+**Every action here is Object Model Guard territory.** Recipients and address entries are exactly
+the members Outlook protects against out-of-process callers, so any of these calls can be refused
+by a modal security prompt that no program can answer. A refusal fails the call with an
+explanation; a property refused while the rest of the call succeeded is named in `accessDenied`, so
+a missing value is never confused with a value the directory does not hold.
 
 ---
 

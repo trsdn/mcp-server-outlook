@@ -6,14 +6,21 @@ An [Agent Skill](https://agentskills.io) for automating classic Outlook for Wind
 ## What this skill does
 
 When loaded by an AI agent (Claude, Codex, Cursor, Gemini CLI, etc.), this skill teaches the agent
-how to drive Outlook from scripts, with the same 5 tools and 30 operations the MCP server exposes:
+how to drive Outlook from scripts, with the same 8 tools and 60 operations the MCP server exposes:
 
-- **Mail** (16) - read the active item, read, list, search, create drafts, reply, reply-all,
-  forward, send, move, delete, set read state, set categories, set subject, body, and recipients
-- **Calendar** (5) - list and read appointments, create, update, and delete them
-- **Folders** (4) - list default folders, list children, resolve a path, list items
+- **Mail** (23) - read the active item, read, list, search, read a whole conversation, answer a
+  meeting invitation, create drafts, reply, reply-all, forward, send, move, delete, export, and set
+  read state, flags, categories, subject, body and recipients
+- **Folders** (10) - list default folders and stores, open a shared mailbox, create, rename, move
+  and delete folders, list children, resolve a path, list items
+- **Calendar** (7) - list and read appointments, create, update and delete them, check free/busy,
+  export
+- **Contacts** (5) - list, read, create, update, delete
+- **Tasks** (5) - list, read, create, update, delete
 - **Attachments** (4) - list, save, add, remove
-- **Application** (1) - report Outlook availability
+- **Application** (3) - report Outlook availability and what the user is looking at
+- **Address book** (3) - resolve addressees to real SMTP addresses before sending, list address
+  books, browse one
 
 The CLI surface is deliberately token-efficient and fully discoverable through `--help`, which makes
 it a better fit than the MCP server for coding agents.

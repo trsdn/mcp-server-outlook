@@ -8,6 +8,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Address book lookup and recipient resolution** (#15): a new `addressbook` tool with `resolve`,
+  `list-address-lists` and `list-entries`. `Session.AddressLists` was previously unused, so there
+  was no way to check an addressee before sending to them - the only feedback available was a bounce.
+
+  `resolve` takes one or more display names, aliases or addresses and answers per addressee, with
+  `allResolved` as the single flag to check before sending and `unresolvedNames` naming the bad
+  ones. An unresolved name is a success with `resolved: false`, not a failure: "no such person" and
+  "Outlook could not be reached" are different answers and collapsing them would defeat the point of
+  the call.
+
+  Three things were measured against a live Exchange mailbox rather than assumed:
+
+  - **`AddressEntry.Address` is not an email address.** For an Exchange entry it is the X500
+    legacyExchangeDN (`/o=.../cn=Recipients/cn=...`) - a plausible-looking string that mail cannot be
+    sent to. The real address comes from `GetExchangeUser().PrimarySmtpAddress`, with
+    `GetExchangeDistributionList().PrimarySmtpAddress` for a group (a different call on a different
+    COM type; `GetExchangeUser()` returns null for a group) and a `PR_SMTP_ADDRESS` read as a
+    fallback for everything else, including any entry at all while the client is offline from the
+    directory. Both values are reported - `smtpAddress` and `rawAddress` - and `smtpAddressSource`
+    says which route produced the answer, so a directory-confirmed address is distinguishable from a
+    one-off SMTP string that was never checked against anything.
+
+  - **An ambiguous name is indistinguishable from a missing one.** `Recipient.Resolve()` returns
+    false for both and the object model offers no way to list the candidates, so both are reported as
+    unresolved rather than guessed at.
+
+  - **An address book cannot be searched, only scanned.** There is no `Restrict` or `Find` on
+    `AddressEntries`, so `list-entries` walks the book with the documented `GetFirst`/`GetNext`
+    cursor and stops at `scanLimit`. `scanLimitReached` distinguishes "the book ran out" from "the
+    scan did", because an empty answer means opposite things in the two cases.
+
+  This is the most Object Model Guard-exposed surface in the product: every property and method on
+  `Recipient` is protected, along with `AddressEntry.Address`, `GetExchangeUser`,
+  `ExchangeUser.PrimarySmtpAddress` and every cursor method on `AddressEntries`. Guard exposure is
+  documented on every action, a whole-call denial fails with an explanation rather than a wrong
+  answer, and a property refused while the rest of the call succeeded is named in `accessDenied` so a
+  missing value is never confused with a value the directory does not hold.
+
+### Changed
+
+- **Object Model Guard denials are now recognised by `MAPI_E_NOT_SUPPORTED` as well as `E_ABORT`.**
+  `OutlookInteropRunner.IsObjectModelGuardDenial` only tested `E_ABORT` (0x80004004), which is what
+  the guard returns when it aborts a call in flight. Microsoft documents 0x80040102 for a protected
+  member refused outright, which is the shape the recipient and address book surface hits, and which
+  previously fell through to a generic COM failure. Note that `PropertyAccessor` also returns
+  `MAPI_E_NOT_SUPPORTED` for a property type it genuinely cannot handle, so code reading arbitrary
+  MAPI properties has to triage that case itself.
+
+### Added
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the

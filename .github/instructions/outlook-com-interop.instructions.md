@@ -308,7 +308,8 @@ it. A green result from it is not evidence:
   source files.
 - For the files it does read, the verdict is two file-wide booleans with no pairing between
   acquisition and release, so a file that acquires ten objects and releases one still prints
-  `Proper COM cleanup`.
+  `Proper COM cleanup`. One release call anywhere in a long file marks every acquisition in it
+  clean, which means a leak on an early-return or exception path cannot be caught by construction.
 - Its release pattern matches `ReleaseComObject` and `ReleaseSharedComObject` identically, so it
   cannot distinguish the correct call from the one that crashes the process - it is structurally
   incapable of enforcing the two release rules above.

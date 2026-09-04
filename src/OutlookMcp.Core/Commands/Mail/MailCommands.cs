@@ -932,7 +932,7 @@ public partial class MailCommands : IMailCommands
     public MailSendResult Send(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         bool confirm = false,
         string? operationId = null)
     {
@@ -1078,7 +1078,7 @@ public partial class MailCommands : IMailCommands
         string targetFolder,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = false)
     {
         if (string.IsNullOrWhiteSpace(targetFolder))
         {
@@ -1201,7 +1201,7 @@ public partial class MailCommands : IMailCommands
     public MailMutationResult Delete(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         bool confirm = false)
     {
         return OutlookInteropRunner.Execute(
@@ -1292,7 +1292,7 @@ public partial class MailCommands : IMailCommands
         bool isRead,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = false)
     {
         return OutlookInteropRunner.Execute(
             "OutlookMailSetReadState",
@@ -1376,7 +1376,7 @@ public partial class MailCommands : IMailCommands
     public MailMutationResult SetFlag(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         string flagStatus = "flagged",
         string? dueDate = null,
         string? flagRequest = null)
@@ -2007,7 +2007,7 @@ public partial class MailCommands : IMailCommands
         string? categories = null,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = false)
     {
         return OutlookInteropRunner.Execute(
             "OutlookMailSetCategories",
@@ -2085,7 +2085,7 @@ public partial class MailCommands : IMailCommands
         string subject,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = false)
     {
         if (subject == null)
         {
@@ -2169,7 +2169,7 @@ public partial class MailCommands : IMailCommands
         string body,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         string bodyFormat = "plain")
     {
         if (body == null)
@@ -2273,7 +2273,7 @@ public partial class MailCommands : IMailCommands
         string? bcc = null,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = false)
     {
         if (recipientTo == null && cc == null && bcc == null)
         {

@@ -81,7 +81,14 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use respond-to-meeting to accept, decline or tentatively accept a meeting invitation - a listing's itemType "
     + "says which items are invitations. Responding updates your own calendar; the organiser is told only when "
     + "sendResponse is true, so accepting quietly and notifying them are separate choices. "
-    + "Replying to an invitation with reply or forward is not the same thing and does not answer it.")]
+    + "Replying to an invitation with reply or forward is not the same thing and does not answer it. "
+    + "TARGETING: every action that changes, deletes or sends a message requires an explicit entryId. "
+    + "useActiveMail defaults to false for send, move, delete, set-read-state, set-flag, set-categories, "
+    + "set-subject, set-body, set-recipients and respond-to-meeting, so none of them will silently act on "
+    + "whatever the user happens to have highlighted in Outlook. Get the entry id from read-active, list or "
+    + "search first, or pass useActiveMail: true deliberately when the user's current selection really is "
+    + "what you mean. read, get-conversation, export, reply, reply-all and forward still default to the "
+    + "active item, because they only read the mailbox or produce a draft that nothing sends on its own.")]
 public interface IMailCommands
 {
     [ServiceAction("read-active", Destructive = false)]
@@ -184,7 +191,7 @@ public interface IMailCommands
     MailSendResult Send(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         bool confirm = false,
         string? operationId = null);
 
@@ -193,7 +200,7 @@ public interface IMailCommands
         string targetFolder,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = false);
 
     /// <summary>
     /// Saves a mail item to disk with <c>MailItem.SaveAs</c>.
@@ -230,7 +237,7 @@ public interface IMailCommands
     MailMutationResult Delete(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         bool confirm = false);
 
     [ServiceAction("set-read-state")]
@@ -238,13 +245,13 @@ public interface IMailCommands
         bool isRead,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = false);
 
     [ServiceAction("set-flag")]
     MailMutationResult SetFlag(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         string flagStatus = "flagged",
         string? dueDate = null,
         string? flagRequest = null);
@@ -254,7 +261,7 @@ public interface IMailCommands
         string? categories = null,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = false);
 
     [ServiceAction("list-categories")]
     MailCategoryListResult ListCategories();
@@ -275,14 +282,14 @@ public interface IMailCommands
         string subject,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = false);
 
     [ServiceAction("set-body")]
     MailMutationResult SetBody(
         string body,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         string bodyFormat = "plain");
 
     [ServiceAction("set-recipients")]
@@ -292,6 +299,6 @@ public interface IMailCommands
         string? bcc = null,
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = false);
 }
 

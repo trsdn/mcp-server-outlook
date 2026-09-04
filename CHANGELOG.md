@@ -43,7 +43,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **BREAKING (Core API only): `folder delete`, `attachment remove` and  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
+- **BREAKING: mutating actions no longer fall back to the user's current Outlook selection** (#9).
+  `useActiveMail`, `useActiveAppointment`, `useActiveContact` and `useActiveTask` now default to
+  **false** on every action that changes, deletes or sends something. Calling one without an
+  `entryId` is refused instead of acting on whatever happens to be highlighted in Outlook.
+
+  This is a confused deputy, and finding 5 of #9 is about exactly this: the model chooses the verb
+  and the human's current selection chooses the object, with neither party aware of the other's
+  contribution. "Delete that one", issued a moment after the user clicks a different message,
+  deleted the wrong message and reported success.
+
+  **Migration.** Get the entry id first - `mail.read-active` is one call and tells you exactly what
+  the user is looking at - and pass it explicitly. Where the current selection genuinely *is* the
+  target, pass `use_active_mail: true` (MCP) or `--use-active-mail true` (CLI) deliberately.
+
+  | Still defaults to the active item | Now requires an explicit `entryId` |
+  |---|---|
+  | `mail.read-active`, `mail.read`, `mail.get-conversation`, `mail.export` | `mail.send`, `mail.move`, `mail.delete`, `mail.set-read-state`, `mail.set-flag`, `mail.set-categories`, `mail.set-subject`, `mail.set-body`, `mail.set-recipients` |
+  | `mail.reply`, `mail.reply-all`, `mail.forward` | `attachment.add`, `attachment.remove` |
+  | `attachment.list`, `attachment.save` | `calendar.update-appointment`, `calendar.delete-appointment` |
+  | `calendar.read`, `calendar.export`, `contact.read`, `task.read` | `contact.update`, `contact.delete`, `task.update`, `task.delete` |
+
+  `reply`, `reply-all` and `forward` keep the fallback on purpose. They neither change an existing
+  item nor send anything: they produce a saved draft, which is inert until `send` - and `send` is
+  now both explicitly targeted and confirm-gated. Replying to "the message I'm looking at" is the
+  single most natural use of active-item targeting, and no irreversible step is attached to it.
+
+- **Fixed: per-action targeting defaults were decorative on the MCP surface** (#9). An
+  action-dispatch tool exposes **one** MCP parameter per name, shared by every action, and the
+  generator resolved its default by taking the first declaring method's. So `contact.delete`, which
+  has declared `useActiveContact = false` since it was written, received `true` anyway - because
+  `contact.read` is declared above it. The same applied to `calendar.update-appointment`,
+  `calendar.delete-appointment` and `task.delete`. Every deliberate per-action default on this
+  surface was overridden before it reached an LLM.
+
+  The generator now refuses to pick a winner: where the Core methods disagree about a parameter's
+  default, it emits the MCP parameter as nullable defaulting to `null`, and the dispatcher applies
+  each action's own default. The CLI was never affected - its generated settings were already
+  nullable - which is why the discrepancy survived. The two surfaces genuinely behaved differently
+  while every parity check compared action names rather than defaults.
+
+  This also fixes `mail.get-conversation` and `mail.list-reminders`, which advertised
+  `max_count: 25` over MCP while Core declares 50 for both, for the same reason.
+
+  `ActiveTargetingDefaultTests` asserts the general invariant across every action-dispatch tool, so
+  a future parameter whose defaults disagree cannot silently acquire one action's value. **The
+  surfaces are discovered by reflection over `[ServiceCategory]`, not listed** - the same live
+  enumeration `CoreCommandsCoverageTests` uses. A hand-written list would have had the same shape as
+  the defect it guards: it does not fail when it falls behind, it just quietly covers less, and a
+  new tool category would have acquired no targeting guard at all without anything reporting it.
+  Discovery raised coverage from five surfaces to seven immediately, since `folder` and
+  `application` were missing from the list that shipped first.
+
+  Two guards keep the discovery honest, because dynamic discovery that finds nothing looks exactly
+  like success: `EveryServiceCategoryInterface_IsPairedWithAGeneratedTool` fails loudly if a
+  category has no matching generated tool, and `AtLeastOneSurface_HasAParameterWhoseCoreDefaults`
+  `Disagree` fails if no surface anywhere exercises the invariant. The second is deliberately global
+  rather than per surface: `application` and `folder` legitimately declare no disagreeing defaults,
+  so demanding one from every tool would fail on a correct repository.
+
+- **BREAKING (Core API only): `folder delete`, `attachment remove` and
+  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
   that relied on an unconfirmed call succeeding must add `confirm: true` (CLI: `--confirm`; MCP:
   `"confirm": true`). No action was removed and no parameter was renamed, so the operation count is
   unchanged at 7 tools / 57 operations.

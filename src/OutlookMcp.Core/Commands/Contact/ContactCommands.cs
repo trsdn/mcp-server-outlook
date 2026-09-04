@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using OutlookMcp.Core.Commands.OutlookInterop;
 using OutlookMcp.Core.Models;
@@ -275,7 +275,7 @@ public class ContactCommands : IContactCommands
         string? businessTelephoneNumber = null,
         string? mobileTelephoneNumber = null,
         string? body = null,
-        bool useActiveContact = true)
+        bool useActiveContact = false)
     {
         bool hasUpdates =
             firstName != null ||

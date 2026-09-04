@@ -45,6 +45,10 @@ public interface IContactCommands
         string? body = null,
         bool display = false);
 
+    /// <summary>
+    /// Changes named fields on an existing contact. Fields that are not passed are left alone.
+    /// </summary>
+    /// <param name="useActiveContact">Off by default. A mutating action must not fall back to whatever the user has selected in Outlook: the caller chooses the verb and the selection would silently choose the object, so a mistyped id would edit a different contact and report success.</param>
     [ServiceAction("update", Destructive = true)]
     ContactMutationResult Update(
         string? entryId = null,
@@ -58,7 +62,7 @@ public interface IContactCommands
         string? businessTelephoneNumber = null,
         string? mobileTelephoneNumber = null,
         string? body = null,
-        bool useActiveContact = true);
+        bool useActiveContact = false);
 
     /// <summary>
     /// Deletes a contact.

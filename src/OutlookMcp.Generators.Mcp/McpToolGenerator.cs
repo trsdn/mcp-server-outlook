@@ -300,6 +300,21 @@ public class McpToolGenerator : IIncrementalGenerator
 
         // Build a lookup of param info by exposed name for type resolution
         var paramInfoByName = new Dictionary<string, ParameterInfo>(StringComparer.OrdinalIgnoreCase);
+
+        // ...and, separately, every distinct default declared for that exposed name.
+        //
+        // An action-dispatch tool has ONE MCP parameter per exposed name, shared by every action,
+        // but each Core method declares its own default. Where those disagree, taking the first
+        // method's default and applying it to all of them silently overrides the others: an
+        // interface saying `delete(useActiveContact = false)` still received `true`, because `read`
+        // happened to be declared first. That is a confused deputy on the destructive action - the
+        // model picks the verb and the user's current Outlook selection picks the object - and it
+        // made every per-action default on this surface decorative. See #9.
+        //
+        // The fix is to refuse to pick a winner: emit the parameter as nullable defaulting to null,
+        // so RouteAction forwards null and the dispatcher applies each action's own Core default.
+        var declaredDefaultsByName = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var method in info.Methods)
         {
             foreach (var p in method.Parameters)
@@ -307,6 +322,14 @@ public class McpToolGenerator : IIncrementalGenerator
                 var exposedName = p.ExposedName ?? p.Name;
                 if (!paramInfoByName.ContainsKey(exposedName))
                     paramInfoByName[exposedName] = p;
+
+                if (!declaredDefaultsByName.TryGetValue(exposedName, out var declared))
+                {
+                    declared = new HashSet<string>(StringComparer.Ordinal);
+                    declaredDefaultsByName[exposedName] = declared;
+                }
+
+                declared.Add(p.DefaultValue ?? "<no default>");
             }
         }
 
@@ -369,6 +392,12 @@ public class McpToolGenerator : IIncrementalGenerator
                 // Direct passthrough — type matches between MCP and RouteAction
                 var defaultExpr = GetDefaultExpression(ep.TypeName, pInfo);
                 var mcpType = ep.TypeName;
+
+                // Where the Core methods disagree about this parameter's default, no single value
+                // is correct for a merged tool-level parameter. Forward null and let each action's
+                // own default apply. See the comment on declaredDefaultsByName above.
+                if (declaredDefaultsByName.TryGetValue(ep.Name, out var declared) && declared.Count > 1)
+                    defaultExpr = "null";
 
                 // All exposed params are optional in MCP (not all actions use every param).
                 // If the default is null, ensure the type is nullable to match RouteAction.

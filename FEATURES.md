@@ -199,6 +199,12 @@ corporate Global Address List is far larger than that, so check `scanLimitReache
 true, an empty result is not evidence that nobody matches, and `resolve` is the right call for
 someone you can already name.
 
+The scan starts at the beginning of the book and does not jump to a prefix. Measured on a real
+corporate GAL: scanning 3000 entries for names starting with `S` matched **none of them**, because
+the first 3000 entries begin with punctuation and digits. The prefix filter is genuinely useful
+against a Contacts folder, which fits inside the budget; against a GAL, `resolve` is the only
+realistic way to find a person.
+
 **Every action here is Object Model Guard territory.** Recipients and address entries are exactly
 the members Outlook protects against out-of-process callers, so any of these calls can be refused
 by a modal security prompt that no program can answer. A refusal fails the call with an

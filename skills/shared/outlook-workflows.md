@@ -345,6 +345,11 @@ is **not** evidence that nobody matches - a corporate Global Address List is far
 sensible scan limit. In that case ask the user for more of the name and use `resolve` instead, which
 asks the directory rather than reading it.
 
+The scan starts at the beginning of the book and does not jump to a prefix. Measured on a real
+corporate GAL: 3000 entries scanned for names starting with `S` matched **none**, because the first
+3000 begin with punctuation and digits. So a prefix filter is worth using against `contacts`, and
+close to useless against the GAL - for a person on the GAL, use `resolve`.
+
 `hasGlobalAddressList` is false on a profile with no Exchange account. There, colleagues cannot be
 looked up at all and the only addressees that exist are in local Contacts.
 

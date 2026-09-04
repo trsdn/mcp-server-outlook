@@ -98,7 +98,7 @@ public interface IAddressBookCommands
     /// <param name="addressList">Which book to read, by name, or the aliases 'gal' and 'contacts'. Defaults to the book Outlook opens first.</param>
     /// <param name="startsWith">Keep only entries whose display name begins with this, compared case-insensitively. Applied while scanning, since Outlook cannot filter server-side.</param>
     /// <param name="maxCount">How many entries to return, 1 to 100.</param>
-    /// <param name="scanLimit">How many entries to examine before giving up, 1 to 5000. A corporate Global Address List is far larger than this.</param>
+    /// <param name="scanLimit">How many entries to examine before giving up, 1 to 5000. The scan starts at the beginning of the book and does not jump to a prefix, so on one real corporate Global Address List a 3000-entry scan for names starting with 'S' matched none at all - the first 3000 entries begin with punctuation and digits. Treat an empty result with scanLimitReached true as "not found yet", never as "nobody matches".</param>
     /// <param name="includeSmtpAddress">Resolve each returned entry to an SMTP address. One extra directory read per returned entry.</param>
     [ServiceAction("list-entries")]
     AddressEntryListResult ListEntries(

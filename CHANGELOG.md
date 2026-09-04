@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`folder.list-items` reported `__ComObject` and dropped the entry id** (#120): any item whose
+  PIA type had no branch in `CreateFolderItemInfo` fell through to a late-bound path that reported
+  `rawItem.GetType().Name`. For a late-bound RCW that name is the literal string `__ComObject`,
+  which identifies nothing. The same fallback never set `EntryId` or `StoreId`, so the item could
+  not be addressed afterwards either.
+
+  - ROOT CAUSE: only `MailItem`, `AppointmentItem` and `ContactItem` had typed branches. Everything
+    else - including `TaskItem` and `NoteItem` - took the fallback. Tasks are a fully shipped CRUD
+    surface, so listing the Tasks folder returned rows that an agent could see and then do nothing
+    with.
+  - FIX: typed branches for `TaskItem` and `NoteItem`, and the fallback now describes an item by its
+    Outlook message class (`IPM.Post` -> `post`, an unknown add-in class by its own name) and reads
+    `EntryID` late-bound. `__ComObject` can no longer be returned.
+  - Also fixed while in that code: the store id was read per item via `item.Parent`, which cost a
+    COM round-trip per row and produced a second reference to the folder the listing loop was
+    already enumerating. It is now read once from that folder. Releasing the per-item parent was
+    briefly attempted instead and crashed the test host - `ReleaseComObject` is
+    `FinalReleaseComObject`, and the RCW cache is keyed on the underlying `IUnknown`, so it
+    separated the very folder being listed. Same failure class as #19, on `MAPIFolder` rather than
+    `Application`.
+
 ### Added
 
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`

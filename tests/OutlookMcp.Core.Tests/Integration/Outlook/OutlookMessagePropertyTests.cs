@@ -54,6 +54,17 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
     /// <summary>
     /// The test the whole feature turns on. A message that arrived over SMTP carries its transport
     /// headers, and they must come back parsed into names and values rather than as one blob.
+    ///
+    /// <para>
+    /// The parsing is proved by counting, not by naming. An earlier version asserted that a
+    /// <c>Received</c> header was present - true of most received mail and not all of it. It went
+    /// green, then failed when the shared inbox changed underneath it and the first message with
+    /// headers turned out to carry none, having tested the mailbox rather than the parser. What is
+    /// asserted now is that the number of parsed headers equals the number of header-start lines
+    /// counted independently in the raw block. That holds for any message, assumes nothing about
+    /// which headers exist, and still fails loudly if the block comes back unsplit or if
+    /// continuation lines leak through as entries of their own.
+    /// </para>
     /// </summary>
     [SkippableFact]
     public void GetHeaders_ReceivedMessage_ReturnsParsedTransportHeaders()
@@ -62,7 +73,7 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
 
         var (entryId, storeId, subject) = RequireReceivedMessageWithHeaders();
 
-        var result = new PropertyCommands().GetHeaders(entryId: entryId, storeId: storeId);
+        var result = new PropertyCommands().GetHeaders(entryId: entryId, storeId: storeId, includeRaw: true);
 
         Assert.True(result.Success, result.ErrorMessage);
         Assert.Null(result.ErrorMessage);
@@ -70,18 +81,18 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
         Assert.Equal("ok", result.Status);
         Assert.NotEmpty(result.Headers);
         Assert.Equal(result.Headers.Count, result.HeaderCount);
+        Assert.NotNull(result.Raw);
 
         foreach (var header in result.Headers)
         {
             Assert.False(string.IsNullOrWhiteSpace(header.Name), "A header arrived without a name.");
             Assert.DoesNotContain(':', header.Name);
+            Assert.DoesNotContain(' ', header.Name);
         }
 
-        // Every message that traversed a transport has at least one Received header. Its absence
-        // would mean the value was read but not parsed.
-        Assert.Contains(result.Headers, h => h.Name.Equals("Received", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(CountHeaderStartLines(result.Raw!), result.HeaderCount);
 
-        output.WriteLine($"'{subject}': {result.HeaderCount} headers.");
+        output.WriteLine($"'{subject}': {result.HeaderCount} headers parsed from {result.RawLength} characters.");
         foreach (var header in result.Headers.Take(12))
         {
             output.WriteLine($"  {header.Name}: {Truncate(header.Value)}");
@@ -125,7 +136,15 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
 
     /// <summary>
     /// Header blocks run to tens of kilobytes. Asking for one header by name has to return that
-    /// header rather than everything.
+    /// header and nothing else.
+    ///
+    /// <para>
+    /// The name is taken from the message's own headers rather than hardcoded, for the same reason
+    /// as the test above: hardcoding <c>Received</c> tested which mail happened to be in a shared
+    /// inbox. Taking the name from the unfiltered result also allows the stronger assertion - the
+    /// filtered count must equal the number of headers of that name in the unfiltered set, which
+    /// catches a filter that drops duplicates as well as one that lets extras through.
+    /// </para>
     /// </summary>
     [SkippableFact]
     public void GetHeaders_WithHeaderName_ReturnsOnlyThatHeader()
@@ -133,15 +152,56 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
         EnsureOutlookAvailable();
 
         var (entryId, storeId, _) = RequireReceivedMessageWithHeaders();
+        var commands = new PropertyCommands();
 
-        var result = new PropertyCommands().GetHeaders(entryId: entryId, storeId: storeId, headerName: "Received");
+        var unfiltered = commands.GetHeaders(entryId: entryId, storeId: storeId);
+        Assert.True(unfiltered.Success, unfiltered.ErrorMessage);
+        Assert.NotEmpty(unfiltered.Headers);
+
+        // Prefer a header that appears more than once, so the duplicate-preserving behaviour is
+        // exercised; fall back to the first header when every one of them is unique.
+        string name = unfiltered.Headers
+            .GroupBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .First()
+            .Key;
+
+        int expected = unfiltered.Headers.Count(h => h.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+        var filtered = commands.GetHeaders(entryId: entryId, storeId: storeId, headerName: name);
+
+        Assert.True(filtered.Success, filtered.ErrorMessage);
+        Assert.True(filtered.HeadersPresent);
+        Assert.NotEmpty(filtered.Headers);
+        Assert.All(filtered.Headers, h => Assert.Equal(name, h.Name, ignoreCase: true));
+        Assert.Equal(expected, filtered.HeaderCount);
+        Assert.False(string.IsNullOrWhiteSpace(filtered.Note), "A filtered result did not say it was filtered.");
+
+        output.WriteLine($"'{name}': {filtered.HeaderCount} of {unfiltered.HeaderCount} headers returned.");
+    }
+
+    /// <summary>
+    /// A header name the message does not carry is a success with an empty list and a note saying
+    /// so, not a failure and not a silent fall back to every header.
+    /// </summary>
+    [SkippableFact]
+    public void GetHeaders_WithUnknownHeaderName_ReturnsNothingRatherThanEverything()
+    {
+        EnsureOutlookAvailable();
+
+        var (entryId, storeId, _) = RequireReceivedMessageWithHeaders();
+
+        var result = new PropertyCommands().GetHeaders(
+            entryId: entryId, storeId: storeId, headerName: $"X-OutlookMcp-{Guid.NewGuid():N}");
 
         Assert.True(result.Success, result.ErrorMessage);
-        Assert.True(result.HeadersPresent);
-        Assert.NotEmpty(result.Headers);
-        Assert.All(result.Headers, h => Assert.Equal("Received", h.Name, ignoreCase: true));
+        Assert.Null(result.ErrorMessage);
+        Assert.True(result.HeadersPresent, "The item carries headers, so headersPresent must stay true.");
+        Assert.Empty(result.Headers);
+        Assert.Equal(0, result.HeaderCount);
+        Assert.False(string.IsNullOrWhiteSpace(result.Note));
 
-        output.WriteLine($"{result.HeaderCount} Received header(s) returned.");
+        output.WriteLine($"Unknown header note: {result.Note}");
     }
 
     /// <summary>
@@ -486,6 +546,38 @@ public class OutlookMessagePropertyTests(ITestOutputHelper output)
     }
 
     private static string UniqueSubject() => $"{SubjectPrefix}-{Guid.NewGuid():N}";
+
+    /// <summary>
+    /// Counts the lines in a raw header block that begin a header, independently of the parser
+    /// under test: a line that starts with a non-whitespace character and carries a colon after at
+    /// least one character, stopping at the blank line that ends the block. Deliberately a second,
+    /// simpler implementation - a test that reuses the parser's own logic proves only that the
+    /// parser agrees with itself.
+    /// </summary>
+    private static int CountHeaderStartLines(string raw)
+    {
+        int count = 0;
+
+        foreach (string line in raw.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        {
+            if (line.Length == 0)
+            {
+                break;
+            }
+
+            if (line[0] == ' ' || line[0] == '\t')
+            {
+                continue;
+            }
+
+            if (line.IndexOf(':') > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     private static string Truncate(string? value)
         => value is null ? "(none)" : value.Length <= 70 ? value : value[..70] + "...";

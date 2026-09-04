@@ -1,6 +1,6 @@
 # Outlook agent skills
 
-Two skill packages target the two entry points. Both describe the same 5 tools and 30 operations.
+Two skill packages target the two entry points. Both describe the same 8 tools and 60 operations.
 
 | Skill | Folder | Target | Best for |
 |---|---|---|---|

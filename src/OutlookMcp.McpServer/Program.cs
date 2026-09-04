@@ -61,6 +61,7 @@ public class Program
     /// </summary>
     public static IEnumerable<Type> RegisteredToolTypes { get; } = new[]
     {
+        typeof(OutlookMcp.McpServer.Tools.OutlookAddressbookTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookApplicationTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookAttachmentTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookCalendarTool),

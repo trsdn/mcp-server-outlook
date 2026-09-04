@@ -16,7 +16,9 @@ namespace OutlookMcp.Core.Commands.Folder;
     + "it returns a folder path usable with the mail and calendar tools. "
     + "Use create, rename, move and delete to change the folder tree - create takes a parent folder and a name, "
     + "and delete removes the folder together with everything filed in it. "
-    + "Default folders such as Inbox, Sent Items and Calendar, and store roots, are refused for rename, move and delete: "
+    + "Use empty to clear a folder's own items (moving them to Deleted Items) while keeping the folder and its subfolders; "
+    + "empty requires confirm=true. "
+    + "Default folders such as Inbox, Sent Items and Calendar, and store roots, are refused for rename, move, delete and empty: "
     + "Outlook itself allows those and they are not recoverable.")]
 public interface IFolderCommands
 {
@@ -40,6 +42,33 @@ public interface IFolderCommands
 
     [ServiceAction("delete", Destructive = true)]
     OutlookFolderResolveResult Delete(string? folder = null);
+
+    /// <summary>
+    /// Deletes the items inside a folder while keeping the folder itself.
+    ///
+    /// <para>
+    /// <b>Semantics, stated so an agent never has to guess.</b> Empty removes the folder's own items
+    /// only - it moves each one to the store's Deleted Items folder (the same as deleting a single
+    /// mail item), so in a normal mailbox the contents can still be recovered from Deleted Items.
+    /// <b>Subfolders and everything inside them are left untouched:</b> "empty the archive" clears the
+    /// archive's own messages but keeps its sub-folders and their contents. To remove a subfolder too,
+    /// delete it explicitly.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>This is the most dangerous action here.</b> Emptying the Inbox in one call is not the same
+    /// as deleting one message, so default and special folders (Inbox, Sent Items, Drafts, Deleted
+    /// Items, Calendar, Contacts, Tasks, Notes, Junk) and store roots are refused outright, across
+    /// every store. It also requires <c>confirm=true</c>: without it the folder is resolved, the guard
+    /// is checked, and then the call is refused so the agent has to confirm with the user first. The
+    /// result reports how many items were removed, so an empty folder (0 removed, success) is
+    /// distinguishable from a refusal.
+    /// </para>
+    /// </summary>
+    /// <param name="folder">The folder to empty, as a path or a resolved identifier. There is no default target. Default/special folders and store roots are refused.</param>
+    /// <param name="confirm">Must be <c>true</c> to proceed. Left <c>false</c>, the call is refused after the folder is resolved and the guards are checked, so the agent can tell the user exactly what would be cleared before repeating the call.</param>
+    [ServiceAction("empty", Destructive = true)]
+    OutlookFolderResolveResult Empty(string? folder = null, bool confirm = false);
 
     [ServiceAction("list-children")]
     OutlookFolderListResult ListChildren(

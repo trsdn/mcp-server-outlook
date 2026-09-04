@@ -68,6 +68,7 @@ public class Program
         typeof(OutlookMcp.McpServer.Tools.OutlookContactTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookFolderTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookMailTool),
+        typeof(OutlookMcp.McpServer.Tools.OutlookPropertyTool),
         typeof(OutlookMcp.McpServer.Tools.OutlookTaskTool),
     };
 

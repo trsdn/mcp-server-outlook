@@ -353,6 +353,62 @@ close to useless against the GAL - for a person on the GAL, use `resolve`.
 `hasGlobalAddressList` is false on a profile with no Exchange account. There, colleagues cannot be
 looked up at all and the only addressees that exist are in local Contacts.
 
+## Read the headers behind a message
+
+```
+property.get-headers(entryId: <message>)
+property.get-headers(entryId: <message>, headerName: "Authentication-Results")
+```
+
+This is how you answer "did this really come from who it says", "who sent the original behind this
+forward", and "how do I unsubscribe from this". SPF and DKIM verdicts live in
+`Authentication-Results` and `Received-SPF`; the delivery path is the `Received` chain, one header
+per relay hop, ordered newest first.
+
+A header block is often tens of kilobytes. Pass `headerName` when you want one header. Only set
+`includeRaw` when the unparsed block is genuinely what the user asked for.
+
+**A draft has no headers, and that is not a failure.** Nothing composed locally traversed a
+transport, so it carries none - `headersPresent` is false on a successful call. The same is often
+true of a message delivered entirely inside one organisation. Do not report that as an error, and do
+not retry it.
+
+Continuation lines are already folded back in, so a long `Authentication-Results` arrives whole
+rather than split across entries.
+
+## Read a property Outlook does not show you
+
+```
+property.get-known(entryId: <message>)        → the common ones, decoded
+property.get-property(entryId: <message>, dasl: "http://schemas.microsoft.com/mapi/proptag/0x007D001F")
+```
+
+`get-known` answers the usual questions in one call: the Internet message id, the in-reply-to id,
+the sender's real SMTP address, and whether the message was replied to or forwarded
+(`lastVerbExecuted`, with a plain-English `meaning`). Prefer it over hand-assembling DASL tags.
+
+`get-property` reads **any** MAPI property by its DASL name. It is read-only and it cannot reach an
+item you could not already open with `mail.read`, but it is not a narrow window either: it will
+return anything the store holds on that item. Use `get-headers` or `get-known` when they answer the
+question, and reach for `get-property` when they do not.
+
+**Every property comes back with a `status`, and `found` is the flag to check:**
+
+| status | meaning |
+|---|---|
+| `ok` | there is a value |
+| `not-present` | the item does not carry this property - ordinary, not a failure |
+| `empty` | the store returned an empty value instead of reporting it missing - same practical meaning |
+| `blocked` | the value exists and Outlook refused to hand it over |
+| `unsupported-or-blocked` | either the property's type cannot be read at all, or it was refused - Outlook does not say which |
+
+`not-present` and `empty` both mean "no usable value" and both set `found: false`, so a single check
+covers them. `blocked` is different in kind: never report a blocked property as "this message has
+none". Say that Outlook withheld it.
+
+A binary property comes back as base64 plus the hex form Outlook itself uses - never as the string
+`System.Byte[]`.
+
 ## Formatted mail, and when not to use it
 
 `create-draft`, `reply`, `reply-all`, `forward` and `set-body` all take `bodyFormat`, which is

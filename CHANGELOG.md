@@ -86,8 +86,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   This also fixes `mail.get-conversation` and `mail.list-reminders`, which advertised
   `max_count: 25` over MCP while Core declares 50 for both, for the same reason.
 
-  `ActiveTargetingDefaultTests` asserts the general invariant across all five action-dispatch tools,
-  so a future parameter whose defaults disagree cannot silently acquire one action's value.
+  `ActiveTargetingDefaultTests` asserts the general invariant across every action-dispatch tool, so
+  a future parameter whose defaults disagree cannot silently acquire one action's value. **The
+  surfaces are discovered by reflection over `[ServiceCategory]`, not listed** - the same live
+  enumeration `CoreCommandsCoverageTests` uses. A hand-written list would have had the same shape as
+  the defect it guards: it does not fail when it falls behind, it just quietly covers less, and a
+  new tool category would have acquired no targeting guard at all without anything reporting it.
+  Discovery raised coverage from five surfaces to seven immediately, since `folder` and
+  `application` were missing from the list that shipped first.
+
+  Two guards keep the discovery honest, because dynamic discovery that finds nothing looks exactly
+  like success: `EveryServiceCategoryInterface_IsPairedWithAGeneratedTool` fails loudly if a
+  category has no matching generated tool, and `AtLeastOneSurface_HasAParameterWhoseCoreDefaults`
+  `Disagree` fails if no surface anywhere exercises the invariant. The second is deliberately global
+  rather than per surface: `application` and `folder` legitimately declare no disagreeing defaults,
+  so demanding one from every tool would fail on a correct repository.
 
 - **BREAKING (Core API only): `folder delete`, `attachment remove` and
   `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers

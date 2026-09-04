@@ -485,7 +485,7 @@ public class OutlookMailFlagTests(ITestOutputHelper output)
         {
             OutlookInteropRunner.ReleaseComObject(ref mail);
             OutlookInteropRunner.ReleaseComObject(ref session);
-            OutlookInteropRunner.ReleaseComObject(ref application);
+            OutlookInteropRunner.ReleaseSharedComObject(ref application);
         }
     }
 
@@ -513,7 +513,7 @@ public class OutlookMailFlagTests(ITestOutputHelper output)
             throw new SkipException("No running classic Outlook desktop instance is available.");
         }
 
-        OutlookInteropRunner.ReleaseComObject(ref application);
+        OutlookInteropRunner.ReleaseSharedComObject(ref application);
     }
 }
 

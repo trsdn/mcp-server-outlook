@@ -369,6 +369,6 @@ public class OutlookContactTests(ITestOutputHelper output)
             return;
         }
 
-        OutlookInteropRunner.ReleaseComObject(ref application);
+        OutlookInteropRunner.ReleaseSharedComObject(ref application);
     }
 }

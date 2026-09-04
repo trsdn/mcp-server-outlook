@@ -98,6 +98,28 @@ catch {
 }
 
 Write-Host ""
+
+Write-Host "Checking nothing final-releases the shared Outlook.Application..." -ForegroundColor Cyan
+
+try {
+    $sharedApplicationScript = Join-Path $rootDir "scripts\check-shared-application-release.ps1"
+    & $sharedApplicationScript
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "The shared Outlook.Application is being final-released. Fix it before committing." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Shared Application release check passed" -ForegroundColor Green
+}
+catch {
+    Write-Host "Error running shared Application release check: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "   This check is mandatory and could not be completed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ""
 Write-Host "Checking Core Commands coverage (Outlook surface)..." -ForegroundColor Cyan
 
 try {

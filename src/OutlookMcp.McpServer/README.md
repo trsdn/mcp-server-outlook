@@ -8,7 +8,7 @@ identical actions, parameters, defaults, and validation.
 
 ## Tool families
 
-8 tools, 60 operations:
+9 tools, 64 operations:
 
 | Tool | Operations |
 |---|---|
@@ -20,6 +20,7 @@ identical actions, parameters, defaults, and validation.
 | `attachment` | 4 |
 | `application` | 3 |
 | `addressbook` | 3 |
+| `property` | 4 |
 
 See [FEATURES.md](../../FEATURES.md) for the full action list.
 

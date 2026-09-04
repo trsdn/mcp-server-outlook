@@ -27,6 +27,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The test suite intermittently crashed the test host** (#116). Thirteen sites across ten
+  integration test files released the shared `Outlook.Application` with
+  `OutlookInteropRunner.ReleaseComObject`, whose generic overload is `FinalReleaseComObject`. That
+  zeroes the RCW refcount for every holder in the process, so a later test could be handed a wrapper
+  separated from its RCW and the host died with `STATUS_STACK_BUFFER_OVERRUN` (`0xc0000409`). It
+  never surfaced as a test failure, only as apparent infrastructure flakiness. This is the same
+  defect as #19, which production already guards against; the convention was documented in the test
+  suite but not followed. All sites now use `ReleaseSharedComObject`.
+
+  A new pre-commit check, `check-shared-application-release.ps1`, keeps it from coming back. It was
+  confirmed to block a commit by reintroducing one of the thirteen sites.
+
 - **Pre-commit staged the generated skill files before the build that generates them.** The
   auto-staging step asserted in a comment that "the Release build already ran"; it had not - the
   only Release build in the hook is the one inside the CLI workflow smoke test, which runs

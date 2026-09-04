@@ -393,7 +393,7 @@ public class OutlookRecurrenceOccurrenceTests(ITestOutputHelper output)
             return;
         }
 
-        OutlookInteropRunner.ReleaseComObject(ref application);
+        OutlookInteropRunner.ReleaseSharedComObject(ref application);
         output.WriteLine("Classic Outlook is running; the test will exercise it.");
     }
 }

@@ -8,6 +8,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Category creation** (#15): `mail create-category`, `update-category` and `delete-category`
+  manage the mailbox's master category list. `list-categories` and `set-categories` already let an
+  agent discover and assign categories, but nothing could create one, so assigning a name that did
+  not exist silently produced a colourless dead label that Outlook cannot filter or colour by.
+
+  - **Colours are friendly names, not enum ordinals.** `create-category` and `update-category` take
+    a colour by the same name `list-categories` reports (`red`, `darkTeal`, `none`, ...), mapped to
+    `OlCategoryColor`. An omitted or unrecognised colour creates the category with `none` and says
+    so in the result rather than failing or guessing - nothing is silent.
+  - **Creating a duplicate name is refused, not silently merged.** Outlook throws on
+    `Categories.Add` for an existing name; that is surfaced as an explicit refusal.
+  - **A rename that collides re-scans by snapshot, never while holding the target.** Outlook shares
+    one RCW per underlying category, so re-enumerating the collection to check for a name collision
+    while holding the category being renamed finalises its RCW mid-operation. The collision check
+    reads a name snapshot first, then re-acquires the single target by ordinal.
+
+- **Folder empty** (#15): `folder empty` deletes a folder's own items while keeping the folder. It is
+  the single most dangerous operation in the surface, so the guards are the feature:
+
+  - **Refuses default and special folders and store roots outright** - Inbox, Sent Items, Drafts,
+    Deleted Items, Calendar, Contacts, Tasks, Notes, Junk - in every store. Outlook itself permits
+    emptying the Inbox with no prompt; this does not.
+  - **Requires `confirm=true`.** Without it the call is refused and nothing is removed. This reuses
+    the `confirm=true` confirmation-gate pattern introduced for irreversible actions; the
+    `ConfirmationGate` helper is added here minimally and will reconcile with the same class from the
+    parallel confirmation-gate change on merge (add/add).
+  - **Semantics chosen and documented on the tool:** items are moved to Deleted Items (recoverable,
+    like `mail delete`), and subfolders and their contents are left untouched - "empty the archive"
+    does not recurse. The result reports `itemsRemoved`, so an emptied folder (success with a count)
+    is distinguishable from a refusal (`success=false`).
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the

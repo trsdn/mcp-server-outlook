@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**7 tools with 57 operations for Outlook automation**
+**7 tools with 61 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -13,7 +13,7 @@ bug (see Rule 24, post-change sync).
 
 ---
 
-## Mail Operations (23 operations)
+## Mail Operations (26 operations)
 
 | Action | Description |
 |---|---|
@@ -34,6 +34,9 @@ bug (see Rule 24, post-change sync).
 | `set-flag` | Set or clear a follow-up flag on a message |
 | `set-categories` | Set the categories on a message |
 | `list-categories` | List the categories defined in the master category list |
+| `create-category` | Create a category in the master category list, with a named colour so it shows in colour when assigned |
+| `update-category` | Rename or recolour an existing category, or change its shortcut key |
+| `delete-category` | Remove a category from the master category list |
 | `list-rules` | List the Outlook rules defined on the store |
 | `list-reminders` | List pending reminders |
 | `set-subject` | Set the subject of a draft |
@@ -77,7 +80,7 @@ whether or not the mailbox exists, so a successful create is not proof that the 
 
 ---
 
-## Folder Operations (10 operations)
+## Folder Operations (11 operations)
 
 | Action | Description |
 |---|---|
@@ -88,9 +91,18 @@ whether or not the mailbox exists, so a successful create is not proof that the 
 | `rename` | Rename a folder |
 | `move` | Move a folder under a different parent |
 | `delete` | Delete a folder |
+| `empty` | Delete a folder's own items (moving them to Deleted Items) while keeping the folder and its subfolders. Requires `confirm=true`; refuses default folders and store roots |
 | `list-children` | List the child folders of a folder |
 | `resolve-path` | Resolve a folder path to a folder |
 | `list-items` | List the items in a folder |
+
+**`empty` is the most dangerous folder operation and is guarded accordingly.** It clears a folder's
+own items only - subfolders and their contents are left untouched - and each item is moved to
+Deleted Items rather than destroyed, so it is recoverable the way `mail delete` is. Default and
+special folders (Inbox, Sent Items, Drafts, Deleted Items, Calendar, Contacts, Tasks, Notes, Junk)
+and store roots are refused outright, and any other folder is refused without `confirm=true`. The
+result reports `itemsRemoved`, so a caller can tell an emptied folder (success, count) from a
+refusal (`success=false`).
 
 ---
 

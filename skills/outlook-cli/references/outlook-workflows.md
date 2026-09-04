@@ -408,6 +408,56 @@ Things worth reading off the result:
 Rules are read-only here. Creating or changing one alters real mail flow for every future message,
 so if the user wants that, tell them where it is in Outlook rather than implying this tool can do it.
 
+## Changing rules
+
+The `rule` tool does what `mail.list-rules` cannot: `rule.create`, `rule.update`, `rule.set-enabled`
+and `rule.delete`. `mail.list-rules` and `rule.list` are the same listing.
+
+Treat these as the most dangerous calls available. A wrong `mail.delete` puts one message in Deleted
+Items; a wrong rule silently misfiles or destroys mail that has not arrived yet, indefinitely.
+
+```
+1. rule.list(includeDetail: true)                 → read what is already there
+2. (show the user the rule you intend to create)
+3. rule.create(name: "Newsletters",
+               fromAddress: "newsletter@example.com",
+               moveToFolder: "Inbox\News",
+               enabled: false)                    → staged, not yet acting on mail
+4. rule.list(includeDetail: true)                 → confirm what Outlook actually stored
+5. rule.set-enabled(name: "Newsletters", enabled: true)
+```
+
+Creating it disabled and enabling it as a separate, confirmed step is worth the extra call whenever
+the user has not seen the rule yet.
+
+What will otherwise look like a bug:
+
+- **A new rule is inserted at the top of the evaluation order**, not the bottom, so it runs before
+  every existing rule. If it also stops processing, nothing else runs for mail it matches.
+- **`deleteMessage` reads back as `moveToFolder` to Deleted Items, plus `stop`.** Outlook has no
+  delete action and rewrites it. That is the rule working, not a different rule. For the same reason
+  `deleteMessage` and `moveToFolder` cannot both be set.
+- **A refused name is not a bug to route around.** Rules are addressed by name and Outlook permits
+  duplicates, so a name matching nothing or matching two rules is refused. Take that back to the
+  user rather than picking one.
+
+Constraints worth knowing before promising the user something:
+
+- **There is no mark-as-read action at all.** Outlook's rule object model does not have one. Only
+  the Rules and Alerts wizard inside Outlook can create such a rule.
+- **No forward, redirect or CC action** is offered, because those send mail on the user's behalf
+  unattended and indefinitely.
+- **One condition term each.** `fromAddress` and `subjectContains` take a single term. Rules with
+  several terms are read back correctly but cannot be written here.
+- **A rule must have at least one condition and at least one action.** Outlook would accept a rule
+  with neither; this refuses it, because a rule with no conditions matches every message that
+  arrives.
+- **Rules are per-store.** Pass `storeId` from `folder.list-stores` for a mailbox other than the
+  default; an unknown `storeId` is refused rather than falling back.
+- **Every write rewrites the whole collection.** Check `ruleCount` in the response. If the save
+  fails, nothing was written at all - not partially - and the usual causes are the user having the
+  Rules and Alerts wizard open, the Exchange rules quota, or an unrelated malformed rule.
+
 ## Save attachments
 
 ```

@@ -8,6 +8,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Rule CRUD** (#15): a new `rule` tool and `outlookcli rule` command with `list`, `create`,
+  `update`, `set-enabled` and `delete`. Rules were previously read-only through
+  `mail list-rules`, which could explain where mail had gone but could not do anything about it.
+  `mail list-rules` is kept unchanged and now delegates to the new category, so there is one
+  implementation.
+
+  **Why a separate category rather than more `mail` actions.** Every `mail` action addresses a
+  message by `entryId`/`storeId`; every rule action addresses a rule by name within a store's rule
+  collection, and mixing two identity models in one tool invites passing one where the other
+  belongs. The blast radius also differs in kind - a message deleted in error is in Deleted Items,
+  while a rule created in error silently misfiles mail that has not arrived yet - which deserves a
+  tool description leading with that rather than a clause appended to an already very long one.
+
+  Three things were measured against a live mailbox rather than assumed, and all three would
+  otherwise look like bugs:
+
+  - **Outlook inserts a new rule at the top of the evaluation order, not the bottom.** A newly
+    created rule came back with `executionOrder` 1 on a mailbox with 84 existing rules, so it runs
+    before all of them.
+  - **There is no delete rule action.** Outlook rewrites "delete it" into a move to Deleted Items
+    plus stop-processing, so a rule created with `deleteMessage` reads back as `moveToFolder`. This
+    was found by an assertion on `"delete"` failing against a correct implementation. `deleteMessage`
+    and `moveToFolder` are consequently refused together, because a rule has one move destination.
+  - **There is no mark-as-read action at any level.** `RuleActions` does not expose one, so no
+    programmatic caller can create such a rule; only the Rules and Alerts wizard can. Documented as
+    impossible rather than omitted.
+
+  **Guards, because Outlook has none.** A rule with no conditions matches every message that
+  arrives, and one with no actions does nothing; Outlook accepts both, and both are refused here on
+  create and on update. Rules are addressed by name and Outlook permits duplicates, so `create`
+  refuses a name already in use and `update`/`set-enabled`/`delete` refuse a name matching no rule
+  or more than one rather than picking the first. An unknown `storeId` is refused rather than
+  falling back to the default store.
+
+  **Deliberately out of scope**: forward, redirect and CC actions (they send mail on the user's
+  behalf unattended and indefinitely, and need Object Model Guard-protected recipient resolution),
+  `DeletePermanently`, the `From` condition (needs `Recipients.ResolveAll`, which raises the Object
+  Model Guard prompt - `SenderAddress` is used instead and matches the SMTP address directly),
+  multi-term conditions, rule exceptions, send-rule creation, and reordering. All of these are still
+  enumerated correctly by `list`. See FEATURES.md for the full rationale table.
+
+  `list` now also reports `subjectTerms`, `senderAddresses`, `assignCategories` and
+  `storeDisplayName`, so a rule's clauses can be read rather than only counted - which is also what
+  makes an `update` verifiable as replacing a term rather than appending to it.
+
+### Fixed
+
+- **Use-after-free crash in rule mutation**: everything below a `Rules` collection - the `Rule`
+  objects, their `Conditions`/`Actions` collections and the clause slots inside them - is a cached
+  child that Outlook hands back by the same pointer on every access, so `Rules.Item(3)` twice is one
+  object, as are `Conditions.Subject` and the `Conditions[n]` reporting the subject slot.
+  Final-releasing them dropped the refcount on an object Outlook was still handing out, and the next
+  access took the test host process down rather than throwing. They are now released with
+  `ReleaseSharedComObject`, for the same reason #19 requires it for the shared `Application`.
+
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
   all - an agent asked to "book a room" could only name it in `requiredAttendees`, which invites the

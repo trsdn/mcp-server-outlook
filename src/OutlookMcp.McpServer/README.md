@@ -8,7 +8,7 @@ identical actions, parameters, defaults, and validation.
 
 ## Tool families
 
-5 tools, 30 operations:
+$18 tools, 62 operations:
 
 | Tool | Operations |
 |---|---|

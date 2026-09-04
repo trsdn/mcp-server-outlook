@@ -262,7 +262,7 @@ public class AddressBookCommands : IAddressBookCommands
                 return info;
             }
 
-            entry = SafeGetComObject(() => recipient.AddressEntry);
+            entry = SafeGetComObject(() => recipient.AddressEntry, "Recipient.AddressEntry", info.AccessDenied);
             PopulateFromAddressEntry(info, entry, recipient, includeDetails);
             return info;
         }
@@ -282,8 +282,11 @@ public class AddressBookCommands : IAddressBookCommands
     {
         if (entry == null)
         {
-            info.Note = "Outlook resolved the name but returned no address entry for it, so no "
-                + "address could be read.";
+            info.Note = info.AccessDenied.Contains("Recipient.AddressEntry")
+                ? "Outlook resolved the name but its security prompt refused the address entry, so "
+                  + "no address could be read. This is not the same as the addressee having none."
+                : "Outlook resolved the name but returned no address entry for it, so no "
+                  + "address could be read.";
             return;
         }
 
@@ -359,7 +362,7 @@ public class AddressBookCommands : IAddressBookCommands
 
         try
         {
-            user = SafeGetComObject(() => entry.GetExchangeUser());
+            user = SafeGetComObject(() => entry.GetExchangeUser(), "AddressEntry.GetExchangeUser", info.AccessDenied);
 
             if (user == null)
             {
@@ -404,7 +407,10 @@ public class AddressBookCommands : IAddressBookCommands
             // A distribution list is a different COM type reached by a different call.
             // GetExchangeUser() on a group entry returns null, so dispatching on the entry type
             // rather than trying one call and hoping is the only correct shape here.
-            list = SafeGetComObject(() => entry.GetExchangeDistributionList());
+            list = SafeGetComObject(
+                () => entry.GetExchangeDistributionList(),
+                "AddressEntry.GetExchangeDistributionList",
+                info.AccessDenied);
 
             if (list == null)
             {
@@ -439,7 +445,7 @@ public class AddressBookCommands : IAddressBookCommands
 
         try
         {
-            contact = SafeGetComObject(() => entry.GetContact());
+            contact = SafeGetComObject(() => entry.GetContact(), "AddressEntry.GetContact", info.AccessDenied);
 
             if (contact == null)
             {
@@ -469,15 +475,17 @@ public class AddressBookCommands : IAddressBookCommands
         bool includeSmtpAddress)
     {
         Outlook.OlAddressEntryUserType? userType = SafeGetUserType(entry);
+        var denied = new List<string>();
 
         var info = new AddressBookEntryInfo
         {
             DisplayName = displayName,
             EntryType = DescribeEntryType(userType),
-            AddressType = NullIfBlank(SafeGet(() => entry.Type)),
-            RawAddress = NullIfBlank(SafeGet(() => entry.Address)),
+            AddressType = NullIfBlank(SafeGet(() => entry.Type, "AddressEntry.Type", denied)),
+            RawAddress = NullIfBlank(SafeGet(() => entry.Address, "AddressEntry.Address", denied)),
             IsDistributionList = userType is Outlook.OlAddressEntryUserType.olExchangeDistributionListAddressEntry
-                or Outlook.OlAddressEntryUserType.olOutlookDistributionListAddressEntry
+                or Outlook.OlAddressEntryUserType.olOutlookDistributionListAddressEntry,
+            AccessDenied = denied
         };
 
         if (!includeSmtpAddress)
@@ -485,7 +493,6 @@ public class AddressBookCommands : IAddressBookCommands
             return info;
         }
 
-        var denied = new List<string>();
         var resolved = new ResolvedRecipientInfo { Query = displayName, AccessDenied = denied };
 
         switch (userType)
@@ -523,7 +530,6 @@ public class AddressBookCommands : IAddressBookCommands
 
         info.SmtpAddress = resolved.SmtpAddress;
         info.SmtpAddressSource = resolved.SmtpAddressSource;
-        info.AccessDenied = denied;
         return info;
     }
 
@@ -539,7 +545,7 @@ public class AddressBookCommands : IAddressBookCommands
 
         try
         {
-            accessor = SafeGetComObject(accessorFactory);
+            accessor = SafeGetComObject(accessorFactory, "PropertyAccessor", accessDenied);
 
             if (accessor == null)
             {
@@ -756,9 +762,16 @@ public class AddressBookCommands : IAddressBookCommands
     // ── Small helpers ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Splits an addressee argument on the separators a caller is likely to have used. Commas are
-    /// accepted alongside semicolons because an LLM building the string from a list will reach for
-    /// a comma, and refusing that would be pedantry rather than safety.
+    /// Splits an addressee argument on semicolons, and on semicolons only.
+    ///
+    /// <para>
+    /// Commas are deliberately <b>not</b> separators. <c>Smith, Jane</c> is the canonical Exchange
+    /// Global Address List display-name shape, so splitting on commas would take the single most
+    /// common form of the exact input this action exists to resolve and turn it into two addressees,
+    /// neither of which resolves. Outlook itself uses <c>;</c> between recipients for the same
+    /// reason. Accepting commas as well would be friendlier in the abstract and wrong in the case
+    /// that matters.
+    /// </para>
     /// </summary>
     private static List<string> SplitRecipients(string? recipients)
     {
@@ -768,7 +781,7 @@ public class AddressBookCommands : IAddressBookCommands
         }
 
         return recipients
-            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(part => !string.IsNullOrWhiteSpace(part))
             .ToList();
     }
@@ -810,16 +823,20 @@ public class AddressBookCommands : IAddressBookCommands
         }
         catch (COMException ex) when (OutlookInteropRunner.IsObjectModelGuardDenial(ex))
         {
-            if (!accessDenied.Contains(propertyName))
-            {
-                accessDenied.Add(propertyName);
-            }
-
+            RecordAccessDenied(accessDenied, propertyName);
             return null;
         }
         catch (COMException)
         {
             return null;
+        }
+    }
+
+    private static void RecordAccessDenied(List<string> accessDenied, string memberName)
+    {
+        if (!accessDenied.Contains(memberName))
+        {
+            accessDenied.Add(memberName);
         }
     }
 
@@ -862,13 +879,29 @@ public class AddressBookCommands : IAddressBookCommands
     /// <summary>
     /// Reads a COM object property that may legitimately be unavailable - <c>GetExchangeUser</c>
     /// on a disconnected client, for instance.
+    ///
+    /// <para>
+    /// An Object Model Guard denial is recorded against <paramref name="memberName"/> rather than
+    /// being returned as a plain null. Every member this is used for -
+    /// <c>Recipient.AddressEntry</c>, <c>GetExchangeUser</c>, <c>GetExchangeDistributionList</c>,
+    /// <c>GetContact</c>, <c>PropertyAccessor</c> - is on Outlook's protected list, and this
+    /// surface exists to validate an addressee before sending. "Outlook has no such person" and
+    /// "Outlook refused to tell me" lead to opposite actions: correct the address, or treat the
+    /// answer as unknown and do not call the send validated. Collapsing them would be a silent
+    /// wrong answer in the one place the feature has to be trustworthy. See Rule 22.
+    /// </para>
     /// </summary>
-    private static T? SafeGetComObject<T>(Func<T?> getter)
+    private static T? SafeGetComObject<T>(Func<T?> getter, string memberName, List<string> accessDenied)
         where T : class
     {
         try
         {
             return getter();
+        }
+        catch (COMException ex) when (OutlookInteropRunner.IsObjectModelGuardDenial(ex))
+        {
+            RecordAccessDenied(accessDenied, memberName);
+            return null;
         }
         catch (COMException)
         {

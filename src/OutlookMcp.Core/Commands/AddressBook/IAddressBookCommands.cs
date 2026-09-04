@@ -9,8 +9,12 @@ namespace OutlookMcp.Core.Commands.AddressBook;
     + "discovering at send time that a name did not resolve. Read-only: nothing here creates, "
     + "changes or sends anything. "
     + "Use resolve to check one or more addressees and get their real SMTP addresses. It accepts "
-    + "display names, Exchange aliases and full email addresses, separated by semicolons, and "
-    + "answers per addressee: allResolved is the flag to check before sending, and unresolvedNames "
+    + "display names, Exchange aliases and full email addresses, SEPARATED BY SEMICOLONS. Semicolons "
+    + "only - a comma is part of a name, never a separator, because 'Smith, Jane' is the usual "
+    + "Global Address List display-name shape and splitting on it would turn the commonest input "
+    + "this action exists to resolve into two addressees that resolve to nothing. Outlook itself "
+    + "separates recipients with semicolons for the same reason. It answers "
+    + "per addressee: allResolved is the flag to check before sending, and unresolvedNames "
     + "says which ones are wrong. A name Outlook cannot find is a success with resolved false - not "
     + "an error - because 'no such person' and 'Outlook could not be reached' are different answers. "
     + "An ambiguous name also comes back unresolved: Outlook offers no way to list the candidates, "
@@ -34,7 +38,10 @@ namespace OutlookMcp.Core.Commands.AddressBook;
     + "that no program can answer, in which case the call fails with an explanation rather than "
     + "hanging or returning a wrong answer. Individual properties that were refused while the call "
     + "otherwise succeeded are named in accessDenied, so a missing value is never confused with a "
-    + "value the directory does not hold.")]
+    + "value the directory does not hold. This distinction is load-bearing before a send: 'Outlook "
+    + "has no such person' means correct the address, while 'Outlook refused to tell me' means the "
+    + "answer is unknown and the addressee has NOT been validated. Check accessDenied before "
+    + "treating a resolve as a green light.")]
 public interface IAddressBookCommands
 {
     /// <summary>
@@ -68,7 +75,7 @@ public interface IAddressBookCommands
     /// the rest succeeded is named in <c>accessDenied</c>.
     /// </para>
     /// </summary>
-    /// <param name="recipients">One or more display names, Exchange aliases or email addresses, separated by semicolons or commas.</param>
+    /// <param name="recipients">One or more display names, Exchange aliases or email addresses, separated by semicolons. Semicolons only: a comma is part of a name, since 'Smith, Jane' is the usual Global Address List display-name shape.</param>
     /// <param name="includeDetails">Also read job title, department, office and alias for Exchange users. Each is an extra directory read per addressee.</param>
     [ServiceAction("resolve")]
     AddressResolveResult Resolve(string recipients, bool includeDetails = true);

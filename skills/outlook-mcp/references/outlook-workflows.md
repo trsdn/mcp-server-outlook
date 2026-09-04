@@ -275,8 +275,8 @@ before telling a user something went wrong.
 
 ## Check an addressee before you send to one
 
-`addressbook.resolve` takes one or more display names, aliases or email addresses, separated by
-semicolons, and says which of them Outlook can actually find:
+`addressbook.resolve` takes one or more display names, aliases or email addresses, **separated by
+semicolons**, and says which of them Outlook can actually find:
 
 ```
 addressbook.resolve(recipients: "Jane Smith; someone@example.com")
@@ -289,6 +289,11 @@ user about the one bad addressee instead of sending and waiting for a bounce.
 
 An unresolved name is a **success** with `resolved: false`, not an error. "No such person" and
 "Outlook could not be reached" are different answers and must not be reported as the same thing.
+
+**Semicolons separate; commas do not.** `Smith, Jane` is one addressee, not two. That is the usual
+Global Address List display-name shape, so a comma is part of a name and splitting on it would break
+the commonest input this call exists to handle. Outlook uses `;` between recipients for the same
+reason. When you build the string from a list, join with `; `.
 
 An ambiguous name - two Jane Smiths - also comes back unresolved. Outlook offers no way to list the
 candidates, so ask the user for the full email address rather than guessing which Jane is meant.
@@ -317,8 +322,13 @@ colleague; if the user named a person and a group came back, check before sendin
 **A denial is possible on any of these calls.** Recipients and address entries are exactly what
 Outlook's security prompt protects against outside callers. If a call fails saying Outlook blocked
 it, a human has to answer a dialog inside Outlook - no program can. Report that, do not retry in a
-loop. If a call succeeds but a value is listed in `accessDenied`, that value is missing because it
-was refused, not because the directory lacks it.
+loop.
+
+If a call **succeeds** but names something in `accessDenied`, that value is missing because it was
+refused, not because the directory lacks it - and before a send those two lead to opposite actions.
+"Outlook has no such person" means correct the address. "Outlook refused to tell me" means the
+answer is unknown and the addressee has **not** been validated; say so rather than sending. Check
+`accessDenied` before treating `allResolved: true` as a green light.
 
 ## Find someone whose name you do not know exactly
 

@@ -181,6 +181,11 @@ reached" are different answers and must not collapse into one. An ambiguous name
 unresolved: Outlook's object model offers no way to list the candidates, so pass the full SMTP
 address to disambiguate.
 
+**Semicolons separate addressees; commas do not.** `Smith, Jane` is one addressee. That is the usual
+Global Address List display-name shape, so splitting on commas would take the commonest form of the
+exact input this action exists to resolve and turn it into two fragments that resolve to nothing.
+Outlook separates recipients with `;` for the same reason.
+
 **`smtpAddress` is always a mailable address.** Outlook's own `AddressEntry.Address` returns an
 X500 legacyExchangeDN - `/o=ExchangeLabs/ou=.../cn=Recipients/cn=...` - for an Exchange entry. It
 is a string, it serialises cleanly, and mail sent to it goes nowhere. That value is reported
@@ -199,6 +204,13 @@ the members Outlook protects against out-of-process callers, so any of these cal
 by a modal security prompt that no program can answer. A refusal fails the call with an
 explanation; a property refused while the rest of the call succeeded is named in `accessDenied`, so
 a missing value is never confused with a value the directory does not hold.
+
+That distinction is load-bearing here rather than merely tidy. This surface exists to validate an
+addressee *before* sending, and "Outlook has no such person" and "Outlook refused to tell me" call
+for opposite actions - correct the address, or treat the answer as unknown and do not call the send
+validated. `accessDenied` covers the protected members that matter: `Recipient.AddressEntry`,
+`AddressEntry.Address`, `GetExchangeUser`, `GetExchangeDistributionList`, `GetContact`,
+`ExchangeUser.PrimarySmtpAddress` and `PropertyAccessor`.
 
 ---
 

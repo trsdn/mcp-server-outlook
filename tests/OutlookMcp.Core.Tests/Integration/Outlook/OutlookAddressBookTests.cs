@@ -268,7 +268,10 @@ public class OutlookAddressBookTests(ITestOutputHelper output)
         foreach (var entry in result.Entries)
         {
             Assert.False(string.IsNullOrWhiteSpace(entry.DisplayName), "An address entry arrived without a name.");
-            output.WriteLine($"{entry.DisplayName} | {entry.EntryType} | smtp={entry.SmtpAddress ?? "(none)"}");
+            Assert.NotNull(entry.AccessDenied);
+            output.WriteLine(
+                $"{entry.DisplayName} | {entry.EntryType} | smtp={entry.SmtpAddress ?? "(none)"} "
+                + $"| denied={(entry.AccessDenied.Count == 0 ? "-" : string.Join(",", entry.AccessDenied))}");
         }
 
         output.WriteLine(
@@ -323,6 +326,152 @@ public class OutlookAddressBookTests(ITestOutputHelper output)
         }
 
         output.WriteLine($"prefix '{prefix}': {filtered.ReturnedCount} of {filtered.ScannedCount} scanned matched.");
+    }
+
+    /// <summary>
+    /// A comma is part of a name, not a separator. <c>Smith, Jane</c> is the canonical Exchange
+    /// Global Address List display-name shape, so splitting on commas would take the single most
+    /// common form of the exact input this action exists to resolve and turn it into two addressees
+    /// that resolve to nothing.
+    ///
+    /// <para>
+    /// The name here is invented on purpose: what is being pinned is the arity, not the lookup. One
+    /// query in must mean one addressee out, whether or not anybody by that name exists.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void Resolve_DisplayNameContainingAComma_IsOneAddresseeNotTwo()
+    {
+        EnsureOutlookAvailable();
+
+        string commaName = $"Smith, Jane{Guid.NewGuid():N}";
+
+        var result = new AddressBookCommands().Resolve(commaName);
+
+        SkipIfObjectModelGuardDenied(result);
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Null(result.ErrorMessage);
+
+        Assert.Equal(1, result.RequestedCount);
+        var recipient = Assert.Single(result.Recipients);
+        Assert.Equal(commaName, recipient.Query);
+
+        output.WriteLine($"'{commaName}' stayed one addressee; resolved={recipient.Resolved}");
+    }
+
+    /// <summary>
+    /// The separator contract in full: semicolons split, commas do not, and the two combine
+    /// without interfering. Two comma-bearing names either side of a semicolon must arrive as
+    /// exactly two addressees with their commas intact.
+    /// </summary>
+    [SkippableFact]
+    public void Resolve_SemicolonSeparatesAndCommaDoesNot()
+    {
+        EnsureOutlookAvailable();
+
+        string first = $"Smith, Jane{Guid.NewGuid():N}";
+        string second = $"Jones, Robert{Guid.NewGuid():N}";
+
+        var result = new AddressBookCommands().Resolve($"{first}; {second}");
+
+        SkipIfObjectModelGuardDenied(result);
+        Assert.True(result.Success, result.ErrorMessage);
+
+        Assert.Equal(2, result.RequestedCount);
+        Assert.Equal(2, result.Recipients.Count);
+        Assert.Equal([first, second], result.Recipients.Select(r => r.Query));
+    }
+
+    /// <summary>
+    /// The real-Global-Address-List half of the comma story. A directory of any size contains
+    /// display names with commas in them; resolving one must give back a single addressee carrying
+    /// the whole name, not two fragments.
+    ///
+    /// <para>
+    /// The name is taken from the live address book rather than invented, so this fails if the
+    /// separator contract breaks against real data. It skips, with a stated reason, only if the
+    /// scanned slice of this profile's address book happens to hold no comma at all.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void Resolve_RealGalDisplayNameWithAComma_StaysOneAddressee()
+    {
+        EnsureOutlookAvailable();
+
+        var commands = new AddressBookCommands();
+
+        var listing = commands.ListEntries(maxCount: 100, scanLimit: 2000, includeSmtpAddress: true);
+        SkipIfObjectModelGuardDenied(listing);
+        Assert.True(listing.Success, listing.ErrorMessage);
+
+        var withComma = listing.Entries.FirstOrDefault(
+            e => e.DisplayName.Contains(',', StringComparison.Ordinal));
+
+        Skip.If(
+            withComma is null,
+            $"No display name among the {listing.ScannedCount} address book entries scanned carries "
+            + "a comma, so this profile offers no real comma name to resolve.");
+
+        output.WriteLine($"Real address book comma name: '{withComma!.DisplayName}'");
+
+        var result = commands.Resolve(withComma.DisplayName);
+
+        SkipIfObjectModelGuardDenied(result);
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Null(result.ErrorMessage);
+
+        // The load-bearing claim: one name in, one addressee out, comma intact. Whether the
+        // directory then resolves it is a separate question - an odd or ambiguous name legitimately
+        // may not - but it must never be torn into fragments on the way in.
+        Assert.Equal(1, result.RequestedCount);
+        var recipient = Assert.Single(result.Recipients);
+        Assert.Equal(withComma.DisplayName, recipient.Query);
+
+        if (recipient.Resolved && withComma.SmtpAddress != null && recipient.SmtpAddress != null)
+        {
+            Assert.Equal(withComma.SmtpAddress, recipient.SmtpAddress, ignoreCase: true);
+        }
+
+        output.WriteLine($"resolved={recipient.Resolved}, smtp={recipient.SmtpAddress ?? "(none)"}");
+    }
+
+    /// <summary>
+    /// A refusal is not an absence. The point of this whole surface is validating an addressee
+    /// before a send, and "Outlook has no such person" and "Outlook refused to tell me" call for
+    /// opposite actions - correct the address, or treat the answer as unknown and do not call the
+    /// send validated. So whenever a resolved addressee comes back with no SMTP address, the reason
+    /// must be recoverable: either something is named in <c>accessDenied</c>, or the note says the
+    /// directory genuinely holds none.
+    /// </summary>
+    [SkippableFact]
+    public void Resolve_WhenAnAddressIsMissing_SaysWhetherItWasRefusedOrAbsent()
+    {
+        EnsureOutlookAvailable();
+
+        string address = RequireOwnSmtpAddress();
+
+        var result = new AddressBookCommands().Resolve(address);
+
+        SkipIfObjectModelGuardDenied(result);
+        Assert.True(result.Success, result.ErrorMessage);
+
+        var recipient = Assert.Single(result.Recipients);
+        Assert.NotNull(recipient.AccessDenied);
+
+        if (recipient is { Resolved: true, SmtpAddress: null })
+        {
+            Assert.False(
+                string.IsNullOrWhiteSpace(recipient.Note),
+                "An addressee resolved with no address and no explanation of why.");
+        }
+
+        // Nothing on this machine was refused, so the list must be empty rather than merely
+        // present - an accessDenied that is never populated would pass the assertion above while
+        // telling a caller nothing.
+        Assert.Empty(recipient.AccessDenied);
+        output.WriteLine(
+            $"accessDenied={recipient.AccessDenied.Count}, smtp={recipient.SmtpAddress}, "
+            + $"note={recipient.Note ?? "(none)"}");
     }
 
     /// <summary>

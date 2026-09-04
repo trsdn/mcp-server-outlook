@@ -43,8 +43,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Recipient` is protected, along with `AddressEntry.Address`, `GetExchangeUser`,
   `ExchangeUser.PrimarySmtpAddress` and every cursor method on `AddressEntries`. Guard exposure is
   documented on every action, a whole-call denial fails with an explanation rather than a wrong
-  answer, and a property refused while the rest of the call succeeded is named in `accessDenied` so a
-  missing value is never confused with a value the directory does not hold.
+  answer, and a property or object refused while the rest of the call succeeded is named in
+  `accessDenied` - covering `Recipient.AddressEntry`, `GetExchangeUser`,
+  `GetExchangeDistributionList`, `GetContact` and `PropertyAccessor` acquisition as well as the
+  plain property reads. That distinction is load-bearing rather than tidy: this feature exists to
+  validate an addressee before a send, and "Outlook has no such person" and "Outlook refused to
+  tell me" call for opposite actions, so collapsing them would be a silent wrong answer in the one
+  place the feature has to be trustworthy.
+
+  **Semicolons separate addressees; commas do not.** `Smith, Jane` is one addressee. Commas were
+  accepted as separators at first, on the reasoning that an LLM building a list would reach for one
+  - which defeats the primary use case, since `Last, First` is the canonical Global Address List
+  display-name shape and splitting it yields two fragments that resolve to nothing. Outlook itself
+  separates recipients with `;` for exactly this reason.
 
   `IsObjectModelGuardDenial` was deliberately left testing `E_ABORT` only. Microsoft documents the
   guard returning `MAPI_E_NOT_SUPPORTED` (0x80040102) for a protected member refused outright, so

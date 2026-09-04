@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`application get-active-explorer` and `application get-active-inspector`** (#14): report which
+  folder the user is looking at, what is selected there, and which item they currently have open.
+  `get-active-explorer` returns the current folder's full store path, so an agent can address the
+  folder the user is actually in instead of guessing at a folder name.
+
+  Both report "nothing is open" as a success rather than an error, since no explorer and no open
+  inspector are ordinary states.
+
+  The item kind is derived from a typed switch over the Outlook interfaces. `GetType().Name` on an
+  Outlook item returns `__ComObject`, so the obvious implementation would have labelled every item
+  in the mailbox `"__ComObject"`.
+
+  An item the user is still composing has not been saved and has no `entryId`, so it cannot be
+  addressed by any other action; the field is omitted and `isSaved` distinguishes that case from a
+  saved item. Note that such an item's parent folder reports as the Outbox - where it *would* be
+  sent - not the Drafts folder.
+
+### Fixed
+
+- **Pre-commit staged the generated skill files before the build that generates them.** The
+  auto-staging step asserted in a comment that "the Release build already ran"; it had not - the
+  only Release build in the hook is the one inside the CLI workflow smoke test, which runs
+  afterwards. So editing `skills/shared/*.md` staged the source while the generated copies under
+  `skills/outlook-*/references/` were still stale on disk, and the build that refreshed them
+  happened too late for them to be included in the commit. The hook now runs the Release build
+  first and fails the commit if it does not succeed, so the claim holds by construction.
+
 ### Removed
 
 - **85 dead PowerPoint result types** deleted from `ResultTypes.cs` (123 down to 38), along with the

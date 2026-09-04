@@ -25,6 +25,7 @@ description: >
 ## Current Outlook seed
 
 - `application.get-status`
+- `application.get-active-explorer` / `application.get-active-inspector`
 - `folder.list-default`
 - `mail.read-active`
 - `mail.list`

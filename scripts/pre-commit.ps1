@@ -186,14 +186,29 @@ catch {
 # - CLI workflow smoke test below (end-to-end validation)
 
 Write-Host ""
+Write-Host "Regenerating skill files (Release build)..." -ForegroundColor Cyan
+
+# This block used to assert that "the Release build already ran". It had not: the only Release
+# build in this script is the one inside the CLI workflow smoke test *below*. So an edit to
+# skills/shared/*.md was staged while the copies under skills/outlook-*/references/ were still
+# stale on disk, and the build that refreshed them happened after the staging - leaving the
+# regenerated files out of the commit, which is the exact failure the block exists to prevent.
+# Build first, then stage, so the claim is true by construction.
+$buildOutput = dotnet build -c Release --nologo 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "Release build failed - skill files cannot be regenerated." -ForegroundColor Red
+    Write-Host $buildOutput -ForegroundColor Gray
+    exit 1
+}
+Write-Host "Release build succeeded" -ForegroundColor Green
+
+Write-Host ""
 Write-Host "Auto-staging generated SKILL.md files..." -ForegroundColor Cyan
 
 try {
-    # SKILL.md files are generated during Release build from templates + source generators.
-    # The Release build already ran (required for CLI smoke test below), so SKILL.md files
-    # are up to date on disk. Auto-stage them so developers never have to think about it.
-    # SKILL.md + references are generated during Release build.
-    # Auto-stage all of them so developers never have to think about it.
+    # SKILL.md files and their references/ copies are generated during the Release build above.
+    # Auto-stage them so developers never have to think about it.
     $skillPaths = @(
         "skills/outlook-mcp/SKILL.md",
         "skills/outlook-cli/SKILL.md",

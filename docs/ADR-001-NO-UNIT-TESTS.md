@@ -439,6 +439,24 @@ to make it run, the test is prohibited. Write an integration test instead, or wr
 | `StreamJsonRpcTests` | Real in-process duplex streams; no COM in the RPC layer |
 | `OutlookMcpServiceErrorTests` | Error-message formatting regression guard |
 | `ConfigurationReloadTests` | `reloadOnChange` configuration regression guard |
+| `MailRestrictFilterTests` | DASL filter string construction and escaping; builds a string, calls nothing |
+| `MailPageCursorTests` | Paging token encode/decode, fingerprint binding and rejection rules |
+| `MailPageBoundaryTests` | Tied-received-time boundary accumulation across pages (#135) |
+
+The last three were already in the repository, or arrived with #135, and were missing from a table
+that calls itself normative - the same "rule contradicted by the codebase it governs" problem the
+2026-09-02 amendment was written to fix. They are listed now rather than left to be rediscovered.
+
+`MailPageBoundaryTests` deserves its justification recorded, because at first glance paging looks
+like Outlook behaviour and therefore like something this ADR forbids testing here. The defect it
+guards (#135) is entirely in how entry ids accumulate *across* calls: three messages sharing a
+received time to the tick made the walk oscillate between two of them forever, never reaching the
+third, with every response reporting success. Reproducing that in a real mailbox needs three
+messages with identical received times, which cannot be arranged - a draft the test created takes its
+own creation instant, so a folder-based test compares distinct timestamps, never enters the tied
+band, and passes without executing the logic. That is exactly how the defect survived. The boundary
+type touches no COM object, and the listing paths that use it remain covered by integration tests.
+
 
 Two entries deserve their caveats stated rather than buried:
 

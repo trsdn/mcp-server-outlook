@@ -15,7 +15,8 @@ namespace OutlookMcp.Core.Commands.Folder;
     + "Use open-shared to reach another person's Inbox or Calendar when they have granted access, without adding their mailbox to the profile; "
     + "it returns a folder path usable with the mail and calendar tools. "
     + "Use create, rename, move and delete to change the folder tree - create takes a parent folder and a name, "
-    + "and delete removes the folder together with everything filed in it. "
+    + "and delete removes the folder together with everything filed in it. delete requires confirm=true and is "
+    + "refused without it, because nothing about a deleted folder is recoverable in every store. "
     + "Default folders such as Inbox, Sent Items and Calendar, and store roots, are refused for rename, move and delete: "
     + "Outlook itself allows those and they are not recoverable.")]
 public interface IFolderCommands
@@ -38,8 +39,20 @@ public interface IFolderCommands
     [ServiceAction("move", Destructive = true)]
     OutlookFolderResolveResult Move(string? folder = null, string? destinationFolder = null);
 
+    /// <summary>
+    /// Deletes a folder and everything filed in it.
+    ///
+    /// <para>
+    /// <b>Requires <paramref name="confirm"/>.</b> This is the one folder operation with no way
+    /// back: every message and every subfolder goes with the folder, and in a store without a
+    /// Deleted Items folder it is gone outright rather than moved there. List the folder's children
+    /// and tell the user what will be lost before passing <c>confirm=true</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="folder">The folder to delete. There is no default: falling back to the current folder would delete whatever the user happens to have selected.</param>
+    /// <param name="confirm">Must be true. Without it the call is refused and nothing is touched.</param>
     [ServiceAction("delete", Destructive = true)]
-    OutlookFolderResolveResult Delete(string? folder = null);
+    OutlookFolderResolveResult Delete(string? folder = null, bool confirm = false);
 
     [ServiceAction("list-children")]
     OutlookFolderListResult ListChildren(

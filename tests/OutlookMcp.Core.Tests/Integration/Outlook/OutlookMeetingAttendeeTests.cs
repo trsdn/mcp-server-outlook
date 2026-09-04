@@ -65,10 +65,109 @@ public class OutlookMeetingAttendeeTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// Reading it back must report the same thing. A field that is only correct on the response to
-    /// the call that set it has verified nothing about what Outlook actually stored.
+    /// Rooms and equipment are the third recipient type, and the one that makes a meeting bookable
+    /// rather than merely announced. <c>calendar.create-appointment</c> could name people but not
+    /// resources, so an agent asked to "book a room" had no way to do it and would silently create
+    /// a meeting with no room at all.
+    ///
+    /// <para>
+    /// The signed-in user stands in for a room here. A real room mailbox cannot be assumed to exist
+    /// on any given profile, and a test that skips when it does not is a green test - the failure
+    /// mode this project keeps finding. Using the owner proves the whole path that matters: the
+    /// recipient is attached with <c>olResource</c>, resolves, and is read back typed as a resource.
+    /// </para>
     /// </summary>
     [SkippableFact]
+    public void CreateAppointment_WithResource_AttachesItAsAResourceNotAnAttendee()
+    {
+        string own = ResolveOwnSmtpAddress();
+        string subject = $"OutlookMcp resource test {Guid.NewGuid():N}";
+        var commands = new CalendarCommands();
+        DateTimeOffset start = DateTimeOffset.Now.AddDays(5).Date.AddHours(11);
+
+        var created = commands.CreateAppointment(
+            subject: subject,
+            start: start.ToString("o"),
+            endTime: start.AddMinutes(30).ToString("o"),
+            resourceAttendees: own);
+
+        try
+        {
+            Assert.True(created.Success, created.ErrorMessage);
+            Assert.True(created.IsMeeting);
+            Assert.False(created.InvitationSent);
+            Assert.Empty(created.UnresolvedAttendees);
+
+            // The point of the test: typed as a resource, not folded into required attendees.
+            Assert.Contains(created.Attendees, a => a.Type == "resource");
+            Assert.DoesNotContain(created.Attendees, a => a.Type == "required");
+
+            // And Outlook must have stored it that way, not merely reported it on the response.
+            var read = commands.Read(entryId: created.EntryId, storeId: created.StoreId, useActiveAppointment: false);
+            Assert.True(read.Success, read.ErrorMessage);
+            Assert.Contains(read.Attendees, a => a.Type == "resource");
+
+            foreach (var attendee in read.Attendees)
+            {
+                output.WriteLine($"  {attendee.Type}: {attendee.Name} <{attendee.Address}>");
+            }
+        }
+        finally
+        {
+            DeleteCreatedItem(commands, created.EntryId, created.StoreId);
+        }
+    }
+
+    /// <summary>
+    /// A resource nobody can resolve is exactly as dangerous as an unresolvable person: Outlook will
+    /// save the meeting regardless, so the caller would be told they had booked a room that does not
+    /// exist. The same refusal must apply.
+    ///
+    /// <para>
+    /// <b>The name here has no <c>@</c> in it, and that is deliberate.</b> This test was first
+    /// written with <c>no-such-room-...@invalid.example</c> and it failed - Outlook resolved it. An
+    /// SMTP-shaped string always resolves, as a one-off external address, whether or not any such
+    /// mailbox exists. So <c>Resolved</c> is evidence that Outlook understood the string, not that
+    /// the room is real, and no client-side check can close that gap without sending. Only a bare
+    /// name that is absent from the address book actually fails to resolve, which is the case this
+    /// guard covers.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void CreateAppointment_WithUnresolvableResource_IsRefusedAndSavesNothing()
+    {
+        EnsureOutlookAvailable();
+
+        string missingRoom = $"no-such-room-{Guid.NewGuid():N}";
+        string subject = $"OutlookMcp resource reject {Guid.NewGuid():N}";
+        var commands = new CalendarCommands();
+        DateTimeOffset start = DateTimeOffset.Now.AddDays(6).Date.AddHours(11);
+
+        var created = commands.CreateAppointment(
+            subject: subject,
+            start: start.ToString("o"),
+            endTime: start.AddMinutes(30).ToString("o"),
+            resourceAttendees: missingRoom);
+
+        try
+        {
+            Assert.False(created.Success);
+            Assert.False(created.Saved);
+            Assert.Contains(missingRoom, created.UnresolvedAttendees);
+            Assert.Contains(missingRoom, created.ErrorMessage!, StringComparison.Ordinal);
+
+            output.WriteLine($"Refused as expected: {created.ErrorMessage}");
+        }
+        finally
+        {
+            DeleteCreatedItem(commands, created.EntryId, created.StoreId);
+        }
+    }
+
+    /// <summary>
+    /// Reading it back must report the same thing. A field that is only correct on the response to
+    /// the call that set it has verified nothing about what Outlook actually stored.
+    /// </summary>    [SkippableFact]
     public void Read_ReportsMeetingAndAttendees()
     {
         string own = ResolveOwnSmtpAddress();

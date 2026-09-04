@@ -50,6 +50,7 @@ public interface ICalendarCommands
         bool display = false,
         string? requiredAttendees = null,
         string? optionalAttendees = null,
+        string? resourceAttendees = null,
         bool sendInvitation = false,
         string? recurrenceType = null,
         int recurrenceInterval = 1,

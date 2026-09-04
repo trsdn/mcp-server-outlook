@@ -90,9 +90,42 @@ Marshal.FinalReleaseComObject(application);
 OutlookInteropRunner.ReleaseSharedComObject(ref application);
 ```
 
-`ReleaseComObject` (final-release) is correct for objects **your call created or navigated
-to**: folders, items, `Items` collections, `Recipients`, `Attachments`, `Selection`,
-`Explorer`, `Inspector`. Those are per-call and nobody else holds them. See #19.
+`ReleaseComObject` (final-release) is correct for objects **your call created or navigated to
+and nobody else holds**: items, `Items` collections, `Recipients`, `Attachments`, `Selection`,
+`Explorer`, `Inspector`. Those are per-call. See #19.
+
+### The trap: "I navigated to it" does not mean "I own it"
+
+The CLR's RCW cache is keyed on the underlying `IUnknown`. So if Outlook hands you a pointer it
+is *also* handing to someone else — or to you, again, from a cache — then final-releasing it
+disconnects it for that other holder too. The call still looks local. The damage is not.
+
+This has now bitten three times in this codebase, in three different shapes:
+
+| Object | How it looked | What it was |
+|---|---|---|
+| `Outlook.Application` (#19) | a value returned by `GetActiveObject` | one cached RCW shared by the whole process |
+| `folder` from `item.Parent` (#122) | a fresh navigation per item | the same folder the listing loop was still enumerating |
+| `Rule` / `RuleConditions` and their clause slots (#134) | children of a `Rules` collection | cached children Outlook re-hands by the same pointer |
+
+Both of the later two produced a hard crash of the test host, not a subtle leak.
+
+**The test to apply is ownership, not syntax.** Before `ReleaseComObject`, ask: could anything
+else in this process be holding this same underlying object right now? If it could — because
+you reached it *upward* via `.Parent` or `.Session`, or because it is a cached child of a
+long-lived collection — use `ReleaseSharedComObject`, which is a plain refcount decrement.
+
+Two habits that avoid the question entirely, and are usually also faster:
+
+- **Do not navigate upward per item.** If you need a folder's `StoreID` for every row in a
+  listing, read it once from the folder you already hold, not from each item's `.Parent`. That
+  removes a COM round-trip per row as well as the lifetime hazard.
+- **Prefer the object you were given.** `Execute` hands you `application` and `session`; use
+  them rather than re-deriving them from something else and then releasing the result.
+
+When unsure, `ReleaseSharedComObject` is the safe choice: the worst case is that the RCW lives
+until GC, which is a leak. The worst case for a wrong `ReleaseComObject` is that unrelated
+Outlook automation fails process-wide until restart.
 
 ---
 
@@ -207,6 +240,21 @@ model replaced the batch model.
   Outbox; delivery is not confirmed by the call returning.
 - **`EntryId` is not stable across stores.** An item moved between stores gets a new one, so
   always carry `StoreId` alongside it.
+- **A `Table`'s `EntryID` column is the *short-term* entry id**, not the long-term id
+  `MailItem.EntryID` returns. Both resolve through `GetItemFromID`, which is exactly what makes
+  this dangerous: ids read from a rowset work perfectly and never compare equal to ids read from
+  an item. Use `PR_LONGTERM_ENTRYID_FROM_TABLE` (`0x66700102`) when projecting from a table, and
+  fall back to opening items on a store that does not publish it. Found in #27.
+- **DASL date tags return UTC; the Outlook property names return local wall clock.** Mixing them
+  shifts every timestamp by the machine's offset. If a paging cursor is a keyset walk over that
+  value, the shift corrupts the walk rather than merely displaying oddly. Found in #27.
+- **`ReceivedTime` is not unique.** Bulk delivery, newsletters, an invite and its response all
+  tie. Anything ordering or paging on it must handle a tied band explicitly — see #135 for what
+  happens when the tie-breaking set is not carried across pages.
+- **A locally created draft still has a `ReceivedTime`** (its creation instant). This matters for
+  test design more than for production: a paging or ordering test built on freshly created drafts
+  gets *distinct* timestamps, never enters the tied band, and passes having exercised none of the
+  logic it was written for.
 
 ---
 
@@ -231,8 +279,16 @@ Before committing a change under `src/OutlookMcp.Core/`:
 - [ ] Goes through `OutlookInteropRunner.Execute` with a unique `operationName`
 - [ ] Every COM object released in a `finally`, children before parents
 - [ ] Shared `Application` never final-released
+- [ ] Anything reached *upward* (`.Parent`, `.Session`) or handed back from a cached
+      collection released with `ReleaseSharedComObject`, not `ReleaseComObject`
 - [ ] No `catch` returning a failure result inside `action`
 - [ ] `Success = true` only where `ErrorMessage` is empty
-- [ ] `check-com-leaks.ps1` reports 0 leaks
 - [ ] `check-success-flag.ps1` passes
 - [ ] Any `dynamic` has a comment explaining why
+
+`check-com-leaks.ps1` is **not** on this list, deliberately. It examines only files declaring an
+explicitly-typed `Outlook.X y =` local — 10 of 72 source files at the time of writing, so a file
+acquiring COM through `var` is invisible to it — and for the files it does read the verdict is two
+file-wide booleans with no pairing of acquisition to release, so a file that releases one object
+of ten still prints `Proper COM cleanup`. Run it, but do not treat a green result as evidence that
+your release discipline is correct. See #136.

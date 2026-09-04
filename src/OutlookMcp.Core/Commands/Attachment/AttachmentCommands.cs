@@ -217,6 +217,8 @@ public class AttachmentCommands : IAttachmentCommands
     public AttachmentSaveResult Save(
         string destinationDirectory,
         int attachmentIndex = 0,
+        string? attachmentName = null,
+        bool allAttachments = false,
         string? mailEntryId = null,
         string? storeId = null,
         bool useActiveMail = true,
@@ -228,6 +230,43 @@ public class AttachmentCommands : IAttachmentCommands
             {
                 Success = false,
                 ErrorMessage = "destinationDirectory is required for attachment.save."
+            };
+        }
+
+        // Argument validation of the selectors, before any COM call. Exactly one of attachmentIndex
+        // (1-based), attachmentName, or allAttachments must identify the target. attachmentIndex=0 is
+        // deliberately NOT a shortcut for "all" — see #15.
+        bool byIndex = attachmentIndex != 0;
+        bool byName = !string.IsNullOrWhiteSpace(attachmentName);
+        int selectorCount = (byIndex ? 1 : 0) + (byName ? 1 : 0) + (allAttachments ? 1 : 0);
+
+        if (byIndex && attachmentIndex < 1)
+        {
+            return new AttachmentSaveResult
+            {
+                Success = false,
+                ErrorMessage = $"attachmentIndex is 1-based and must be 1 or greater (received {attachmentIndex}). "
+                    + "Set allAttachments=true to save every attachment."
+            };
+        }
+
+        if (selectorCount == 0)
+        {
+            return new AttachmentSaveResult
+            {
+                Success = false,
+                ErrorMessage = "Specify which attachment to save: set attachmentName (as shown by attachment list), "
+                    + "attachmentIndex (1-based, as shown by attachment list), or allAttachments=true. "
+                    + "attachmentIndex is 1-based and 0 is not a valid attachment; it no longer means 'all' — use allAttachments=true for that."
+            };
+        }
+
+        if (selectorCount > 1)
+        {
+            return new AttachmentSaveResult
+            {
+                Success = false,
+                ErrorMessage = "Specify exactly one of attachmentIndex, attachmentName or allAttachments, not several at once."
             };
         }
 
@@ -276,28 +315,57 @@ public class AttachmentCommands : IAttachmentCommands
                     int count = SafeGetInt(() => attachments.Count);
                     if (count == 0)
                     {
-                        return new AttachmentSaveResult
+                        // allAttachments over an empty item is a no-op success; a specific request is an error.
+                        if (allAttachments)
                         {
-                            Success = true,
-                            EntryId = SafeGet(() => mail.EntryID),
-                            StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
-                            Subject = SafeGet(() => mail.Subject),
-                            SavedCount = 0,
-                            Message = "The selected Outlook mail item has no attachments."
-                        };
-                    }
+                            return new AttachmentSaveResult
+                            {
+                                Success = true,
+                                EntryId = SafeGet(() => mail.EntryID),
+                                StoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null),
+                                Subject = SafeGet(() => mail.Subject),
+                                SavedCount = 0,
+                                Message = "The selected Outlook mail item has no attachments."
+                            };
+                        }
 
-                    var indexes = attachmentIndex > 0
-                        ? [attachmentIndex]
-                        : Enumerable.Range(1, count).ToArray();
-
-                    if (indexes.Any(index => index < 1 || index > count))
-                    {
                         return new AttachmentSaveResult
                         {
                             Success = false,
-                            ErrorMessage = $"attachmentIndex must be between 1 and {count}, or 0 to save all attachments."
+                            ErrorMessage = "The selected Outlook mail item has no attachments to save."
                         };
+                    }
+
+                    int[] indexes;
+                    if (allAttachments)
+                    {
+                        indexes = Enumerable.Range(1, count).ToArray();
+                    }
+                    else if (byName)
+                    {
+                        indexes = FindIndexesByName(attachments, count, attachmentName!);
+                        if (indexes.Length == 0)
+                        {
+                            return new AttachmentSaveResult
+                            {
+                                Success = false,
+                                ErrorMessage = $"No attachment named '{attachmentName}' was found on the item. "
+                                    + $"Use attachment list to see the available attachments (this item has {count})."
+                            };
+                        }
+                    }
+                    else
+                    {
+                        if (attachmentIndex > count)
+                        {
+                            return new AttachmentSaveResult
+                            {
+                                Success = false,
+                                ErrorMessage = $"attachmentIndex must be between 1 and {count} (received {attachmentIndex})."
+                            };
+                        }
+
+                        indexes = [attachmentIndex];
                     }
 
                     var plannedSaves = new List<(int Index, string FilePath)>(indexes.Length);
@@ -490,6 +558,31 @@ public class AttachmentCommands : IAttachmentCommands
     {
         char[] invalidChars = Path.GetInvalidFileNameChars();
         return string.Concat(fileName.Select(ch => invalidChars.Contains(ch) ? '_' : ch));
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static int[] FindIndexesByName(Outlook.Attachments attachments, int count, string attachmentName)
+    {
+        var matches = new List<int>();
+        for (int index = 1; index <= count; index++)
+        {
+            Outlook.Attachment? attachment = null;
+            try
+            {
+                attachment = attachments[index];
+                string? fileName = SafeGet(() => attachment.FileName);
+                if (string.Equals(fileName, attachmentName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(index);
+                }
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref attachment);
+            }
+        }
+
+        return matches.ToArray();
     }
 
     private static string? SafeGet(Func<string?> getter)

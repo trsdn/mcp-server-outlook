@@ -8,6 +8,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **An opt-in recipient allow-list for `mail send`** (#9). Set
+  `OUTLOOKMCP_ALLOWED_RECIPIENTS` to a semicolon- or comma-separated list of permitted recipient
+  domains (`contoso.example` or `@contoso.example`) and complete addresses
+  (`alice@contoso.example`), and `send` refuses anything outside it before Outlook is asked to send
+  anything. **Unset - the default - and behaviour is exactly as before.** This was the last
+  unchecked acceptance criterion on #9, and it was specified as opt-in from the start.
+
+  Three decisions worth stating rather than leaving to be discovered:
+
+  - **Configured through the environment, not a config file.** It is the one mechanism the two
+    entry points genuinely share: an MCP client sets `env` on the server definition, and the CLI
+    daemon inherits the shell's environment. Neither has a configuration file the other reads, and
+    inventing one would have put a security setting somewhere only half the product could see it.
+
+  - **It fails closed.** With a policy configured, an address that cannot be read as SMTP - empty,
+    malformed, or an unresolved Exchange X500 path - is refused rather than assumed safe. That is
+    the opposite posture from the Deleted Items check added alongside it, and deliberately so: this
+    is a control the user opted into, and waving through the addresses it could not read would make
+    it worthless in precisely the cases it exists for.
+
+  - **Internal Exchange recipients are resolved to SMTP first.** `Recipient.Address` is an X500
+    path (`/o=ExchangeLabs/...`) for anyone inside the organisation, so a naive domain match would
+    have refused every colleague. The address is taken from
+    `AddressEntry.GetExchangeUser().PrimarySmtpAddress` when `Address` is not SMTP-shaped.
+
+  A domain entry matches that domain and nothing else: `@contoso.example` admits neither
+  `evilcontoso.example` nor the subdomain `mail.contoso.example`. Name a subdomain explicitly if it
+  is wanted.
+
+  Nothing in the recipient walk catches: `Recipients` and `AddressEntry` are Object Model Guard
+  protected, and a denial has to reach the runner's classifier so the caller is told the guard
+  blocked it - not told, falsely, that their recipients failed a policy check (Rule 1b).
+
 - **Confirmation gates on the irreversible destructive actions** (#9): `folder delete`,
   `attachment remove` and `calendar delete-appointment` with an `occurrenceDate` now take a
   `confirm` parameter and are refused without `confirm=true`. So is any item delete whose target is

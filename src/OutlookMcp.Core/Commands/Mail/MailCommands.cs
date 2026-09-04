@@ -1016,6 +1016,30 @@ public partial class MailCommands : IMailCommands
                         string? resolvedEntryId = SafeGet(() => mail.EntryID);
                         string? resolvedStoreId = SafeGet(() => mail.Parent is Outlook.MAPIFolder folder ? folder.StoreID : null);
 
+                        // The opt-in recipient allow-list. Read here rather than before Execute
+                        // because it needs the resolved item's recipients, and evaluated before
+                        // Send() so a refusal costs nothing. Disabled unless configured, in which
+                        // case CollectDisallowedRecipients returns nothing and this is a no-op.
+                        // See RecipientPolicy and #9.
+                        var policy = RecipientPolicy.FromEnvironment();
+                        if (policy.IsEnabled)
+                        {
+                            var rejected = CollectDisallowedRecipients(mail, policy);
+                            if (rejected.Count > 0)
+                            {
+                                return new MailSendResult
+                                {
+                                    Success = false,
+                                    Sent = false,
+                                    EntryId = resolvedEntryId,
+                                    StoreId = resolvedStoreId,
+                                    Subject = subject,
+                                    To = recipientTo,
+                                    ErrorMessage = policy.BuildRefusal(rejected)
+                                };
+                            }
+                        }
+
                         mail.Send();
 
                         return new MailSendResult
@@ -1071,6 +1095,94 @@ public partial class MailCommands : IMailCommands
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The recipients on <paramref name="mail"/> that <paramref name="policy"/> does not permit.
+    ///
+    /// <para>
+    /// <c>Recipient.Address</c> is SMTP for an external recipient and an X500 path
+    /// (<c>/o=ExchangeLabs/...</c>) for an internal Exchange one, so an Exchange recipient is
+    /// resolved through <c>AddressEntry.GetExchangeUser().PrimarySmtpAddress</c> first. Anything
+    /// still not SMTP-shaped is rejected by the policy rather than guessed at.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Nothing here catches.</b> <c>Recipients</c> and <c>AddressEntry.Address</c> are Object
+    /// Model Guard protected, and a denial must reach <c>OutlookInteropRunner</c>'s classifier so the
+    /// caller is told the guard blocked it - not told, falsely, that their recipients failed a
+    /// policy check. Rule 1b. A draft with no recipients yields an empty list and the send proceeds
+    /// to Outlook, which refuses it for its own reasons.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static List<string> CollectDisallowedRecipients(Outlook.MailItem mail, RecipientPolicy policy)
+    {
+        var rejected = new List<string>();
+
+        Outlook.Recipients? recipients = null;
+        try
+        {
+            recipients = mail.Recipients;
+            int count = recipients.Count;
+
+            for (int index = 1; index <= count; index++)
+            {
+                Outlook.Recipient? recipient = null;
+                try
+                {
+                    recipient = recipients[index];
+                    string? address = ResolveSmtpAddress(recipient);
+
+                    if (!policy.IsAllowed(address))
+                    {
+                        rejected.Add(string.IsNullOrWhiteSpace(address)
+                            ? SafeGet(() => recipient.Name) ?? $"recipient {index}"
+                            : address!);
+                    }
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref recipient);
+                }
+            }
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref recipients);
+        }
+
+        return rejected;
+    }
+
+    /// <summary>
+    /// The SMTP address of a recipient, or null when Outlook holds no SMTP form of it.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? ResolveSmtpAddress(Outlook.Recipient recipient)
+    {
+        string? address = recipient.Address;
+
+        if (!string.IsNullOrWhiteSpace(address) && address!.Contains('@'))
+        {
+            return address;
+        }
+
+        // An internal Exchange recipient: Address is an X500 path, and the SMTP address lives on
+        // the ExchangeUser behind the AddressEntry.
+        Outlook.AddressEntry? entry = null;
+        Outlook.ExchangeUser? exchangeUser = null;
+        try
+        {
+            entry = recipient.AddressEntry;
+            exchangeUser = entry?.GetExchangeUser();
+            return exchangeUser?.PrimarySmtpAddress ?? address;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref exchangeUser);
+            OutlookInteropRunner.ReleaseComObject(ref entry);
+        }
     }
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]

@@ -59,6 +59,22 @@ Two further points on `mail.send`:
 - `mail.send` is idempotent per operation ID. If a call times out or the result is ambiguous, retry
   with the **same** operation ID rather than sending again. Generating a new ID risks a duplicate.
 
+### The recipient allow-list, if one is configured
+
+`mail.send` may additionally be restricted to a list of permitted recipient domains or addresses,
+set by the user in the `OUTLOOKMCP_ALLOWED_RECIPIENTS` environment variable. It is **off by
+default**, so most installations will never see it.
+
+When it is on, a send to anyone outside the list is refused before Outlook is asked to send
+anything, and the error names both what was refused and what the list permits. Two things follow:
+
+- **Do not try to route around it.** Sending to a different address that happens to be inside the
+  list, or splitting the recipients across several sends, defeats a control the user deliberately
+  turned on. Report the refusal and let them decide.
+- An address the policy cannot read as SMTP is refused, not assumed safe. If a recipient is refused
+  and you did not expect it to be, the address may be an unresolved one - check it with
+  `mail.read`.
+
 ## Rule 4: Entry IDs are the addressing scheme
 
 Outlook items are addressed by entry ID, not by name or index. Entry IDs:

@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Paging over messages that share a received time no longer loops forever** (#135): the cursor
+  excludes already-served messages by identity rather than by timestamp, which is only correct if it
+  carries every id served at that instant across every page that shared it. Both listing paths
+  accumulated those ids in a list local to a single call and cleared it the moment the frontier
+  timestamp was first seen - which on a resumed page is immediately - so each cursor forgot the
+  previous page's ids. With three messages sharing an instant and a page size of one, the walk went
+  A, B, A, B, … forever: the third message was never reached, `hasMore` never went false, and every
+  individual response was well-formed and reported success, so a caller looping until the cursor ran
+  out did not terminate.
+
+  Pre-existing in the item path, and faithfully reproduced by the rowset path above, so it briefly
+  existed twice. Both now share one `MailPageBoundary` - a second copy of this reasoning is what
+  produced the defect in the first place. The regression test drives the exact A/B/C walk and fails
+  against the previous accumulation, returning `["A", "B", "A", "B", "A", …]`.
+
+  It is tested directly rather than through a folder, and the reason is the trap that let it survive:
+  three messages must share a received time **to the tick**, which cannot be arranged in a real
+  mailbox. A draft a test creates takes its own creation instant, so a folder-based test compares
+  *distinct* timestamps, never enters the tied band, and passes green having executed none of the
+  logic under test.
+
+- **`Table.Columns` is released** (#27): `MailTableProjection.Configure` dereferenced the COM
+  `Columns` collection once per projected column and never released any of them - nineteen leaked
+  RCWs on the hottest path in a long-lived server process. `scripts/check-com-leaks.ps1` reported the
+  file clean because it never examined it at all (#136).
+
+- **An unsent draft no longer reports being sent in the year 4501** (#27): `mail.read`, `mail.list`
+  and `mail.search` passed Outlook's "no date" sentinel straight through as `sentOn`. It looks like an
+  ordinary date, so a caller sorting or filtering by it was acting on a fabricated value rather than
+  merely missing one. The sentinel was already stripped from flag and task due dates; the same rule
+  now applies to message dates. Found by the projection-parity test, not by inspection.
+
 - **`folder.list-items` reported `__ComObject` and dropped the entry id** (#120): any item whose
   PIA type had no branch in `CreateFolderItemInfo` fell through to a late-bound path that reported
   `rawItem.GetType().Name`. For a late-bound RCW that name is the literal string `__ComObject`,
@@ -110,6 +142,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     safety feature into an outage.
 
 ### Changed
+
+- **`mail.list` and `mail.search` are projected from an Outlook table rowset** (#27, #13): an
+  ordinary listing no longer opens a `MailItem` per result. Measured on the reference mailbox,
+  fifteen rows went from about 8 seconds to under 1. Same messages, same order, same paging,
+  `truncated` / `hasMore` / `nextCursor` and every filter unchanged.
+
+  Two fields cannot come from a rowset, and both are reported rather than invented:
+
+  - `attachmentCount` is now **absent** on the fast path instead of being reported as `0`, and a new
+    `hasAttachment` boolean is always present. A rowset knows whether a message has attachments, not
+    how many; reporting `0` for a message with three, under `success: true`, is the failure mode this
+    change was specifically shaped to avoid. Pass `includeBodyPreview: true`, or use `mail.read` /
+    `attachment.list`, when the exact count matters.
+  - `bodyPreview` still requires `includeBodyPreview`, which forces the message to be opened.
+
+  Every response now reports `projection` (`table` or `item`) so a caller never has to infer which
+  one answered from a field's absence. A free-text `query` in the default `clientScan` mode still
+  opens each candidate, because a rowset cannot read a message body - so search lost nothing.
+
+  Three things were established against a live mailbox rather than assumed, each of which would
+  otherwise have shipped a listing that looked correct and was not:
+
+  - **The table's `EntryID` column is not the entry id the rest of the surface uses.** It returns the
+    provider's short-term id (24 bytes) while `MailItem.EntryID` returns the long-term one (70
+    bytes). Both resolve through `GetItemFromID`, which is what makes it dangerous - the listing works
+    perfectly while handing back ids that never compare equal to the ones `mail.read` and
+    `get-conversation` report. The long-term id is now taken from `PR_LONGTERM_ENTRYID_FROM_TABLE`
+    (`0x66700102`), verified byte-for-byte equal. A store that does not publish it falls back to
+    opening items rather than returning ids that do not match.
+  - **DASL date tags return UTC; the Outlook property names return local wall clock.** Using
+    `urn:schemas:httpmail:datereceived` would have shifted every timestamp by the machine's UTC offset
+    and silently corrupted the paging cursor, which is a keyset walk over exactly that value.
+  - **Categories cannot be read through the DASL keywords property at all** (`Columns.Add` refuses
+    it), but the Outlook name `Categories` returns the same string `MailItem.Categories` does. A
+    column that can be *added* is not thereby a column that returns data.
 
 - **BREAKING (Core API only): `folder delete`, `attachment remove` and  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
   that relied on an unconfirmed call succeeding must add `confirm: true` (CLI: `--confirm`; MCP:

@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`mail.search` is answered by `Application.AdvancedSearch`** (#13, #27): a new `advancedSearch`
+  engine, and the **default** whenever a free-text `query` is present. `Items.Restrict` cannot filter
+  on `Body` at all, so a body match previously meant opening every candidate message here and giving
+  up at a scan limit - and in a large folder that limit is not a performance detail, because a match
+  past it was reported to the caller as "no such mail". Outlook now runs the same substring question
+  itself, over the whole folder, with no client-side scan and no horizon.
+
+  `searchMode` is now `advancedSearch` (default), `clientScan` or `fullText`; the previous two keep
+  their exact meanings and `searchEngine` on every response says which one actually ran. Substring
+  semantics are preserved deliberately - the filter uses `LIKE`, not `ci_phrasematch`, because
+  swapping in the content index would have silently stopped finding every mid-word match while still
+  reporting success.
+
+  **How the asynchronous completion is handled.** `AdvancedSearch` is the only asynchronous call this
+  server makes: it returns a `Search` object before the results exist and signals completion by
+  raising `AdvancedSearchComplete` on the apartment that registered the handler - the single
+  process-wide STA dispatcher thread (ADR-002). Out-of-process COM events reach an STA as window
+  messages, and that thread blocks on its work-item channel rather than pumping, so waiting for the
+  event on it would block the very thread the event has to be delivered on until the operation
+  timeout expired. A new `StaMessagePump` pumps the queue while waiting. It cannot re-enter another
+  Outlook operation, because the dispatcher's queue is a `Channel` and not a window message queue -
+  draining window messages delivers Outlook's callbacks and nothing else, and the next work item
+  stays queued behind the current one. The handler is matched on the search's `Tag` (Outlook raises
+  the event for every search in the process, including one a person started in the Outlook window)
+  and unhooked in a `finally`, since a sink left on the shared `Application` would fire into a dead
+  closure for the life of the process. Measured: a 2,400-item folder completed in 2.7 seconds with an
+  explicit pump against 8.2 with managed waits, which is the second reason not to rely on the CLR's
+  implicit STA pumping.
+
+  The wait is bounded at 60 seconds, far inside the dispatcher's own five-minute timeout, so a slow
+  search degrades into a described partial answer rather than wedging the dispatcher. A search that
+  ran but did not finish returns its matches with `truncated: true` and a message saying the set is
+  partial - and deliberately no `nextCursor`, which would imply a completeness the search never
+  established. A search Outlook refuses to run at all, or a query carrying a `%` or `_` that DASL has
+  no `ESCAPE` clause for, falls back to `clientScan` and says so rather than running a quietly
+  widened search under the same label.
+
 ### Changed
 
 - **`mail.list` and `mail.search` are projected from an Outlook table rowset** (#27, #13): an

@@ -2578,10 +2578,20 @@ public partial class MailCommands : IMailCommands
         // An unrecognised mode is refused rather than defaulted. Falling back silently would hand
         // the caller substring semantics while they believed they had asked for the index, and the
         // difference is only visible in results they never see.
-        if (!TryParseSearchMode(searchMode, out bool useContentIndex, out string? modeError))
+        if (!TryParseSearchMode(searchMode, out MailSearchEngine requestedEngine, out string? modeError))
         {
             return new MailListResult { Success = false, ErrorMessage = modeError };
         }
+
+        // With no free-text query there is no engine question to answer, so a listing keeps
+        // reporting the label it always has rather than claiming a search engine it never invoked.
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            requestedEngine = MailSearchEngine.ClientScan;
+        }
+
+        bool useContentIndex = requestedEngine == MailSearchEngine.ContentIndex;
+        bool useAdvancedSearch = requestedEngine == MailSearchEngine.AdvancedSearch;
 
         // The content index answers the free-text question itself, so the query is pushed down
         // instead of being checked client-side afterwards.
@@ -2604,6 +2614,8 @@ public partial class MailCommands : IMailCommands
             receivedAfter, receivedBefore, hasAttachment, flaggedOnly, searchMode);
 
         MailPageCursor? page = null;
+        DateTimeOffset? effectiveBefore = parsedBefore;
+
         if (!string.IsNullOrWhiteSpace(cursor))
         {
             if (!MailPageCursor.TryDecode(cursor, fingerprint, out page, out string? cursorError))
@@ -2620,7 +2632,7 @@ public partial class MailCommands : IMailCommands
             // design -- the exact comparison happens client-side below, where being wrong is
             // recoverable.
             DateTimeOffset boundary = page!.LastReceived;
-            DateTimeOffset effectiveBefore =
+            effectiveBefore =
                 parsedBefore.HasValue && parsedBefore.Value < boundary ? parsedBefore.Value : boundary;
 
             restrictFilter = MailRestrictFilter.Build(
@@ -2633,6 +2645,22 @@ public partial class MailCommands : IMailCommands
                 flaggedOnly,
                 pushedDownQuery);
         }
+
+        // The same predicates, in the dialect AdvancedSearch accepts, with the free-text term as a
+        // substring match rather than a content-index phrase match. Null when the term carries a
+        // wildcard DASL cannot escape, which sends the request to the client-side scan rather than
+        // running a quietly widened search under the same label.
+        string? advancedSearchFilter = useAdvancedSearch
+            ? MailRestrictFilter.BuildAdvancedSearch(
+                query!,
+                unreadOnly,
+                fromAddress,
+                subjectContains,
+                parsedAfter,
+                effectiveBefore,
+                hasAttachment,
+                flaggedOnly)
+            : null;
 
         return OutlookInteropRunner.Execute(
             operationName,
@@ -2659,36 +2687,72 @@ public partial class MailCommands : IMailCommands
                     items = resolvedFolder.Items;
                     int totalItemCount = SafeGetInt(() => items.Count);
 
+                    var listQuery = new MailListQuery(
+                        query,
+                        boundedMaxCount,
+                        unreadOnly,
+                        fromAddress,
+                        subjectContains,
+                        parsedAfter,
+                        parsedBefore,
+                        hasAttachment,
+                        flaggedOnly,
+                        restrictFilter,
+                        fingerprint,
+                        page,
+                        useContentIndex);
+
+                    string? tableFallbackReason = null;
+                    string? advancedSearchMessage = null;
+
+                    // Outlook's own search engine, for a free-text query (#13). Restrict cannot see
+                    // a message body at all, so the alternative is opening every candidate and
+                    // giving up at a scan limit -- which reports a match past that limit as "no such
+                    // mail". This asks the same substring question with no client-side scan and no
+                    // horizon.
+                    if (useAdvancedSearch)
+                    {
+                        if (advancedSearchFilter == null)
+                        {
+                            advancedSearchMessage = MailAdvancedSearch.DescribeFallback(
+                                "the query contains a wildcard character, which DASL cannot escape, so pushing it "
+                                + "down would have widened the search rather than answering it exactly");
+                        }
+                        else
+                        {
+                            MailListResult? searched = TryListFromAdvancedSearch(
+                                application,
+                                resolvedFolder,
+                                advancedSearchFilter,
+                                listQuery,
+                                totalItemCount,
+                                ScanSafetyLimit,
+                                out string? searchFallbackReason);
+
+                            if (searched != null)
+                            {
+                                return searched;
+                            }
+
+                            advancedSearchMessage = MailAdvancedSearch.DescribeFallback(
+                                searchFallbackReason ?? "Outlook could not run the search");
+                        }
+                    }
+
                     // A table rowset can answer everything a listing reports except a message body,
                     // so it is used whenever nothing in this request needs one: includeBodyPreview
-                    // returns a body, and a free-text query the content index did not take is
-                    // matched against bodies client-side. Falling back for those two is what keeps
-                    // the fast path from quietly narrowing what a search can find. See #27.
+                    // returns a body, and a free-text query neither the content index nor Outlook's
+                    // search engine took is matched against bodies client-side. Falling back for
+                    // those is what keeps the fast path from quietly narrowing what a search can
+                    // find. See #27.
                     bool bodyRequired = includeBodyPreview
                         || (!string.IsNullOrWhiteSpace(query) && !useContentIndex);
 
-                    string? tableFallbackReason = null;
-
                     if (!bodyRequired)
                     {
-                        var tableQuery = new MailListQuery(
-                            query,
-                            boundedMaxCount,
-                            unreadOnly,
-                            fromAddress,
-                            subjectContains,
-                            parsedAfter,
-                            parsedBefore,
-                            hasAttachment,
-                            flaggedOnly,
-                            restrictFilter,
-                            fingerprint,
-                            page,
-                            useContentIndex);
-
                         MailListResult? projected = TryListFromTable(
                             resolvedFolder,
-                            tableQuery,
+                            listQuery,
                             totalItemCount,
                             ScanSafetyLimit,
                             out tableFallbackReason);
@@ -2755,16 +2819,13 @@ public partial class MailCommands : IMailCommands
                         SortDirection = "descending",
                         SearchEngine = contentIndexAnswered ? "contentIndex" : "clientScan",
                         Projection = MailTableProjection.ItemProjectionName,
-                        // Two different things can need saying here - the content index could not
-                        // answer, and the table rowset could not be used - and a caller needs both,
-                        // so neither overwrites the other.
-                        Message = engineMessage == null
-                            ? (tableFallbackReason == null
-                                ? null
-                                : MailTableProjection.DescribeFallback(tableFallbackReason))
-                            : (tableFallbackReason == null
-                                ? engineMessage
-                                : engineMessage + " " + MailTableProjection.DescribeFallback(tableFallbackReason))
+                        // Up to three separate things can need saying - Outlook's search engine
+                        // declined the query, the content index could not answer, the table rowset
+                        // could not be used - and a caller needs all of them, so none of them
+                        // overwrites another.
+                        Message = JoinMessages(advancedSearchMessage, engineMessage, tableFallbackReason == null
+                            ? null
+                            : MailTableProjection.DescribeFallback(tableFallbackReason))
                     };
 
                     int scanned = 0;
@@ -2967,8 +3028,6 @@ public partial class MailCommands : IMailCommands
                 return null;
             }
 
-            string? storeId = SafeGet(() => folder.StoreID);
-
             var result = new MailListResult
             {
                 Success = true,
@@ -2982,100 +3041,85 @@ public partial class MailCommands : IMailCommands
                 Projection = MailTableProjection.ProjectionName
             };
 
-            int scanned = 0;
-            int skipped = 0;
+            return ProjectRows(table, query, result, scanSafetyLimit, SafeGet(() => folder.StoreID), out fallbackReason)
+                ? result
+                : null;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref table);
+        }
+    }
 
-            // The same tied-band boundary the item path keeps, and deliberately the same object:
-            // received times are not unique, the cursor excludes by identity rather than by
-            // timestamp, and keeping a second copy of that accumulation here is exactly what
-            // produced #135.
-            var boundary = new MailPageBoundary(query.Page);
+    /// <summary>
+    /// Answers a free-text search with <c>Application.AdvancedSearch</c> (#13), projecting its result
+    /// rowset exactly as a folder listing is projected.
+    ///
+    /// <para>
+    /// Returns <see langword="null"/> when Outlook could not run the search, which the caller answers
+    /// by falling back to the client-side scan and saying so. A search that ran but did not
+    /// <i>finish</i> is not a null: it returns rows, marked <c>truncated</c>, with a message saying
+    /// the set is partial. Those are different outcomes and a caller must be able to tell them apart.
+    /// </para>
+    ///
+    /// <para>
+    /// The scope is the resolved folder alone, subfolders excluded, so the result set means the same
+    /// thing a folder listing means. Searching subfolders would return mail from folders the caller
+    /// did not ask about while still reporting the requested folder's name.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static MailListResult? TryListFromAdvancedSearch(
+        Outlook.Application application,
+        Outlook.MAPIFolder folder,
+        string filter,
+        MailListQuery query,
+        int totalItemCount,
+        int scanSafetyLimit,
+        out string? fallbackReason)
+    {
+        MailAdvancedSearch.Result? search = MailAdvancedSearch.TryRun(
+            application,
+            folder,
+            filter,
+            MailTableProjection.Configure,
+            out fallbackReason);
 
-            while (!table.EndOfTable
-                   && scanned < scanSafetyLimit
-                   && result.Messages.Count < query.MaxCount)
+        if (search == null)
+        {
+            return null;
+        }
+
+        Outlook.Table? table = search.Table;
+
+        try
+        {
+            var result = new MailListResult
             {
-                Outlook.Row? row = null;
+                Success = true,
+                FolderName = SafeGet(() => folder.Name),
+                FolderPath = OutlookInteropRunner.GetFolderPath(folder),
+                Query = query.Query,
+                TotalItemCount = totalItemCount,
+                SortedBy = "receivedTime",
+                SortDirection = "descending",
+                SearchEngine = MailAdvancedSearch.EngineName,
+                Projection = MailTableProjection.ProjectionName
+            };
 
-                try
-                {
-                    row = table.GetNextRow();
-                    scanned++;
-
-                    // Classified before anything else, so a folder entry this surface does not model
-                    // - an appointment or a delivery report filed in a mail folder - is counted as
-                    // skipped without disturbing the paging boundary, exactly as the item path does.
-                    string? itemType = MailTableProjection.ClassifyRow(row);
-                    if (itemType == null)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    string? entryId = MailTableProjection.ReadEntryId(row);
-
-                    if (entryId == null)
-                    {
-                        // This store does not publish the long-term entry id through a table. The
-                        // short-term one it does publish resolves perfectly well but never compares
-                        // equal to what mail.read reports for the same message, so a listing built
-                        // on it would look correct and silently break every cross-reference. Give up
-                        // on the fast path rather than hand back ids that do not match the rest of
-                        // the surface.
-                        fallbackReason =
-                            "this store does not expose long-term entry ids through a table rowset, and the "
-                            + "short-term ids it does expose would not match the ids other actions report";
-                        return null;
-                    }
-
-                    DateTimeOffset? received = MailTableProjection.ReadReceived(row);
-
-                    if (received.HasValue)
-                    {
-                        DateTimeOffset receivedUtc = received.Value.ToUniversalTime();
-
-                        if (query.Page != null && !query.Page.Includes(receivedUtc, entryId))
-                        {
-                            continue;
-                        }
-
-                        boundary.Observe(receivedUtc, entryId);
-                    }
-
-                    if (!MailTableProjection.MatchesStructuredFilters(
-                            row,
-                            query.UnreadOnly,
-                            query.FromAddress,
-                            query.SubjectContains,
-                            query.ReceivedAfter,
-                            query.ReceivedBefore,
-                            query.HasAttachment,
-                            query.FlaggedOnly))
-                    {
-                        continue;
-                    }
-
-                    // The free-text query is never re-checked here. Either the content index
-                    // answered it - and re-checking as a substring would throw away legitimate
-                    // whole-word matches - or the request needed a body, in which case this path
-                    // was not taken at all.
-                    result.Messages.Add(MailTableProjection.CreateSummary(row, storeId, itemType, entryId));
-                }
-                finally
-                {
-                    OutlookInteropRunner.ReleaseComObject(ref row);
-                }
+            if (!ProjectRows(table, query, result, scanSafetyLimit, SafeGet(() => folder.StoreID), out fallbackReason))
+            {
+                return null;
             }
 
-            result.ReturnedCount = result.Messages.Count;
-            result.ScannedCount = scanned;
-            result.SkippedItemCount = skipped;
-            result.Truncated = !table.EndOfTable;
-
-            if (result.Truncated && boundary.Instant.HasValue)
+            if (!search.Completed)
             {
-                result.NextCursor = MailPageCursor.Encode(query.Fingerprint, boundary.Instant.Value, boundary.Ids);
-                result.HasMore = true;
+                // The rows are real, the set is not the whole answer, and the caller must not read a
+                // short list as "nothing more matches". Deliberately no nextCursor: continuing a walk
+                // over a result set that was never finished would imply a completeness the search
+                // never established.
+                result.Truncated = true;
+                result.Message = JoinMessages(result.Message, MailAdvancedSearch.DescribeIncompleteSearch());
             }
 
             return result;
@@ -3084,6 +3128,143 @@ public partial class MailCommands : IMailCommands
         {
             OutlookInteropRunner.ReleaseComObject(ref table);
         }
+    }
+
+    /// <summary>
+    /// Walks a configured rowset into <paramref name="result"/>, applying the paging cursor and the
+    /// client-side narrowing. Shared by the folder listing and the advanced search so the two cannot
+    /// drift apart in what they count, what they skip or where they stop.
+    ///
+    /// <para>
+    /// Returns <see langword="false"/> when the rowset cannot be trusted to produce comparable entry
+    /// ids, which sends the caller to the item-based path.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Truncation is exact here rather than inferred.</b> A <c>Table</c> has no count, so this
+    /// cannot compare "scanned" against "available" the way the item path does - it asks the table
+    /// directly whether rows remain. That is strictly better: the item path's comparison is against
+    /// a count taken before the walk, which a concurrent delivery can invalidate.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool ProjectRows(
+        Outlook.Table table,
+        MailListQuery query,
+        MailListResult result,
+        int scanSafetyLimit,
+        string? storeId,
+        out string? fallbackReason)
+    {
+        fallbackReason = null;
+
+        int scanned = 0;
+        int skipped = 0;
+
+        // Tied received times are not unique, so the cursor excludes by identity rather than by
+        // timestamp. Accumulating the ids for that band is subtle enough that both listing paths
+        // share one implementation - a second copy of it is what produced #135.
+        var boundary = new MailPageBoundary(query.Page);
+
+        while (!table.EndOfTable
+               && scanned < scanSafetyLimit
+               && result.Messages.Count < query.MaxCount)
+        {
+            Outlook.Row? row = null;
+
+            try
+            {
+                row = table.GetNextRow();
+                scanned++;
+
+                // Classified before anything else, so a folder entry this surface does not model
+                // - an appointment or a delivery report filed in a mail folder - is counted as
+                // skipped without disturbing the paging boundary, exactly as the item path does.
+                string? itemType = MailTableProjection.ClassifyRow(row);
+                if (itemType == null)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string? entryId = MailTableProjection.ReadEntryId(row);
+
+                if (entryId == null)
+                {
+                    // This store does not publish the long-term entry id through a table. The
+                    // short-term one it does publish resolves perfectly well but never compares
+                    // equal to what mail.read reports for the same message, so a listing built
+                    // on it would look correct and silently break every cross-reference. Give up
+                    // on the fast path rather than hand back ids that do not match the rest of
+                    // the surface.
+                    fallbackReason =
+                        "this store does not expose long-term entry ids through a table rowset, and the "
+                        + "short-term ids it does expose would not match the ids other actions report";
+                    return false;
+                }
+
+                DateTimeOffset? received = MailTableProjection.ReadReceived(row);
+
+                if (received.HasValue)
+                {
+                    DateTimeOffset receivedUtc = received.Value.ToUniversalTime();
+
+                    if (query.Page != null && !query.Page.Includes(receivedUtc, entryId))
+                    {
+                        continue;
+                    }
+
+                    boundary.Observe(receivedUtc, entryId);
+                }
+
+                if (!MailTableProjection.MatchesStructuredFilters(
+                        row,
+                        query.UnreadOnly,
+                        query.FromAddress,
+                        query.SubjectContains,
+                        query.ReceivedAfter,
+                        query.ReceivedBefore,
+                        query.HasAttachment,
+                        query.FlaggedOnly))
+                {
+                    continue;
+                }
+
+                // The free-text query is never re-checked here. Either Outlook's own engine
+                // answered it - and re-checking client-side could only narrow what it found - or
+                // the request needed a body, in which case this path was not taken at all.
+                result.Messages.Add(MailTableProjection.CreateSummary(row, storeId, itemType, entryId));
+            }
+            finally
+            {
+                OutlookInteropRunner.ReleaseComObject(ref row);
+            }
+        }
+
+        result.ReturnedCount = result.Messages.Count;
+        result.ScannedCount = scanned;
+        result.SkippedItemCount = skipped;
+        result.Truncated = !table.EndOfTable;
+
+        if (result.Truncated && boundary.Instant.HasValue)
+        {
+            result.NextCursor = MailPageCursor.Encode(query.Fingerprint, boundary.Instant.Value, boundary.Ids);
+            result.HasMore = true;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Joins the explanations a response may need to carry, dropping the ones that do not apply.
+    /// Several can be true at once - Outlook's search engine declined, the content index could not
+    /// answer, the rowset could not be used - and a caller needs every one of them, so none replaces
+    /// another.
+    /// </summary>
+    private static string? JoinMessages(params string?[] messages)
+    {
+        string joined = string.Join(" ", messages.Where(m => !string.IsNullOrWhiteSpace(m)));
+        return string.IsNullOrWhiteSpace(joined) ? null : joined;
     }
 
     /// <summary>
@@ -3560,18 +3741,47 @@ public partial class MailCommands : IMailCommands
            && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Which engine answers a free-text <c>query</c>. Three genuinely different questions, not three
+    /// speeds of the same one, which is why the choice is explicit and the answer says which one ran.
+    /// </summary>
+    private enum MailSearchEngine
+    {
+        /// <summary>
+        /// <c>Application.AdvancedSearch</c>. Outlook runs a substring match over subject, sender,
+        /// recipients and body itself: no client-side scan, and no horizon past which a match becomes
+        /// invisible. The default.
+        /// </summary>
+        AdvancedSearch,
+
+        /// <summary>
+        /// Each candidate is opened here and checked. Substring matching, exact, but bounded by a
+        /// scan limit - a match past it is reported as "no such mail".
+        /// </summary>
+        ClientScan,
+
+        /// <summary>
+        /// Outlook's content index, via <c>ci_phrasematch</c>. Whole-word matching, so it finds
+        /// <c>foo</c> in "a foo arrived" but not inside <c>foobar</c>.
+        /// </summary>
+        ContentIndex
+    }
+
+    /// <summary>
     /// Resolves the caller's <c>searchMode</c> to a decision about which engine answers the free-text
-    /// query (#42).
+    /// query (#42, #13).
     /// </summary>
     /// <remarks>
-    /// An unrecognised value is an error rather than a default. The two engines do not answer the
-    /// same question - the index matches whole words, the scan matches substrings and stops at a
-    /// limit - so a typo silently resolving to the default would give the caller results they did not
-    /// ask for, in the one place where the difference is invisible: the matches they never see.
+    /// An unrecognised value is an error rather than a default. The engines do not answer the same
+    /// question - the index matches whole words, the scan matches substrings and stops at a limit -
+    /// so a typo silently resolving to the default would give the caller results they did not ask
+    /// for, in the one place where the difference is invisible: the matches they never see.
     /// </remarks>
-    private static bool TryParseSearchMode(string? searchMode, out bool useContentIndex, out string? errorMessage)
+    private static bool TryParseSearchMode(string? searchMode, out MailSearchEngine engine, out string? errorMessage)
     {
-        useContentIndex = false;
+        // The default. It answers the same substring question the client-side scan answered, but
+        // Outlook runs it, so it does not stop at a scan limit - which is the whole of the bug this
+        // surface was reported for.
+        engine = MailSearchEngine.AdvancedSearch;
         errorMessage = null;
 
         if (string.IsNullOrWhiteSpace(searchMode))
@@ -3581,20 +3791,26 @@ public partial class MailCommands : IMailCommands
 
         switch (searchMode.Trim().ToLowerInvariant())
         {
+            case "advancedsearch":
+            case "advanced":
+                return true;
+
             case "clientscan":
             case "client":
+                engine = MailSearchEngine.ClientScan;
                 return true;
 
             case "fulltext":
             case "contentindex":
-                useContentIndex = true;
+                engine = MailSearchEngine.ContentIndex;
                 return true;
 
             default:
                 errorMessage =
-                    $"searchMode '{searchMode}' is not recognised. Use 'clientScan' (the default: exact substring "
-                    + "matching, bounded by a scan limit) or 'fullText' (Outlook's content index: whole-word matching "
-                    + "with no scan limit).";
+                    $"searchMode '{searchMode}' is not recognised. Use 'advancedSearch' (the default: Outlook runs a "
+                    + "substring search over subject, sender, recipients and body itself, with no scan limit), "
+                    + "'clientScan' (each candidate is opened here and checked - substring matching, bounded by a "
+                    + "scan limit) or 'fullText' (Outlook's content index: whole-word matching with no scan limit).";
                 return false;
         }
     }

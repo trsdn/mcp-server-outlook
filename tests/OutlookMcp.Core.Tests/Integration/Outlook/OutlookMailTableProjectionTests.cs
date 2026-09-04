@@ -123,7 +123,7 @@ public class OutlookMailTableProjectionTests(ITestOutputHelper output)
     /// <summary>
     /// The regression that would matter most. A rowset cannot read a message body, so a free-text
     /// search answered from one would stop finding terms that appear only in the body - and would
-    /// report that as "no such mail". The default search mode must therefore still open items.
+    /// report that as "no such mail". The client-side scan mode must therefore still open items.
     /// </summary>
     [SkippableFact]
     public void MailSearch_WithAClientScanQuery_StillFindsATermThatAppearsOnlyInTheBody()
@@ -141,7 +141,11 @@ public class OutlookMailTableProjectionTests(ITestOutputHelper output)
             Assert.True(draft.Success, draft.ErrorMessage);
             draftId = draft.EntryId;
 
-            var found = commands.Search(query: bodyOnlyToken, folder: "drafts", maxCount: 50);
+            var found = commands.Search(
+                query: bodyOnlyToken,
+                folder: "drafts",
+                maxCount: 50,
+                searchMode: "clientScan");
 
             Assert.True(found.Success, found.ErrorMessage);
             Assert.Equal("item", found.Projection);

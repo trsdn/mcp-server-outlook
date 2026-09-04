@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Search depth is now demonstrated rather than asserted** (#13, #27): an integration test walks a
+  real folder to a position past the roughly 500-item window the old client-side scan could reach,
+  picks a term from the message sitting there, and requires the search to find it. Measured on the
+  reference mailbox: the target sat at **position 527** of a 2,691-item folder and was found by the
+  `advancedSearch` engine. The paging code had claimed this worked since #43; nothing demonstrated
+  it, and an untested claim about search depth is exactly the failure this issue was filed about.
+
+  The test **cannot pass vacuously**. It measures every candidate folder first and *skips with the
+  measured item counts* if none is large enough to place a message past the window - it never passes
+  on a small mailbox. A second test pins the weaker guarantee for the bounded `clientScan` engine:
+  whether it reaches that depth is a property of the machine, but it must never come back complete
+  and empty, because a caller reads that as proof the message does not exist.
+
+- **Cached versus online Exchange mode is documented** (#13): what each means for what a search can
+  see, why an indexed store is a third and separate condition, and why "older than this profile
+  caches" is a real explanation for a miss rather than proof the mail does not exist. Written into
+  `skills/shared/`, so it reaches the skill references and the generated MCP prompts alike.
+
 - **`mail.search` is answered by `Application.AdvancedSearch`** (#13, #27): a new `advancedSearch`
   engine, and the **default** whenever a free-text `query` is present. `Items.Restrict` cannot filter
   on `Body` at all, so a body match previously meant opening every candidate message here and giving

@@ -65,6 +65,34 @@ A search that Outlook started but did not finish in time comes back with `trunca
 matches found so far, and a `message` saying so. Do not read that as the complete answer - narrow it
 with structured filters and ask again.
 
+### Cached mode, online mode, and what each means for a search
+
+An Exchange mailbox is connected in one of two modes, and it changes what a search can see and how
+long it takes. You cannot switch it from here, but you should know which questions it affects.
+
+**Cached Exchange Mode** (the usual setup) keeps a local replica of the mailbox in an OST file.
+Listings and searches run against that copy, so they are fast and work offline - but they see the
+mailbox as of the last sync. A message that reached the server moments ago may not be local yet, and
+a mailbox configured to cache only the last few months genuinely does not hold the older mail
+locally at all. If a user insists something exists and a search cannot find it, "it is older than
+this profile caches" is a real answer worth offering rather than asserting the mail does not exist.
+
+**Online Mode** talks to the server for every request. Nothing is stale, and nothing is local: each
+listing and each search is a round trip, so both are noticeably slower and a large folder can take
+seconds rather than milliseconds.
+
+**Indexing is a third, separate thing.** The `fullText` engine uses the content-indexer keywords,
+which only work on an *indexed* store - in cached mode that is the Windows Search index over the OST.
+Where indexing is disabled by policy, or still catching up after a new profile or a large resync, an
+indexed search fails outright rather than returning fewer results; the response falls back to another
+engine and `message` says so. The default `advancedSearch` engine does not depend on the index at
+all, which is the other reason it is the default: it still answers on an unindexed or
+still-indexing store, just less quickly.
+
+Practical consequence: prefer the default. Reach for `fullText` when whole-word matching is genuinely
+what you want and the mailbox is a normal indexed cached one, and read `searchEngine` and `message`
+on the response before drawing any conclusion from an empty result.
+
 
 ## Read past the first page
 

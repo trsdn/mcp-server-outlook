@@ -902,6 +902,37 @@ public class MailSendResult : ResultBase
     public DateTimeOffset? SentOn { get; set; }
 }
 
+/// <summary>
+/// The outcome of exporting an Outlook item to a file with <c>SaveAs</c>.
+/// </summary>
+public class ItemExportResult : ResultBase
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
+
+    /// <summary>The format written, normalised - one of msg, txt, html, mht, rtf, ics.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Format { get; set; }
+
+    /// <summary>
+    /// Size of the file on disk after the export. Read back rather than reported by Outlook, which
+    /// says nothing about what it wrote.
+    /// </summary>
+    public long BytesWritten { get; set; }
+
+    /// <summary>Whether an existing file was replaced. Outlook overwrites silently.</summary>
+    public bool Overwritten { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreId { get; set; }
+}
+
 public class MailMutationResult : ResultBase
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -408,6 +408,33 @@ so if the user wants that, tell them where it is in Outlook rather than implying
 
 Ask where to save if the user did not say. That is a genuine preference, so Rule 2 does not apply.
 
+## Saving a whole item to disk
+
+`mail.export` and `calendar.export` write the item itself, not its attachments.
+
+```
+1. mail.list(...) or calendar.list(...)            → find the item
+2. mail.export(entryId: ..., filePath: "C:\\...\\thread.msg")
+   calendar.export(entryId: ..., filePath: "C:\\...\\event.ics")
+```
+
+Four rules, all of which exist because Outlook does the wrong thing quietly:
+
+- **`filePath` must be absolute.** Outlook accepts a relative path and resolves it against its own
+  working directory, so the file exists somewhere the user will never look. A relative path is
+  refused.
+- **The format follows the extension.** `.msg` `.txt` `.html` `.mht` `.rtf` for mail, plus `.ics` for
+  appointments. Passing a `format` that contradicts the extension is refused, because Outlook writes
+  the requested format regardless of the name and would leave a binary `.msg` called `.txt`.
+- **`.msg` is always Unicode.** Outlook's ANSI `.msg` replaces anything outside the machine's code
+  page with `?` and reports success. Never ask for the ANSI variant; there is no way to.
+- **Nothing is overwritten unless you ask.** A second export to the same path fails; pass
+  `overwrite` if replacing it is intended. Ask the user first.
+
+`.ics` only works on an appointment. Asking for it on a mail item is refused with an explanation -
+Outlook's own answer, "Value does not fall within the expected range", is about the argument rather
+than the item and is not worth relaying.
+
 ## Look at the calendar
 
 ```

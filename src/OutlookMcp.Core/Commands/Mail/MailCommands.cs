@@ -1202,7 +1202,8 @@ public partial class MailCommands : IMailCommands
     public MailMutationResult Delete(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true)
+        bool useActiveMail = true,
+        bool confirm = false)
     {
         return OutlookInteropRunner.Execute(
             "OutlookMailDelete",
@@ -1215,6 +1216,7 @@ public partial class MailCommands : IMailCommands
                 object? currentItem = null;
                 object? selectedItem = null;
                 object? resolvedItem = null;
+                Outlook.MAPIFolder? parentFolder = null;
 
                 try
                 {
@@ -1234,6 +1236,19 @@ public partial class MailCommands : IMailCommands
                     if (mail == null)
                     {
                         return CreateMailMutationNotFoundResult(entryId);
+                    }
+
+                    // Whether this delete is recoverable depends on where the message currently
+                    // lives, which the caller cannot know from an entry id. See ConfirmationGate.
+                    parentFolder = mail.Parent as Outlook.MAPIFolder;
+                    if (ConfirmationGate.RequiresConfirmationToDelete(confirm, parentFolder))
+                    {
+                        return new MailMutationResult
+                        {
+                            Success = false,
+                            ErrorMessage = ConfirmationGate.AlreadyInDeletedItems(
+                                "Outlook mail item", "mail delete")
+                        };
                     }
 
                     var result = new MailMutationResult
@@ -1256,6 +1271,7 @@ public partial class MailCommands : IMailCommands
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref parentFolder);
                     OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
                     OutlookInteropRunner.ReleaseComObject(ref selectedItem);
                     OutlookInteropRunner.ReleaseComObject(ref currentItem);

@@ -100,7 +100,12 @@ public class OutlookRuleCrudTests(ITestOutputHelper output)
         finally
         {
             SweepTestRules(commands);
-            folders.Delete(scratchFolder);
+
+            // confirm: true is required since #123 gated folder delete. Without it the call is
+            // refused and returns a failed result, which - because this is cleanup and nothing
+            // asserts on it - would silently leave a scratch folder in the user's real mailbox.
+            var folderCleanup = folders.Delete(scratchFolder, confirm: true);
+            Assert.True(folderCleanup.Success, folderCleanup.ErrorMessage);
         }
     }
 

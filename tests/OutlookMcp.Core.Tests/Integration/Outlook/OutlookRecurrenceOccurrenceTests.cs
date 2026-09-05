@@ -137,7 +137,8 @@ public class OutlookRecurrenceOccurrenceTests(ITestOutputHelper output)
             var deleted = commands.DeleteAppointment(
                 entryId: created.EntryId,
                 storeId: created.StoreId,
-                occurrenceDate: target.ToString("o"));
+                occurrenceDate: target.ToString("o"),
+                confirm: true);
 
             Assert.True(deleted.Success, deleted.ErrorMessage);
             Assert.True(deleted.Deleted);
@@ -295,7 +296,8 @@ public class OutlookRecurrenceOccurrenceTests(ITestOutputHelper output)
             var deleted = commands.DeleteAppointment(
                 entryId: created.EntryId,
                 storeId: created.StoreId,
-                occurrenceDate: target.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                occurrenceDate: target.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                confirm: true);
 
             Assert.True(deleted.Success, deleted.ErrorMessage);
             Assert.Equal("occurrence", deleted.Scope);

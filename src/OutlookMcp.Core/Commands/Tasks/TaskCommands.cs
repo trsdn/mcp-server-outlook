@@ -430,7 +430,8 @@ public class TaskCommands : ITaskCommands
     public TaskMutationResult Delete(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveTask = false)
+        bool useActiveTask = false,
+        bool confirm = false)
     {
         if (string.IsNullOrWhiteSpace(entryId) && !useActiveTask)
         {
@@ -447,6 +448,7 @@ public class TaskCommands : ITaskCommands
             (application, session) =>
             {
                 var resolved = ResolveTaskItem(application, session, entryId, storeId, useActiveTask);
+                Outlook.MAPIFolder? parentFolder = null;
 
                 try
                 {
@@ -456,6 +458,19 @@ public class TaskCommands : ITaskCommands
                         {
                             Success = false,
                             ErrorMessage = BuildUnresolvedMessage(entryId, "delete")
+                        };
+                    }
+
+                    // Whether this delete is recoverable depends on where the task currently lives,
+                    // which the caller cannot know from an entry id. See ConfirmationGate.
+                    parentFolder = resolved.Task.Parent as Outlook.MAPIFolder;
+                    if (ConfirmationGate.RequiresConfirmationToDelete(confirm, parentFolder))
+                    {
+                        return new TaskMutationResult
+                        {
+                            Success = false,
+                            ErrorMessage = ConfirmationGate.AlreadyInDeletedItems(
+                                "Outlook task", "task delete")
                         };
                     }
 
@@ -469,6 +484,7 @@ public class TaskCommands : ITaskCommands
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref parentFolder);
                     resolved.Release();
                 }
             },

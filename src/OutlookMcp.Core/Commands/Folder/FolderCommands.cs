@@ -733,17 +733,26 @@ public class FolderCommands : IFolderCommands
     /// <para>
     /// <b>This is not a recycle-bin operation for every store.</b> In a mail store Outlook moves the
     /// folder to Deleted Items; elsewhere it can be gone outright. Either way the contents go with
-    /// it, which is why the protected-folder guard below is the substance of this operation.
+    /// it, which is why the confirmation gate and the protected-folder guard below are the substance
+    /// of this operation.
     /// </para>
     /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public OutlookFolderResolveResult Delete(string? folder = null)
+    public OutlookFolderResolveResult Delete(string? folder = null, bool confirm = false)
     {
         if (string.IsNullOrWhiteSpace(folder))
         {
             return Refuse(
                 "A folder is required. Delete has no default target: falling back to the current "
                 + "folder here would delete whatever the user happens to have selected.");
+        }
+
+        // Gated before Outlook is reached at all: a refusal must not cost a COM round trip, and
+        // nothing about the target can make an unconfirmed folder delete acceptable. See #9 and
+        // ConfirmationGate for why folder delete is gated where an item delete is not.
+        if (!confirm)
+        {
+            return Refuse(ConfirmationGate.FolderDelete(folder!));
         }
 
         return OutlookInteropRunner.Execute(
@@ -1441,6 +1450,12 @@ public class FolderCommands : IFolderCommands
                     // different ordering rather than a pretended one.
                     string? sortedBy = TrySortNewestFirst(items);
 
+                    // Every item in a folder lives in that folder's store, so the store id is read
+                    // once here rather than per item. Reading it from item.Parent instead would cost
+                    // a COM round-trip per row and hand back a reference to this very folder, whose
+                    // lifetime the loop already owns. See #120.
+                    string? folderStoreId = SafeGet(() => resolvedFolder.StoreID);
+
                     var result = new OutlookFolderItemListResult
                     {
                         Success = true,
@@ -1459,7 +1474,7 @@ public class FolderCommands : IFolderCommands
                         try
                         {
                             rawItem = items[index];
-                            var info = CreateFolderItemInfo(rawItem, includePreview);
+                            var info = CreateFolderItemInfo(rawItem, includePreview, folderStoreId);
                             if (info != null)
                             {
                                 result.Items.Add(info);
@@ -1566,15 +1581,29 @@ public class FolderCommands : IFolderCommands
         }
     }
 
+    /// <summary>
+    /// Builds the listing row for one item.
+    /// </summary>
+    /// <param name="rawItem">The item, which may be any Outlook item type.</param>
+    /// <param name="includePreview">Whether to read and normalise a body preview.</param>
+    /// <param name="folderStoreId">
+    /// Store id of the folder being listed, resolved once by the caller. Every item in a folder is
+    /// in that folder's store, so this is read from the folder rather than from each item's
+    /// <c>Parent</c> - which would cost a COM round-trip per row and hand back a second reference to
+    /// the folder the listing loop is already enumerating. See #120.
+    /// </param>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    private static OutlookFolderItemInfo? CreateFolderItemInfo(object rawItem, bool includePreview)
+    private static OutlookFolderItemInfo? CreateFolderItemInfo(
+        object rawItem,
+        bool includePreview,
+        string? folderStoreId)
     {
         if (rawItem is Outlook.MailItem mail)
         {
             return new OutlookFolderItemInfo
             {
                 EntryId = SafeGet(() => mail.EntryID),
-                StoreId = SafeGet(() => (mail.Parent as Outlook.MAPIFolder)?.StoreID),
+                StoreId = folderStoreId,
                 ItemType = "mail",
                 MessageClass = SafeGet(() => mail.MessageClass),
                 Subject = SafeGet(() => mail.Subject),
@@ -1592,7 +1621,7 @@ public class FolderCommands : IFolderCommands
             return new OutlookFolderItemInfo
             {
                 EntryId = SafeGet(() => appointment.EntryID),
-                StoreId = SafeGet(() => (appointment.Parent as Outlook.MAPIFolder)?.StoreID),
+                StoreId = folderStoreId,
                 ItemType = "appointment",
                 MessageClass = SafeGet(() => appointment.MessageClass),
                 Subject = SafeGet(() => appointment.Subject),
@@ -1610,13 +1639,47 @@ public class FolderCommands : IFolderCommands
             return new OutlookFolderItemInfo
             {
                 EntryId = SafeGet(() => contact.EntryID),
-                StoreId = SafeGet(() => (contact.Parent as Outlook.MAPIFolder)?.StoreID),
+                StoreId = folderStoreId,
                 ItemType = "contact",
                 MessageClass = SafeGet(() => contact.MessageClass),
                 Subject = SafeGet(() => contact.CompanyName),
                 Name = SafeGet(() => contact.FullName),
                 Preview = includePreview
                     ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => contact.Body))
+                    : null
+            };
+        }
+
+        if (rawItem is Outlook.TaskItem task)
+        {
+            return new OutlookFolderItemInfo
+            {
+                EntryId = SafeGet(() => task.EntryID),
+                StoreId = folderStoreId,
+                ItemType = "task",
+                MessageClass = SafeGet(() => task.MessageClass),
+                Subject = SafeGet(() => task.Subject),
+                Name = SafeGet(() => task.Owner),
+                Preview = includePreview
+                    ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => task.Body))
+                    : null,
+                End = SafeGetDateTimeOffset(() => task.DueDate)
+            };
+        }
+
+        if (rawItem is Outlook.NoteItem note)
+        {
+            // A note has essentially only a body: Outlook derives its Subject from the body's first
+            // line, and it has no sender, owner or recipient to report as Name. See #120.
+            return new OutlookFolderItemInfo
+            {
+                EntryId = SafeGet(() => note.EntryID),
+                StoreId = folderStoreId,
+                ItemType = "note",
+                MessageClass = SafeGet(() => note.MessageClass),
+                Subject = SafeGet(() => note.Subject),
+                Preview = includePreview
+                    ? OutlookInteropRunner.NormalizeBodyPreview(SafeGet(() => note.Body))
                     : null
             };
         }
@@ -1628,14 +1691,69 @@ public class FolderCommands : IFolderCommands
         // RuntimeBinderException when a given type does not have the member.
         dynamic untypedItem = rawItem;
 
+        string? messageClass = SafeGet(() => (string?)untypedItem.MessageClass);
+
         return new OutlookFolderItemInfo
         {
-            ItemType = SafeGet(() => rawItem.GetType().Name),
-            MessageClass = SafeGet(() => (string?)untypedItem.MessageClass),
+            // An unidentified item still needs an addressable id, otherwise a caller can see it in a
+            // listing and do nothing whatsoever with it (#120).
+            EntryId = SafeGet(() => (string?)untypedItem.EntryID),
+            StoreId = folderStoreId,
+            ItemType = DescribeItemType(messageClass),
+            MessageClass = messageClass,
             Subject = SafeGet(() => (string?)untypedItem.Subject),
             Name = SafeGet(() => (string?)untypedItem.FullName) ?? SafeGet(() => (string?)untypedItem.Name)
         };
     }
+
+    /// <summary>
+    /// Describes an item whose PIA type this class does not have a branch for, using its message
+    /// class rather than the name of its runtime wrapper.
+    ///
+    /// <para>
+    /// This exists because <c>rawItem.GetType().Name</c> on a late-bound RCW is the literal string
+    /// <c>__ComObject</c>, which was previously reported as the item type and told a caller
+    /// precisely nothing. The message class is the value Outlook itself uses to identify an item,
+    /// it is stable, and for a third-party add-in item it is the only meaningful answer available.
+    /// See #120.
+    /// </para>
+    /// </summary>
+    private static string? DescribeItemType(string? messageClass)
+    {
+        if (string.IsNullOrWhiteSpace(messageClass))
+        {
+            return null;
+        }
+
+        foreach ((string prefix, string reported) in MessageClassItemTypes)
+        {
+            if (messageClass.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return reported;
+            }
+        }
+
+        return messageClass;
+    }
+
+    /// <summary>
+    /// Message class prefixes mapped to the item type names this server reports. Ordered so that a
+    /// more specific class is matched before the general <c>IPM.Note</c> it is derived from -
+    /// <c>IPM.Note.SMIME</c> is still mail, but <c>IPM.Post</c> is not.
+    /// </summary>
+    private static readonly (string Prefix, string Reported)[] MessageClassItemTypes =
+    [
+        ("IPM.Note", "mail"),
+        ("IPM.Appointment", "appointment"),
+        ("IPM.Schedule.Meeting", "meeting"),
+        ("IPM.Contact", "contact"),
+        ("IPM.DistList", "distribution-list"),
+        ("IPM.Task", "task"),
+        ("IPM.StickyNote", "note"),
+        ("IPM.Activity", "journal"),
+        ("IPM.Post", "post"),
+        ("IPM.Document", "document")
+    ];
 
     private static string? TryGetDefaultRole(string? folder)
     {

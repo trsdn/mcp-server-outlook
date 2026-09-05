@@ -67,7 +67,7 @@ public class OutlookFolderMutationTests(ITestOutputHelper output)
         {
             if (created != null)
             {
-                var delete = commands.Delete(created);
+                var delete = commands.Delete(created, confirm: true);
                 output.WriteLine($"Delete: success={delete.Success} {delete.ErrorMessage}");
                 Assert.True(delete.Success, delete.ErrorMessage);
             }
@@ -196,7 +196,10 @@ public class OutlookFolderMutationTests(ITestOutputHelper output)
         var commands = new FolderCommands();
         EnsureOutlookAvailable(commands);
 
-        var result = commands.Delete(role);
+        // confirm: true deliberately. The point of this test is that the protected-folder guard
+        // refuses even a fully confirmed delete; going through the confirmation gate instead would
+        // prove nothing about the guard.
+        var result = commands.Delete(role, confirm: true);
 
         Assert.False(result.Success);
         Assert.NotNull(result.ErrorMessage);
@@ -247,7 +250,9 @@ public class OutlookFolderMutationTests(ITestOutputHelper output)
             .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p));
         Skip.If(root == null, "No store reported a root folder path.");
 
-        var result = commands.Delete(root);
+        // confirm: true deliberately, for the same reason as Delete_OfADefaultFolder_IsRefused: the
+        // store-root guard has to hold against a caller who has already confirmed.
+        var result = commands.Delete(root, confirm: true);
 
         Assert.False(result.Success);
         Assert.NotNull(result.ErrorMessage);
@@ -359,7 +364,7 @@ public class OutlookFolderMutationTests(ITestOutputHelper output)
 
             foreach (var folder in leftovers)
             {
-                var deleted = commands.Delete(folder.FolderPath);
+                var deleted = commands.Delete(folder.FolderPath, confirm: true);
                 output.WriteLine($"Sweep pass {pass}: {folder.Name} -> success={deleted.Success} {deleted.ErrorMessage}");
             }
         }

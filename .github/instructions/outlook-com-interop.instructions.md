@@ -123,7 +123,7 @@ reached zero, Outlook freed the object, and the next access goes through a dangl
 an access violation that takes the **whole process** down, with no stack and nothing in the
 event log. It is also non-deterministic, so it looks like flakiness.
 
-Four distinct instances have been found in this migration, which is why this is a rule rather
+Five distinct instances have been found in this migration, which is why this is a rule rather
 than a footnote:
 
 1. **The shared `Application`** (#19).
@@ -136,7 +136,11 @@ than a footnote:
    disconnected the very folder the loop was still enumerating, and the test host crashed. Fixed
    by removing the per-item round-trip entirely - the store id is read once from the folder being
    listed - which is the second defence below rather than a different release call.
-4. **The whole `Rules` object graph** (#15). `Rules.Item(3)` twice is one object; so are
+4. **The shared `NameSpace`** (#9). The Deleted Items walk added for the confirmation gates stops
+   at a store root, whose `Parent` is the `NameSpace` rather than a folder - and the CLR caches one
+   `NameSpace` RCW per process, the same instance `Execute` holds as `session`. Verified live:
+   `inbox.Parent.Parent` is reference-identical to `GetNamespace("MAPI")`.
+5. **The whole `Rules` object graph** (#15). `Rules.Item(3)` twice is one object; so are
    `Conditions.Subject` and the `Conditions[n]` that reports the subject slot, and
    `rule.Conditions` fetched before and after a write. Reading a rule's clauses and then
    writing them in the same operation crashed the test host until every `Rule`,
@@ -268,6 +272,21 @@ model replaced the batch model.
   Outbox; delivery is not confirmed by the call returning.
 - **`EntryId` is not stable across stores.** An item moved between stores gets a new one, so
   always carry `StoreId` alongside it.
+- **A `Table`'s `EntryID` column is the *short-term* entry id**, not the long-term id
+  `MailItem.EntryID` returns. Both resolve through `GetItemFromID`, which is exactly what makes
+  this dangerous: ids read from a rowset work perfectly and never compare equal to ids read from
+  an item. Use `PR_LONGTERM_ENTRYID_FROM_TABLE` (`0x66700102`) when projecting from a table, and
+  fall back to opening items on a store that does not publish it. Found in #27.
+- **DASL date tags return UTC; the Outlook property names return local wall clock.** Mixing them
+  shifts every timestamp by the machine's offset. If a paging cursor is a keyset walk over that
+  value, the shift corrupts the walk rather than merely displaying oddly. Found in #27.
+- **`ReceivedTime` is not unique.** Bulk delivery, newsletters, an invite and its response all
+  tie. Anything ordering or paging on it must handle a tied band explicitly — see #135 for what
+  happens when the tie-breaking set is not carried across pages.
+- **A locally created draft still has a `ReceivedTime`** (its creation instant). This matters for
+  test design more than for production: a paging or ordering test built on freshly created drafts
+  gets *distinct* timestamps, never enters the tied band, and passes having exercised none of the
+  logic it was written for.
 
 ---
 

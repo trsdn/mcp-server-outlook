@@ -1,7 +1,7 @@
 # Behavioral Rules for Outlook Operations
 
 These rules apply to every Outlook operation, through both the MCP server and the `outlookcli` CLI.
-The two surfaces expose the same 7 tools and the same 57 actions with the same parameters, so this
+The two surfaces expose the same 8 tools and the same 62 actions with the same parameters, so this
 guidance is identical for both.
 
 ## Rule 1: Check Outlook availability before anything else
@@ -58,6 +58,43 @@ Two further points on `mail.send`:
   recipients, subject, and body back to them, and send only after they confirm.
 - `mail.send` is idempotent per operation ID. If a call times out or the result is ambiguous, retry
   with the **same** operation ID rather than sending again. Generating a new ID risks a duplicate.
+
+## Rule 3a: Rule writes need more confirmation than deletes, not less
+
+`rule.create`, `rule.update`, `rule.set-enabled` and `rule.delete` change what happens to mail that
+has not arrived yet. That makes them the highest-risk actions in this surface, above `mail.delete`:
+
+- a message deleted in error sits in Deleted Items and the user notices within minutes
+- a rule created in error silently moves or destroys **future** mail, keeps doing it, and is
+  typically noticed days later
+
+So:
+
+- **Read before you write.** `rule.list` with `includeDetail` first, and show the user the rule you
+  intend to create or change, in full, before creating or changing it.
+- **Never touch a rule the user did not name.** Rules are addressed by name and Outlook allows
+  duplicates; a name matching more than one rule is refused rather than guessed at, and you should
+  take that refusal back to the user rather than picking one.
+- **Prefer `rule.set-enabled` with `false` over `rule.delete`.** Disabling is reversible; deleting
+  is not, and the user loses the definition.
+- Every write rewrites the store's whole rule collection, so check `ruleCount` in the response
+  against what `rule.list` reported before.
+
+Two behaviours will otherwise look like bugs and are not:
+
+- **A new rule is inserted first, not last.** It runs before every rule the mailbox already had.
+- **`deleteMessage` reads back as `moveToFolder`.** Outlook has no delete action; it stores
+  "delete it" as a move to Deleted Items plus stop-processing.
+
+There is no mark-as-read rule action, in either surface. Outlook's rule object model does not have
+one, so this is not something to work around - tell the user only the Rules and Alerts wizard in
+Outlook can do it.
+
+**Note that no `rule` action is gated behind `confirm=true` today**, so its absence from Rule 3's
+table is not a statement that rule writes are recoverable. By Rule 3's own recoverability line
+`rule.delete` is not - the definition is gone and there is no Deleted Items for it - so the
+confirmation here is yours to obtain from the user, not the API's to enforce. Treat this section as
+carrying that weight until the gate exists.
 
 ## Rule 4: Entry IDs are the addressing scheme
 

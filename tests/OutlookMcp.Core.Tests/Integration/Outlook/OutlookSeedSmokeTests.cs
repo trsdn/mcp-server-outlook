@@ -552,7 +552,8 @@ public class OutlookSeedSmokeTests(ITestOutputHelper output)
                 attachmentIndex: 1,
                 mailEntryId: draft.EntryId,
                 storeId: draft.StoreId,
-                useActiveMail: false);
+                useActiveMail: false,
+                confirm: true);
 
             Assert.True(removeResult.Success, removeResult.ErrorMessage);
             Assert.Equal(Path.GetFileName(tempFile), removeResult.FileName);

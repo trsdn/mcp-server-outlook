@@ -22,7 +22,11 @@ namespace OutlookMcp.Core.Commands.Calendar;
     + "against that entry id change or cancel the WHOLE series. To change or cancel one instance, pass occurrenceDate "
     + "with the date of that instance; a bare date takes its time of day from the series. Naming occurrenceDate on an "
     + "item that is not recurring is refused rather than silently ignored, and the response reports scope as series or "
-    + "occurrence so a caller can confirm what was actually touched.")]
+    + "occurrence so a caller can confirm what was actually touched. "
+    + "Cancelling a single occurrence requires confirm=true and is refused without it: the occurrence becomes an "
+    + "exception in the recurrence pattern rather than moving to Deleted Items, so it cannot be restored. Deleting "
+    + "a whole appointment or series needs no confirmation, because that does go to Deleted Items - unless the "
+    + "appointment is already there, in which case the delete is permanent and confirm=true is required.")]
 public interface ICalendarCommands
 {
     [ServiceAction("list", Destructive = false)]
@@ -71,12 +75,26 @@ public interface ICalendarCommands
         bool useActiveAppointment = false,
         string? occurrenceDate = null);
 
+    /// <summary>
+    /// Deletes an appointment, or cancels one occurrence of a recurring series.
+    ///
+    /// <para>
+    /// Deleting a whole appointment or series is an ordinary soft delete - Outlook moves it to
+    /// Deleted Items and the user can restore it - so it is <b>not</b> gated. Two cases are:
+    /// cancelling a single <paramref name="occurrenceDate"/>, which writes a deletion exception into
+    /// the recurrence pattern and leaves nothing to restore; and deleting an appointment that is
+    /// already in Deleted Items, which destroys it. Both refuse without
+    /// <paramref name="confirm"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="confirm">Required only for the irreversible cases above. An ordinary delete ignores it.</param>
     [ServiceAction("delete-appointment", Destructive = true)]
     CalendarMutationResult DeleteAppointment(
         string? entryId = null,
         string? storeId = null,
         bool useActiveAppointment = false,
-        string? occurrenceDate = null);
+        string? occurrenceDate = null,
+        bool confirm = false);
 
     [ServiceAction("get-free-busy", Destructive = false)]
     CalendarFreeBusyResult GetFreeBusy(

@@ -733,17 +733,26 @@ public class FolderCommands : IFolderCommands
     /// <para>
     /// <b>This is not a recycle-bin operation for every store.</b> In a mail store Outlook moves the
     /// folder to Deleted Items; elsewhere it can be gone outright. Either way the contents go with
-    /// it, which is why the protected-folder guard below is the substance of this operation.
+    /// it, which is why the confirmation gate and the protected-folder guard below are the substance
+    /// of this operation.
     /// </para>
     /// </summary>
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
-    public OutlookFolderResolveResult Delete(string? folder = null)
+    public OutlookFolderResolveResult Delete(string? folder = null, bool confirm = false)
     {
         if (string.IsNullOrWhiteSpace(folder))
         {
             return Refuse(
                 "A folder is required. Delete has no default target: falling back to the current "
                 + "folder here would delete whatever the user happens to have selected.");
+        }
+
+        // Gated before Outlook is reached at all: a refusal must not cost a COM round trip, and
+        // nothing about the target can make an unconfirmed folder delete acceptable. See #9 and
+        // ConfirmationGate for why folder delete is gated where an item delete is not.
+        if (!confirm)
+        {
+            return Refuse(ConfirmationGate.FolderDelete(folder!));
         }
 
         return OutlookInteropRunner.Execute(

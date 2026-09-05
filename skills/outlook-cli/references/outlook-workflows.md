@@ -279,12 +279,154 @@ before telling a user something went wrong.
 ## Compose a new message
 
 ```
-1. mail.create-draft(...)
-2. mail.set-recipients / mail.set-subject / mail.set-body
-3. attachment.add(entryId: <draft>, path: ...)     → if needed
-4. read the draft back to the user
-5. mail.send(entryId: <draft>, confirm: true)
+1. addressbook.resolve(recipients: "...")            → check the addressees exist
+2. mail.create-draft(...)
+3. mail.set-recipients / mail.set-subject / mail.set-body
+4. attachment.add(entryId: <draft>, path: ...)     → if needed
+5. read the draft back to the user
+6. mail.send(entryId: <draft>, confirm: true)
 ```
+
+## Check an addressee before you send to one
+
+`addressbook.resolve` takes one or more display names, aliases or email addresses, **separated by
+semicolons**, and says which of them Outlook can actually find:
+
+```
+addressbook.resolve(recipients: "Jane Smith; someone@example.com")
+  → allResolved: false
+    unresolvedNames: ["Jane Smith"]
+```
+
+`allResolved` is the flag to check. `unresolvedNames` says which ones are wrong, so you can ask the
+user about the one bad addressee instead of sending and waiting for a bounce.
+
+An unresolved name is a **success** with `resolved: false`, not an error. "No such person" and
+"Outlook could not be reached" are different answers and must not be reported as the same thing.
+
+**Semicolons separate; commas do not.** `Smith, Jane` is one addressee, not two. That is the usual
+Global Address List display-name shape, so a comma is part of a name and splitting on it would break
+the commonest input this call exists to handle. Outlook uses `;` between recipients for the same
+reason. When you build the string from a list, join with `; `.
+
+An ambiguous name - two Jane Smiths - also comes back unresolved. Outlook offers no way to list the
+candidates, so ask the user for the full email address rather than guessing which Jane is meant.
+
+**`smtpAddress` is the mailable address; `rawAddress` is not.** For an Exchange colleague, Outlook's
+own address property is an X500 directory name like
+`/o=ExchangeLabs/ou=Exchange Administrative Group.../cn=Recipients/cn=8a3f...`. It looks like an
+identifier because it is one, and mail sent to it goes nowhere. Always use `smtpAddress`, and never
+quote `rawAddress` to a user as their email address.
+
+`smtpAddressSource` says how the answer was obtained, and the distinction matters before sending:
+
+- `exchange-user` / `exchange-distribution-list` - the directory confirmed this person or group
+  exists
+- `contact` - it came from the user's own Contacts, which nobody validates
+- `smtp-entry` - it is a syntactically valid address that resolved as a one-off. **This is not
+  evidence the mailbox exists.** Anything shaped like an address resolves this way, including a
+  typo.
+
+So `allResolved: true` with every source `smtp-entry` means "nothing was misspelled enough to
+notice", not "these people are real". Say so if it matters.
+
+`isDistributionList` marks a group. Sending to a group is a different act from sending to one
+colleague; if the user named a person and a group came back, check before sending.
+
+**A denial is possible on any of these calls.** Recipients and address entries are exactly what
+Outlook's security prompt protects against outside callers. If a call fails saying Outlook blocked
+it, a human has to answer a dialog inside Outlook - no program can. Report that, do not retry in a
+loop.
+
+If a call **succeeds** but names something in `accessDenied`, that value is missing because it was
+refused, not because the directory lacks it - and before a send those two lead to opposite actions.
+"Outlook has no such person" means correct the address. "Outlook refused to tell me" means the
+answer is unknown and the addressee has **not** been validated; say so rather than sending. Check
+`accessDenied` before treating `allResolved: true` as a green light.
+
+## Find someone whose name you do not know exactly
+
+```
+addressbook.list-address-lists()                → which books exist
+addressbook.list-entries(addressList: "gal", startsWith: "Sm")
+```
+
+`list-entries` **scans**; it does not search. Outlook exposes no server-side lookup over an address
+book, so `startsWith` is applied while walking entries and the walk stops at `scanLimit`.
+
+Check `scanLimitReached`. When it is true the scan ran out before the book did, and an empty result
+is **not** evidence that nobody matches - a corporate Global Address List is far larger than any
+sensible scan limit. In that case ask the user for more of the name and use `resolve` instead, which
+asks the directory rather than reading it.
+
+The scan starts at the beginning of the book and does not jump to a prefix. Measured on a real
+corporate GAL: 3000 entries scanned for names starting with `S` matched **none**, because the first
+3000 begin with punctuation and digits. So a prefix filter is worth using against `contacts`, and
+close to useless against the GAL - for a person on the GAL, use `resolve`.
+
+`hasGlobalAddressList` is false on a profile with no Exchange account. There, colleagues cannot be
+looked up at all and the only addressees that exist are in local Contacts.
+
+## Read the headers behind a message
+
+```
+property.get-headers(entryId: <message>)
+property.get-headers(entryId: <message>, headerName: "Authentication-Results")
+```
+
+This is how you answer "did this really come from who it says", "who sent the original behind this
+forward", and "how do I unsubscribe from this". SPF and DKIM verdicts live in
+`Authentication-Results` and `Received-SPF`; the delivery path is the `Received` chain, one header
+per relay hop, ordered newest first.
+
+A header block is often tens of kilobytes. Pass `headerName` when you want one header. Only set
+`includeRaw` when the unparsed block is genuinely what the user asked for.
+
+**A draft has no headers, and that is not a failure.** Nothing composed locally traversed a
+transport, so it carries none - `headersPresent` is false on a successful call. The same is often
+true of a message delivered entirely inside one organisation. Do not report that as an error, and do
+not retry it.
+
+`headersPresent` is also false when Outlook **refused** the read, so check `status` before telling a
+user a message has no headers. `ok` means they are there; `not-present` and `empty` mean there are
+genuinely none; `blocked` and `unsupported-or-blocked` mean Outlook withheld them, which is a
+different thing and must be reported as such.
+
+Continuation lines are already folded back in, so a long `Authentication-Results` arrives whole
+rather than split across entries.
+
+## Read a property Outlook does not show you
+
+```
+property.get-known(entryId: <message>)        → the common ones, decoded
+property.get-property(entryId: <message>, dasl: "http://schemas.microsoft.com/mapi/proptag/0x007D001F")
+```
+
+`get-known` answers the usual questions in one call: the Internet message id, the in-reply-to id,
+the sender's real SMTP address, and whether the message was replied to or forwarded
+(`lastVerbExecuted`, with a plain-English `meaning`). Prefer it over hand-assembling DASL tags.
+
+`get-property` reads **any** MAPI property by its DASL name. It is read-only and it cannot reach an
+item you could not already open with `mail.read`, but it is not a narrow window either: it will
+return anything the store holds on that item. Use `get-headers` or `get-known` when they answer the
+question, and reach for `get-property` when they do not.
+
+**Every property comes back with a `status`, and `found` is the flag to check:**
+
+| status | meaning |
+|---|---|
+| `ok` | there is a value |
+| `not-present` | the item does not carry this property - ordinary, not a failure |
+| `empty` | the store returned an empty value instead of reporting it missing - same practical meaning |
+| `blocked` | the value exists and Outlook refused to hand it over |
+| `unsupported-or-blocked` | either the property's type cannot be read at all, or it was refused - Outlook does not say which |
+
+`not-present` and `empty` both mean "no usable value" and both set `found: false`, so a single check
+covers them. `blocked` is different in kind: never report a blocked property as "this message has
+none". Say that Outlook withheld it.
+
+A binary property comes back as base64 plus the hex form Outlook itself uses - never as the string
+`System.Byte[]`.
 
 ## Formatted mail, and when not to use it
 

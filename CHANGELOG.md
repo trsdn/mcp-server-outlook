@@ -31,6 +31,118 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Message property reads: internet headers, MAPI properties and user properties** (#15): a new
+  `property` tool with `get-headers`, `get-known`, `get-property` and `list-user-properties`.
+  `PropertyAccessor` was previously used in exactly two places, both inside
+  `AttachmentCommands`, for `ContentId` and `Hidden`. There was no general surface at all, so
+  checking an SPF or DKIM verdict, finding a `List-Unsubscribe`, or identifying the original sender
+  behind a forward was impossible.
+
+  Read-only by design: nothing here writes a property.
+
+  Four behaviours were measured against a live Exchange mailbox rather than assumed:
+
+  - **`GetProperty` throws when a property is absent** instead of returning null, and the HRESULTs
+    mean different things. `MAPI_E_NOT_FOUND` (0x8004010F) is an ordinary absence;
+    `E_ACCESSDENIED` and `E_ABORT` mean the value exists and was withheld. Collapsing those into one
+    "no value" answer would let a security refusal masquerade as a missing property.
+    `MAPI_E_NOT_SUPPORTED` (0x80040102) is genuinely ambiguous - Outlook returns it both for a
+    `PT_OBJECT` property that cannot be read at all and for a guard refusal - so it is reported as
+    `unsupported-or-blocked` rather than asserted to be one or the other.
+
+  - **A store returns an empty string where MAPI would report the property missing.** Asked for
+    `PR_TRANSPORT_MESSAGE_HEADERS` or `PR_INTERNET_MESSAGE_ID` on a draft, this Exchange store
+    answers with a zero-length value rather than raising `MAPI_E_NOT_FOUND`. Passing that through
+    would answer "yes, this message has an Internet message id" and hand back nothing, so an empty
+    value is reported as status `empty` and never as `ok`. `found` is false for both `empty` and
+    `not-present`, so a caller that only wants a usable value can ignore the distinction. This was
+    caught by a test that asserted `not-present` and failed.
+
+  - **Headers must be unfolded.** An RFC 5322 continuation line begins with whitespace and continues
+    the header above it. A line-by-line split invents nameless entries and truncates exactly the
+    headers worth reading, since `Received` and `Authentication-Results` are almost always folded.
+    Duplicates are preserved in transport order, because a message carries one `Received` per relay
+    hop and their order is the delivery path in reverse.
+
+  - **A binary property is a byte array.** Anything that stringifies it naively emits the literal
+    `System.Byte[]` and reports success. `PT_BINARY` values come back as base64 and as the hex form
+    Outlook itself uses, which is the form an entry id must be in to be handed back to Outlook.
+
+  **On arbitrary DASL reads.** `get-property` accepts any DASL property name rather than a curated
+  allow-list, and that is stated plainly in the tool description, in `FEATURES.md` and in the skill
+  guidance rather than left to be discovered. The reasoning: it is read-only, and it cannot reach an
+  item the caller could not already open in full with `mail.read`, so it grants no access the rest
+  of the surface does not already grant - but it does expose properties this surface deliberately
+  does not project. A fixed list over a property space with thousands of members would be
+  permanently incomplete and the curation would be guesswork, so `get-headers` and `get-known` exist
+  to answer the common questions and `get-property` is the documented escape hatch. Writing is not
+  exposed at all.
+
+  A malformed DASL name is refused up front with the accepted namespaces named, rather than handed
+  to Outlook, which answers "The property name is invalid" and says nothing about what a valid one
+  looks like.
+
+  Object Model Guard exposure is documented on every action: `PropertyAccessor` is itself a
+  protected member on every Outlook item type, so any of these reads can be refused, and a refused
+  read reports `blocked` - which is not the same answer as `not-present`. `get-headers` carries the
+  same `status` vocabulary for the same reason: `headersPresent: false` alone cannot distinguish
+  "this message has no headers" from "Outlook would not say".
+
+- **Address book lookup and recipient resolution** (#15): a new `addressbook` tool with `resolve`,
+  `list-address-lists` and `list-entries`. `Session.AddressLists` was previously unused, so there
+  was no way to check an addressee before sending to them - the only feedback available was a bounce.
+
+  `resolve` takes one or more display names, aliases or addresses and answers per addressee, with
+  `allResolved` as the single flag to check before sending and `unresolvedNames` naming the bad
+  ones. An unresolved name is a success with `resolved: false`, not a failure: "no such person" and
+  "Outlook could not be reached" are different answers and collapsing them would defeat the point of
+  the call.
+
+  Three things were measured against a live Exchange mailbox rather than assumed:
+
+  - **`AddressEntry.Address` is not an email address.** For an Exchange entry it is the X500
+    legacyExchangeDN (`/o=.../cn=Recipients/cn=...`) - a plausible-looking string that mail cannot be
+    sent to. The real address comes from `GetExchangeUser().PrimarySmtpAddress`, with
+    `GetExchangeDistributionList().PrimarySmtpAddress` for a group (a different call on a different
+    COM type; `GetExchangeUser()` returns null for a group) and a `PR_SMTP_ADDRESS` read as a
+    fallback for everything else, including any entry at all while the client is offline from the
+    directory. Both values are reported - `smtpAddress` and `rawAddress` - and `smtpAddressSource`
+    says which route produced the answer, so a directory-confirmed address is distinguishable from a
+    one-off SMTP string that was never checked against anything.
+
+  - **An ambiguous name is indistinguishable from a missing one.** `Recipient.Resolve()` returns
+    false for both and the object model offers no way to list the candidates, so both are reported as
+    unresolved rather than guessed at.
+
+  - **An address book cannot be searched, only scanned.** There is no `Restrict` or `Find` on
+    `AddressEntries`, so `list-entries` walks the book with the documented `GetFirst`/`GetNext`
+    cursor and stops at `scanLimit`. `scanLimitReached` distinguishes "the book ran out" from "the
+    scan did", because an empty answer means opposite things in the two cases.
+
+  This is the most Object Model Guard-exposed surface in the product: every property and method on
+  `Recipient` is protected, along with `AddressEntry.Address`, `GetExchangeUser`,
+  `ExchangeUser.PrimarySmtpAddress` and every cursor method on `AddressEntries`. Guard exposure is
+  documented on every action, a whole-call denial fails with an explanation rather than a wrong
+  answer, and a property or object refused while the rest of the call succeeded is named in
+  `accessDenied` - covering `Recipient.AddressEntry`, `GetExchangeUser`,
+  `GetExchangeDistributionList`, `GetContact` and `PropertyAccessor` acquisition as well as the
+  plain property reads. That distinction is load-bearing rather than tidy: this feature exists to
+  validate an addressee before a send, and "Outlook has no such person" and "Outlook refused to
+  tell me" call for opposite actions, so collapsing them would be a silent wrong answer in the one
+  place the feature has to be trustworthy.
+
+  **Semicolons separate addressees; commas do not.** `Smith, Jane` is one addressee. Commas were
+  accepted as separators at first, on the reasoning that an LLM building a list would reach for one
+  - which defeats the primary use case, since `Last, First` is the canonical Global Address List
+  display-name shape and splitting it yields two fragments that resolve to nothing. Outlook itself
+  separates recipients with `;` for exactly this reason.
+
+  `IsObjectModelGuardDenial` was deliberately left testing `E_ABORT` only. Microsoft documents the
+  guard returning `MAPI_E_NOT_SUPPORTED` (0x80040102) for a protected member refused outright, so
+  widening it was tried - and reverted, because 0x80040102 is also the ordinary MAPI "this provider
+  or property type does not support that" error. Treating it as a denial would make every such
+  failure across the existing mail and folder surface tell the caller to look for a security dialog
+  that does not exist.
 - **Rule CRUD** (#15): a new `rule` tool and `outlookcli rule` command with `list`, `create`,
   `update`, `set-enabled` and `delete`. Rules were previously read-only through
   `mail list-rules`, which could explain where mail had gone but could not do anything about it.

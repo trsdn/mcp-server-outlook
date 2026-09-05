@@ -273,6 +273,17 @@ internal static class OutlookInteropRunner
     /// automation surface, since OMG aborts the call rather than returning a normal error result.
     /// This is a heuristic (Outlook does not expose a dedicated "OMG denied" HRESULT) but is
     /// specific enough in practice to distinguish from generic COM failures. See #30.
+    ///
+    /// <para>
+    /// Deliberately <em>not</em> widened to <c>MAPI_E_NOT_SUPPORTED</c> (0x80040102). Microsoft
+    /// documents the guard returning that HRESULT for a protected member refused outright, but it
+    /// is also the ordinary MAPI "this provider, store or property type does not support that"
+    /// error - <c>PropertyAccessor</c> returns it for a <c>PT_OBJECT</c> property, and a computed
+    /// user property returns it when it cannot be evaluated. Treating it as a denial here would
+    /// make every such failure tell the caller to look for a security dialog that does not exist.
+    /// Code that needs the distinction should triage the HRESULT itself and report the ambiguity
+    /// rather than resolving it - see <c>PropertyCommands.ReadProperty</c>.
+    /// </para>
     /// </summary>
     internal static bool IsObjectModelGuardDenial(COMException ex)
     {

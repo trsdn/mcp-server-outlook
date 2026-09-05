@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**8 tools with 62 operations for Outlook automation**
+**10 tools with 69 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -241,6 +241,112 @@ model, so every other operation in this document requires classic Outlook.
 `get-active-explorer` and `get-active-inspector` both answer "nothing is open" as a success, not an
 error. An item the user is still composing has not been saved and therefore has no `entryId`, so it
 cannot be addressed by any other action until it is; `isSaved` says which case you are in.
+
+---
+
+## Address Book Operations (3 operations)
+
+| Action | Description |
+|---|---|
+| `resolve` | Check one or more addressees against the address book and report their real SMTP addresses |
+| `list-address-lists` | List the address books attached to the profile: the Global Address List, Contacts, LDAP directories |
+| `list-entries` | Browse the entries in one address book |
+
+**`resolve` is the check to run before sending.** It answers per addressee, and `allResolved` is
+the single flag to test; `unresolvedNames` says which ones are wrong. A name Outlook cannot find is
+a success with `resolved: false`, not an error - "no such person" and "Outlook could not be
+reached" are different answers and must not collapse into one. An ambiguous name also comes back
+unresolved: Outlook's object model offers no way to list the candidates, so pass the full SMTP
+address to disambiguate.
+
+**Semicolons separate addressees; commas do not.** `Smith, Jane` is one addressee. That is the usual
+Global Address List display-name shape, so splitting on commas would take the commonest form of the
+exact input this action exists to resolve and turn it into two fragments that resolve to nothing.
+Outlook separates recipients with `;` for the same reason.
+
+**`smtpAddress` is always a mailable address.** Outlook's own `AddressEntry.Address` returns an
+X500 legacyExchangeDN - `/o=ExchangeLabs/ou=.../cn=Recipients/cn=...` - for an Exchange entry. It
+is a string, it serialises cleanly, and mail sent to it goes nowhere. That value is reported
+separately as `rawAddress` and is never passed off as an email address. `smtpAddressSource` says
+which route produced the answer: the Exchange directory, a distribution list, a local contact, a
+`PR_SMTP_ADDRESS` read, or a one-off SMTP string that was never checked against anything.
+
+**`list-entries` scans; it does not search.** The Outlook object model has no `Restrict` or `Find`
+on an address book, so `startsWith` is applied while scanning and the scan stops at `scanLimit`. A
+corporate Global Address List is far larger than that, so check `scanLimitReached`: when it is
+true, an empty result is not evidence that nobody matches, and `resolve` is the right call for
+someone you can already name.
+
+The scan starts at the beginning of the book and does not jump to a prefix. Measured on a real
+corporate GAL: scanning 3000 entries for names starting with `S` matched **none of them**, because
+the first 3000 entries begin with punctuation and digits. The prefix filter is genuinely useful
+against a Contacts folder, which fits inside the budget; against a GAL, `resolve` is the only
+realistic way to find a person.
+
+**Every action here is Object Model Guard territory.** Recipients and address entries are exactly
+the members Outlook protects against out-of-process callers, so any of these calls can be refused
+by a modal security prompt that no program can answer. A refusal fails the call with an
+explanation; a property refused while the rest of the call succeeded is named in `accessDenied`, so
+a missing value is never confused with a value the directory does not hold.
+
+That distinction is load-bearing here rather than merely tidy. This surface exists to validate an
+addressee *before* sending, and "Outlook has no such person" and "Outlook refused to tell me" call
+for opposite actions - correct the address, or treat the answer as unknown and do not call the send
+validated. `accessDenied` covers the protected members that matter: `Recipient.AddressEntry`,
+`AddressEntry.Address`, `GetExchangeUser`, `GetExchangeDistributionList`, `GetContact`,
+`ExchangeUser.PrimarySmtpAddress` and `PropertyAccessor`.
+
+---
+
+## Message Property Operations (4 operations)
+
+| Action | Description |
+|---|---|
+| `get-headers` | Read the internet message headers of a received message, parsed into names and values |
+| `get-known` | Read a curated set of MAPI properties that are commonly useful and awkward to get right by hand |
+| `get-property` | Read any MAPI property by its DASL name |
+| `list-user-properties` | List the custom user properties on an item |
+
+Read-only. There is no way to write a property through this tool.
+
+**A draft has no transport headers.** Nothing composed locally ever traversed an SMTP transport, so
+it carries none, and the call succeeds with `headersPresent: false`. The same is often true of an
+item delivered entirely inside one organisation. That is an answer, not a failure. `headersPresent`
+is also false when Outlook refused the read, so check `status` before concluding a message has no
+headers: "there are none" and "Outlook would not say" are different claims.
+
+**Headers are unfolded.** An RFC 5322 continuation line begins with whitespace and continues the
+header above it, so a line-by-line split invents nameless entries and truncates exactly the headers
+worth reading - `Received` and `Authentication-Results` are almost always folded. Duplicates are
+preserved in transport order, because a message carries one `Received` header per relay hop and
+their order is the delivery path in reverse. A header block runs to tens of kilobytes, so
+`headerName` returns one header rather than all of them and `includeRaw` is off by default.
+
+**Absence has two shapes, and both mean "no usable value".** Outlook raises `MAPI_E_NOT_FOUND` when
+an item does not carry a property, which is reported as `not-present`. But an Exchange store returns
+an **empty string** for some tags rather than reporting them missing - `PR_TRANSPORT_MESSAGE_HEADERS`
+and `PR_INTERNET_MESSAGE_ID` on a draft both do - and reporting that as a found value would answer
+"yes, this message has an Internet message id" while handing back nothing. That case is `empty`.
+`found` is false for both, so one check answers "is there a value here"; the status says which.
+
+**A refusal is not an absence.** `blocked` means the value exists and Outlook withheld it.
+`unsupported-or-blocked` is Outlook's `MAPI_E_NOT_SUPPORTED`, which is genuinely ambiguous: it is
+returned both for a property type the accessor cannot handle at all (`PT_OBJECT`) and for a security
+refusal, and the HRESULT alone cannot tell them apart. It is reported as ambiguous rather than
+asserted to be one or the other.
+
+**`get-property` reads any MAPI property, not a curated list.** This is a deliberate choice. It is
+read-only and it cannot reach an item the caller could not already open in full with `mail.read`, so
+it grants no access the rest of this surface does not already grant - but it does expose properties
+this surface deliberately does not project, and that is stated here rather than left to be
+discovered. A fixed allow-list over a property space with thousands of members would be permanently
+incomplete, and the curation would be guesswork. `get-headers` and `get-known` exist so that the
+common questions do not need it.
+
+**Binary properties are not stringified.** A `PT_BINARY` value arrives as a byte array; anything
+that calls `ToString()` on it emits the literal `System.Byte[]` and reports success. Binary values
+come back as base64 and as the hex form Outlook itself uses, which is the form an entry id has to be
+in to be handed back to Outlook.
 
 ---
 

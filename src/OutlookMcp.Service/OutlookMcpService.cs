@@ -1,11 +1,13 @@
 using System.IO.Pipes;
 using System.Text.Json;
 using OutlookMcp.Core.Commands.Attachment;
+using OutlookMcp.Core.Commands.AddressBook;
 using OutlookMcp.Core.Commands.Application;
 using OutlookMcp.Core.Commands.Calendar;
 using OutlookMcp.Core.Commands.Contact;
 using OutlookMcp.Core.Commands.Folder;
 using OutlookMcp.Core.Commands.Mail;
+using OutlookMcp.Core.Commands.MessageProperties;
 using OutlookMcp.Core.Commands.Rules;
 using OutlookMcp.Core.Commands.Tasks;
 using OutlookMcp.Service.Rpc;
@@ -31,6 +33,8 @@ public sealed class OutlookMcpService : IDisposable
 
     // Outlook command instances
     private readonly ApplicationCommands _applicationCommands = new();
+    private readonly AddressBookCommands _addressBookCommands = new();
+    private readonly PropertyCommands _propertyCommands = new();
     private readonly FolderCommands _folderCommands = new();
     private readonly AttachmentCommands _attachmentCommands = new();
     private readonly MailCommands _mailCommands = new();
@@ -182,11 +186,13 @@ public sealed class OutlookMcpService : IDisposable
                 "service" => HandleServiceCommand(action),
                 "diag" => HandleDiagCommand(action, request),
                 "application" => DispatchApplicationSessionless(action, request),
+                "addressbook" => DispatchAddressBookSessionless(action, request),
                 "attachment" => DispatchAttachmentSessionless(action, request),
                 "calendar" => DispatchCalendarSessionless(action, request),
                 "contact" => DispatchContactSessionless(action, request),
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
+                "property" => DispatchPropertySessionless(action, request),
                 "rule" => DispatchRuleSessionless(action, request),
                 "task" => DispatchTaskSessionless(action, request),
                 _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown command category: {category}" }
@@ -350,6 +356,14 @@ public sealed class OutlookMcpService : IDisposable
         return WrapResult(ServiceRegistry.Application.DispatchToCore(_applicationCommands, action, request.Args));
     }
 
+    private ServiceResponse DispatchAddressBookSessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Addressbook.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Addressbook.DispatchToCore(_addressBookCommands, action, request.Args));
+    }
+
     private ServiceResponse DispatchAttachmentSessionless(string actionString, ServiceRequest request)
     {
         if (!ServiceRegistry.Attachment.TryParseAction(actionString, out var action))
@@ -398,6 +412,12 @@ public sealed class OutlookMcpService : IDisposable
         return WrapResult(ServiceRegistry.Mail.DispatchToCore(_mailCommands, action, request.Args));
     }
 
+    private ServiceResponse DispatchPropertySessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Property.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Property.DispatchToCore(_propertyCommands, action, request.Args));
     private ServiceResponse DispatchRuleSessionless(string actionString, ServiceRequest request)
     {
         if (!ServiceRegistry.Rule.TryParseAction(actionString, out var action))

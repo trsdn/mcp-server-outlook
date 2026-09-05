@@ -8,18 +8,19 @@ identical actions, parameters, defaults, and validation.
 
 ## Tool families
 
-8 tools, 62 operations:
+10 tools, 69 operations:
 
 | Tool | Operations |
 |---|---|
 | `mail` | 23 |
+| `folder` | 10 |
 | `calendar` | 7 |
 | `contact` | 5 |
 | `task` | 5 |
-| `rule` | 5 |
-| `folder` | 10 |
 | `attachment` | 4 |
 | `application` | 3 |
+| `addressbook` | 3 |
+| `property` | 4 |
 
 See [FEATURES.md](../../FEATURES.md) for the full action list.
 

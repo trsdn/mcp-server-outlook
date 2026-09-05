@@ -6,20 +6,23 @@ An [Agent Skill](https://agentskills.io) for automating classic Outlook for Wind
 ## What this skill does
 
 When loaded by an AI agent (Claude, Codex, Cursor, Gemini CLI, etc.), this skill teaches the agent
-how to drive Outlook from scripts, with the same 8 tools and 62 operations the MCP server exposes:
+how to drive Outlook from scripts, with the same 10 tools and 69 operations the MCP server exposes:
 
-- **Mail** (23) - read the active item, read, list, search, read a whole conversation, respond to a
-  meeting invitation, create drafts, reply, reply-all, forward, send, move, export, delete, set read
-  state, flags, categories, subject, body and recipients, and list categories, rules and reminders
-- **Calendar** (7) - list and read appointments, create, update and delete them, check free/busy, export
-- **Contacts** (5) - list and read contacts, create, update and delete them
-- **Tasks** (5) - list and read tasks, create, update and delete them
-- **Rules** (5) - list the inbox rules that decide what happens to mail before you read it, and
-  create, change, switch off or remove them
-- **Folders** (10) - list default folders and stores, open a shared mailbox, list children, resolve
-  a path, list items, and create, rename, move or delete folders
+- **Mail** (23) - read the active item, read, list, search, read a whole conversation, answer a
+  meeting invitation, create drafts, reply, reply-all, forward, send, move, delete, export, and set
+  read state, flags, categories, subject, body and recipients
+- **Folders** (10) - list default folders and stores, open a shared mailbox, create, rename, move
+  and delete folders, list children, resolve a path, list items
+- **Calendar** (7) - list and read appointments, create, update and delete them, check free/busy,
+  export
+- **Contacts** (5) - list, read, create, update, delete
+- **Tasks** (5) - list, read, create, update, delete
 - **Attachments** (4) - list, save, add, remove
-- **Application** (3) - report Outlook availability and the active explorer or inspector
+- **Application** (3) - report Outlook availability and what the user is looking at
+- **Address book** (3) - resolve addressees to real SMTP addresses before sending, list address
+  books, browse one
+- **Message properties** (4) - read internet message headers, MAPI properties and custom user
+  properties
 
 The CLI surface is deliberately token-efficient and fully discoverable through `--help`, which makes
 it a better fit than the MCP server for coding agents.

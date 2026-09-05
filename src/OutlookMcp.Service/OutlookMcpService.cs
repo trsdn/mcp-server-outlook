@@ -7,6 +7,7 @@ using OutlookMcp.Core.Commands.Calendar;
 using OutlookMcp.Core.Commands.Contact;
 using OutlookMcp.Core.Commands.Folder;
 using OutlookMcp.Core.Commands.Mail;
+using OutlookMcp.Core.Commands.MessageProperties;
 using OutlookMcp.Core.Commands.Tasks;
 using OutlookMcp.Service.Rpc;
 using StreamJsonRpc;
@@ -32,6 +33,7 @@ public sealed class OutlookMcpService : IDisposable
     // Outlook command instances
     private readonly ApplicationCommands _applicationCommands = new();
     private readonly AddressBookCommands _addressBookCommands = new();
+    private readonly PropertyCommands _propertyCommands = new();
     private readonly FolderCommands _folderCommands = new();
     private readonly AttachmentCommands _attachmentCommands = new();
     private readonly MailCommands _mailCommands = new();
@@ -188,6 +190,7 @@ public sealed class OutlookMcpService : IDisposable
                 "contact" => DispatchContactSessionless(action, request),
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
+                "property" => DispatchPropertySessionless(action, request),
                 "task" => DispatchTaskSessionless(action, request),
                 _ => new ServiceResponse { Success = false, ErrorMessage = $"Unknown command category: {category}" }
             });
@@ -404,6 +407,14 @@ public sealed class OutlookMcpService : IDisposable
             return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
 
         return WrapResult(ServiceRegistry.Mail.DispatchToCore(_mailCommands, action, request.Args));
+    }
+
+    private ServiceResponse DispatchPropertySessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Property.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Property.DispatchToCore(_propertyCommands, action, request.Args));
     }
 
     public void Dispose()

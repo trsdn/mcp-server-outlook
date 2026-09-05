@@ -8,10 +8,11 @@
 - **Calendar** - list and read appointments, create, update and delete them
 - **Folders** - list default folders, walk child folders, resolve a folder path, list items
 - **Attachments** - list, save to disk, add and remove
+- **Message properties** - read internet message headers, MAPI properties and custom user properties
 - **Address book** - check who an addressee really is, and get their real email address, before sending to them
 - **Application** - check Outlook availability before doing anything else
 
-**8 tools with 60 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
+**9 tools with 64 operations.** See [FEATURES.md](https://github.com/trsdn/mcp-server-outlook/blob/master/FEATURES.md) for the full action list.
 
 ## Requirements
 

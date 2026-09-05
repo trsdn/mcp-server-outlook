@@ -207,6 +207,21 @@ model replaced the batch model.
   Outbox; delivery is not confirmed by the call returning.
 - **`EntryId` is not stable across stores.** An item moved between stores gets a new one, so
   always carry `StoreId` alongside it.
+- **A `Table`'s `EntryID` column is the *short-term* entry id**, not the long-term id
+  `MailItem.EntryID` returns. Both resolve through `GetItemFromID`, which is exactly what makes
+  this dangerous: ids read from a rowset work perfectly and never compare equal to ids read from
+  an item. Use `PR_LONGTERM_ENTRYID_FROM_TABLE` (`0x66700102`) when projecting from a table, and
+  fall back to opening items on a store that does not publish it. Found in #27.
+- **DASL date tags return UTC; the Outlook property names return local wall clock.** Mixing them
+  shifts every timestamp by the machine's offset. If a paging cursor is a keyset walk over that
+  value, the shift corrupts the walk rather than merely displaying oddly. Found in #27.
+- **`ReceivedTime` is not unique.** Bulk delivery, newsletters, an invite and its response all
+  tie. Anything ordering or paging on it must handle a tied band explicitly — see #135 for what
+  happens when the tie-breaking set is not carried across pages.
+- **A locally created draft still has a `ReceivedTime`** (its creation instant). This matters for
+  test design more than for production: a paging or ordering test built on freshly created drafts
+  gets *distinct* timestamps, never enters the tied band, and passes having exercised none of the
+  logic it was written for.
 
 ---
 
@@ -233,6 +248,12 @@ Before committing a change under `src/OutlookMcp.Core/`:
 - [ ] Shared `Application` never final-released
 - [ ] No `catch` returning a failure result inside `action`
 - [ ] `Success = true` only where `ErrorMessage` is empty
-- [ ] `check-com-leaks.ps1` reports 0 leaks
 - [ ] `check-success-flag.ps1` passes
 - [ ] Any `dynamic` has a comment explaining why
+
+`check-com-leaks.ps1` is deliberately **not** on this list. It examines only files declaring an
+explicitly-typed `Outlook.X y =` local — 10 of 72 source files at the time of writing, so a file
+acquiring COM through `var` is invisible to it — and for the files it does read the verdict is two
+file-wide booleans with no pairing of acquisition to release, so a file that releases one object of
+ten still prints `Proper COM cleanup`. Run it, but do not treat a green result as evidence that your
+release discipline is correct. See #136.

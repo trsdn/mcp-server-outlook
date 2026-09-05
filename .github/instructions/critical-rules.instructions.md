@@ -110,7 +110,7 @@ Discovered while debugging a mail item whose sender address could not be resolve
 |------|--------|------|
 | 0. Test before commit | ALWAYS run tests before committing | 3-5 min |
 | 4. Session code | See testing-strategy for test commands | 3-5 min |
-| 6. COM leaks | Pre-commit hook auto-checks | 1 min |
+| 6. COM leaks | Pre-commit hook runs it - but see Rule 5, a clean run is not evidence | 1 min |
 | 7. PRs | Always use PRs, never direct commit | Always |
 | 24. Post-change sync | Verify ALL sync points (CLI, SKILLs, READMEs, counts) | 5-10 min |
 | 26. No confidential info | No customer/project names in commits/PRs/issues | Always |
@@ -302,11 +302,26 @@ Core Command Method
 
 ## Rule 5: COM Object Leak Detection
 
-**Before commit: `& "scripts\check-com-leaks.ps1"` must report 0 leaks.**
+**Every COM object must be released in a `finally` block** using
+`OutlookInteropRunner.ReleaseComObject(ref obj)` — except anything Outlook hands back from a cache
+or that you reached *upward* via `.Parent` / `.Session`, which needs `ReleaseSharedComObject`
+(see #19, #116, #122, #134 and the release-ownership section in
+[outlook-com-interop](outlook-com-interop.instructions.md)).
 
-All COM objects must be released in `finally` blocks using `OutlookInteropRunner.ReleaseComObject(ref obj)`. Never final-release the shared `Outlook.Application`: use `ReleaseSharedComObject` for it (see #19).
+Run `& "scripts\check-com-leaks.ps1"` before commit. **Do not treat a clean run as evidence that
+you got this right.** It is a smoke test for the file that forgot cleanup entirely — useful for
+that, and no evidence at all about the file that mostly remembered. Specifically (#136):
 
-Exception: session management files in `src/OutlookMcp.ComInterop/Session/`.
+- it only examines files declaring an explicitly-typed `Outlook.X y =` local, roughly 11 of 74
+  source files, so anything acquiring COM through `var` is invisible to it
+- its verdict is two file-wide booleans with no pairing of acquisition to release, so one release
+  call anywhere in a nine-hundred-line file marks every acquisition in it clean — it cannot catch a
+  conditional-path leak by construction
+- its release regex matches `ReleaseComObject` and `ReleaseSharedComObject` **identically**, so it
+  is silent on the exact distinction above
+
+All four use-after-free bugs in this codebase were in files it reported clean. The rule is the
+`finally` discipline; the script is a convenience, not the check.
 
 ---
 
@@ -459,7 +474,7 @@ Delete commented-out code (use git history). Exception: Documentation files only
 | 2. NotImplementedException | Never use, full implementation only | Always |
 | 3. Session code | See testing-strategy for test commands | 3-5 min |
 | 4. Instructions | Update after significant work | 5-10 min |
-| 5. COM leaks | Run `scripts\check-com-leaks.ps1` | 1 min |
+| 5. COM leaks | `finally` discipline per Rule 5; the script is a smoke test, not the check | 1 min |
 | 6. PRs | Always use PRs, never direct commit | Always |
 | 7. COM API | Use Outlook COM first, validate docs | Always |
 | 8. TODO markers | Must resolve before commit | 1 min |

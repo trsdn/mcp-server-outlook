@@ -85,7 +85,7 @@ messages that share a received time; a hand-rolled date window silently drops th
 
 ## Not everything in a folder is a message
 
-Every entry in a listing carries `itemType`:
+Every entry in a **mail** listing carries `itemType`:
 
 - `mail` - an ordinary message
 - `meetingRequest` - an invitation. Replying to it is **not** accepting it; a reply is just mail back
@@ -93,6 +93,15 @@ Every entry in a listing carries `itemType`:
 - `meetingCancellation` - the meeting is off
 - `meetingResponse` - somebody's answer to an invitation you sent
 - `other` - something this surface does not model
+
+`folder.list-items` uses a broader vocabulary, because a folder can hold anything: `mail`,
+`appointment`, `meeting`, `contact`, `distribution-list`, `task`, `note`, `journal`, `post` and
+`document`. An item from a third-party add-in that none of those describe is reported by its
+Outlook message class, for example `IPM.Note.Custom.Something`. It is never reported as
+`__ComObject`; if you see that, it is a bug.
+
+Every listed item carries an `entryId`, whatever its type, so anything you can see you can also
+address - a `task` row can go straight to the `task` tool, a `contact` row to the `contact` tool.
 
 `skippedItemCount` counts items that could not be summarised at all. If it is non-zero, the listing
 is not the whole folder - do not describe it as such.
@@ -145,6 +154,11 @@ do not describe the schedule from the pattern without saying so.
 
 The response reports `scope` as `series` or `occurrence`, so you can confirm what was actually
 touched rather than inferring it from an entry id that is the same either way.
+
+Cancelling a single occurrence requires `confirm: true` and is refused without it. Deleting the
+whole series does not: the series goes to Deleted Items and the user can restore it, whereas a
+cancelled occurrence is only an exception written into the recurrence pattern and there is nothing
+left to put back.
 
 `occurrenceDate` may be a bare date (`2026-03-12`); the time of day is then taken from the series, so
 you do not need to know that the stand-up starts at 09:17. Give a full date and time only when you
@@ -453,8 +467,10 @@ than the item and is not worth relaying.
 3. calendar.create-appointment / update-appointment / delete-appointment
 ```
 
-Confirm before `delete-appointment`, and before an `update-appointment` that changes the time of a
-meeting with other attendees.
+Ask the user before `delete-appointment`, and before an `update-appointment` that changes the time
+of a meeting with other attendees. Deleting a whole appointment is recoverable from Deleted Items
+and takes no `confirm` flag; cancelling one occurrence of a series is not, and requires
+`confirm: true`.
 
 ## Walk a folder tree
 
@@ -542,8 +558,9 @@ the rest.
 ```
 
 **`delete` takes the folder's contents with it.** Everything filed in it, and every subfolder, goes
-too. There is no undo beyond whatever Deleted Items happens to retain. Say what will be deleted
-before deleting it.
+too. There is no undo beyond whatever Deleted Items happens to retain. It therefore requires
+`confirm: true` and is refused without it. List the folder's children and say what will be deleted
+before you pass it.
 
 **Default folders and store roots are refused** for `rename`, `move` and `delete` - Inbox, Sent
 Items, Drafts, Deleted Items, Calendar, Contacts, Tasks, Notes, Junk, Outbox, in *every* store, not
@@ -555,6 +572,10 @@ A folder merely *named* "Inbox" that is not the default Inbox is an ordinary fol
 deleted normally - the check compares identity, not names.
 
 Not covered: emptying a folder in place. Delete the items with `mail.delete`, or delete the folder.
+
+Note that `mail.delete` on an item **already in Deleted Items** is a permanent delete and requires
+`confirm: true`. That is the one case where deleting mail is not recoverable, so emptying Deleted
+Items item by item is a confirmed operation whether or not the first delete was.
 
 ## What this surface does not do
 

@@ -25,17 +25,39 @@ Do not ask the user questions you can answer with a read-only call.
 
 Ask the user only when the answer is a genuine preference or an irreversible decision.
 
-## Rule 3: Sending and deleting require explicit confirmation
+## Rule 3: Confirmation gates, and why they are not everywhere
 
-`mail.send` and `mail.delete` are the two actions a user cannot undo from the agent.
+Some actions refuse unless you pass `confirm=true`. The line is drawn at **recoverability**, not at
+how alarming the verb sounds. Gating a recoverable action would train you to pass `confirm=true`
+reflexively, and that is exactly how the gate on the irreversible one stops being read.
+
+**Gated - refused without `confirm=true`:**
+
+| Action | Why there is no way back |
+|---|---|
+| `mail.send` | A sent message cannot be recalled, and the effect is outside the mailbox entirely. |
+| `folder.delete` | Every message and every subfolder goes with the folder, and in a store with no Deleted Items it is gone outright. |
+| `attachment.remove` | An attachment has no Deleted Items of its own. This destroys the only copy the message holds. |
+| `calendar.delete-appointment` **with `occurrenceDate`** | Cancelling one occurrence writes a deletion exception into the recurrence pattern. Nothing lands in Deleted Items. |
+| `mail.delete`, `contact.delete`, `task.delete`, `calendar.delete-appointment` — **when the item is already in Deleted Items** | There is no second recycle bin. This delete destroys the item. |
+
+**Not gated, deliberately:**
+
+| Action | Why it is recoverable |
+|---|---|
+| `mail.delete`, `contact.delete`, `task.delete` | Outlook moves the item to the store's Deleted Items folder. The user restores it from the Outlook UI. |
+| `calendar.delete-appointment` (whole appointment or series) | Same: it goes to Deleted Items. |
+| `mail.move` | Undone by moving the item back. The entry ID changes, so the response reports the new one. |
+
+That these are ungated is a decision, not an oversight. It does **not** relieve you of Rule 7: say
+what you deleted and where it went, so the user can undo it if you were wrong.
+
+Two further points on `mail.send`:
 
 - **Never send a draft the user has not seen.** Create it with `mail.create-draft`, describe the
   recipients, subject, and body back to them, and send only after they confirm.
 - `mail.send` is idempotent per operation ID. If a call times out or the result is ambiguous, retry
   with the **same** operation ID rather than sending again. Generating a new ID risks a duplicate.
-- Confirm before `mail.delete` and before `attachment.remove`.
-
-`mail.move` is recoverable, so it does not need the same ceremony, but say which folder you moved to.
 
 ## Rule 4: Entry IDs are the addressing scheme
 

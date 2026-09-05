@@ -435,6 +435,7 @@ to make it run, the test is prohibited. Write an integration test instead, or wr
 | `McpServerVersionCheckerTests` | Version comparison logic |
 | `OutlookInteropRunnerTests` | HRESULT classification for Object Model Guard denials (#30) |
 | `MailCommandsSendTests` | Send confirmation gate and idempotency cache; returns before COM (#29) |
+| `DestructiveConfirmationGateTests` | Confirmation gates that are guard clauses over the caller's arguments and return before COM (#9) |
 | `OutlookDispatcherTests` | STA queue/serialization mechanics with plain delegates (#20) |
 | `StreamJsonRpcTests` | Real in-process duplex streams; no COM in the RPC layer |
 | `OutlookMcpServiceErrorTests` | Error-message formatting regression guard |

@@ -28,12 +28,16 @@ public interface IAttachmentCommands
         bool useActiveMail = true,
         bool overwrite = false);
 
+    /// <summary>
+    /// Adds a file to a draft as an attachment.
+    /// </summary>
+    /// <param name="useActiveMail">Off by default. A mutating action must not fall back to whatever the user has selected in Outlook: the caller chooses the verb and the selection would silently choose the object. Pass an explicit <c>mailEntryId</c>, or set this to true when "the draft I am looking at" is genuinely what you mean.</param>
     [ServiceAction("add", Destructive = true)]
     AttachmentMutationResult Add(
         string filePath,
         string? mailEntryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = false);
 
     /// <summary>
     /// Removes an attachment from a draft.
@@ -44,12 +48,13 @@ public interface IAttachmentCommands
     /// is the one the user meant.
     /// </para>
     /// </summary>
+    /// <param name="useActiveMail">Off by default, for the same reason as <c>add</c>.</param>
     /// <param name="confirm">Must be true. Without it the call is refused and nothing is touched.</param>
     [ServiceAction("remove", Destructive = true)]
     AttachmentMutationResult Remove(
         int attachmentIndex,
         string? mailEntryId = null,
         string? storeId = null,
-        bool useActiveMail = true,
+        bool useActiveMail = false,
         bool confirm = false);
 }

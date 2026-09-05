@@ -249,6 +249,14 @@ Two things will otherwise catch you out:
 Use `reply-all` only when the user asked for it. Defaulting to reply-all is a common and expensive
 mistake.
 
+**Start with `mail.read-active` and carry the entry ID.** Every action that changes, deletes or
+sends a message has `useActiveMail` **off** by default, so step 3 and step 5 above will refuse
+without an `entryId` rather than acting on whatever is selected in Outlook when the call lands. That
+is the whole point: you pick the verb, and the user's selection must not silently pick the object.
+Reading actions - `read`, `read-active`, `get-conversation`, `export` - and the draft-producing ones
+- `reply`, `reply-all`, `forward` - still default to the active item, because they either change
+nothing or produce a draft that nothing sends on its own.
+
 You cannot reply to or forward an unsent draft - there is nobody to reply to. To change a draft, use
 `mail.set-subject`, `mail.set-body` or `mail.set-recipients` on the draft itself.
 

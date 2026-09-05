@@ -36,6 +36,7 @@ CLI from the same `[ServiceCategory]` interfaces:
 | `calendar` | 7 |
 | `contact` | 5 |
 | `task` | 5 |
+| `rule` | 5 |
 | `attachment` | 4 |
 | `application` | 3 |
 

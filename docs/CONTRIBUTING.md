@@ -8,6 +8,9 @@ OutlookMcp aims to provide a small, reliable Outlook automation surface for AI a
 
 - Mail operations.
 - Calendar appointment operations.
+- Contact operations.
+- Task operations.
+- Inbox rule operations.
 - Folder discovery and item listing.
 - Attachment inspection and mutation.
 - Outlook application status checks.
@@ -77,6 +80,9 @@ Current categories:
 
 - `mail`
 - `calendar`
+- `contact`
+- `task`
+- `rule`
 - `folder`
 - `attachment`
 - `application`

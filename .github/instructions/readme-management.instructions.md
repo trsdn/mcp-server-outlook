@@ -21,15 +21,15 @@ You need to make sure that the `Features.md` file is up-to-date with the latest 
 
 ### Tool & Action Counts Must Match
 
-**⚠️ IMPORTANT: CLI has FEWER tools/operations than MCP Server!**
+**⚠️ IMPORTANT: CLI and MCP tool/action counts must be re-derived from Core before editing docs.**
 
 **ALWAYS count tools/operations BEFORE updating any README. Never use hardcoded numbers from memory.**
 
 Before updating counts, verify by counting:
 
-- **MCP Server**: Count the generated Outlook tool types registered in `Program.cs`
-- **CLI**: Count command group folders (includes Session commands)
-- **Operations**: Count separately for each - they differ!
+- **Tool families**: Count `[ServiceCategory]` interfaces under `src\OutlookMcp.Core\Commands\`
+- **Operations/actions**: Count `[ServiceAction]` methods under those interfaces
+- **Parity**: The MCP server and CLI must expose the same generated surface
 
 Sync counts across:
   - GitHub Project About: https://github.com/trsdn/mcp-server-outlook (use the GitHub CLI to update)

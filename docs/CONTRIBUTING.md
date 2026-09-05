@@ -8,11 +8,14 @@ OutlookMcp aims to provide a small, reliable Outlook automation surface for AI a
 
 - Mail operations.
 - Calendar appointment operations.
+- Contact operations.
+- Task operations.
+- Inbox rule operations.
 - Folder discovery and item listing.
 - Attachment inspection and mutation.
 - Outlook application status checks.
 
-The active product surface is 5 tools with 30 operations. Deleted presentation command domains are not part of the current product.
+The active product surface is 8 tools with 66 operations. Deleted presentation command domains are not part of the current product.
 
 ## Getting Started
 
@@ -77,6 +80,9 @@ Current categories:
 
 - `mail`
 - `calendar`
+- `contact`
+- `task`
+- `rule`
 - `folder`
 - `attachment`
 - `application`

@@ -69,7 +69,7 @@ dotnet test --filter "Feature=ServiceDaemon"
 
 Valid `Feature` trait values today: `ActionEnums`, `ActionValidation`, `Batch`, `CliExitCode`,
 `Configuration`, `DestructiveAnnotations`, `Diag`, `FileLocking`, `McpProtocol`,
-`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`,
+`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`, `RuleCrud`,
 `ServiceDaemon`, `ServiceRegistry`, `SkillGeneration`,
 `StreamJsonRpc`, `VersionCheck`. Confirm against the source before relying on any of them.
 
@@ -167,7 +167,7 @@ GitHub Copilot auto-loads instructions based on the files you are editing:
 | # | Check | Script | What it validates |
 |---|-------|--------|-------------------|
 | 1 | Branch | (inline) | Never commit to `master` directly (Rule 6) |
-| 2 | COM leaks | `check-com-leaks.ps1` | COM objects are released in `finally` blocks |
+| 2 | COM leaks | `check-com-leaks.ps1` | Smoke test only: flags a file that acquires COM and releases nothing anywhere. **Not** evidence of correct release discipline - see Rule 5 and #136 |
 | 3 | Shared Application | `check-shared-application-release.ps1` | Nothing final-releases the shared `Outlook.Application` (#19, #116) |
 | 4 | Coverage | `CoreCommandsCoverageTests` | Core methods exposed via MCP Server with a matching enum action |
 | 5 | Success flag | `check-success-flag.ps1` | Rule 1: never `Success=true` with `ErrorMessage` |

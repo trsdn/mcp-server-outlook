@@ -295,7 +295,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **`FEATURES.md` and `README.md` now match the generated surface.** Both had drifted badly: they
+- **`attachment save` no longer overloads `attachmentIndex=0` to mean "all"** (#15). Outlook's
+  attachment collection is 1-based, but `save` used to treat the default `attachmentIndex=0` as a
+  hidden shortcut for "save every attachment". An automated caller that assumed 0-based indexing and
+  passed `0` silently got a bulk export instead of the first attachment — a different operation than
+  it asked for, with no error.
+
+  This is a **deliberate breaking change** to the shipped `attachment save` action, taken over a
+  deprecation path because the old behaviour was silent and unsafe: the whole point is that `0` can
+  no longer quietly do something surprising. Selection is now explicit — provide exactly one of:
+
+  - `attachmentIndex` — 1-based, matching the `index` field from `attachment list`;
+  - `attachmentName` — the `fileName` from `attachment list`, and the preferred key for an agent
+    because names are stable while indices shift as attachments are added or removed;
+  - `allAttachments=true` — the explicit replacement for the former magic `0`.
+
+  `attachmentIndex=0` (or omitting all three selectors) is now a clear error that names the valid
+  options; it is never a no-op and never silently "attachment 1". Out-of-range and negative indices
+  are rejected up front with a message naming the valid range, rather than surfacing a raw COM
+  exception. The 1-based convention is documented in the tool description an LLM reads. `list`,
+  `add` and `remove` were checked for the same pattern and did not have it: `add`/`list` take no
+  index, and `remove` already rejected `attachmentIndex < 1`.
+
+
   claimed 5 tools and 30 operations while the registry had 6 tools and 48. `mail` was listed with 16
   of its 22 actions and `folder` with 4 of its 10, so `get-conversation`, `respond-to-meeting`,
   `set-flag`, `list-categories`, `list-rules`, `list-reminders`, `get-free-busy`, `list-stores`,

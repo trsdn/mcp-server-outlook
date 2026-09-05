@@ -477,8 +477,17 @@ Constraints worth knowing before promising the user something:
 ```
 1. mail.search(...) or mail.list(...)              → find the message
 2. attachment.list(entryId: ...)                   → see what is on it
-3. attachment.save(entryId: ..., index: ..., path: ...)
+3. attachment.save(entryId: ..., attachmentName: ..., path: ...)
 ```
+
+Prefer `attachmentName` — it is the `fileName` you just read from `attachment.list`, and a name
+stays put while an `attachmentIndex` shifts the moment an attachment is added or removed. Save by
+index only when a name is ambiguous or you deliberately want a position.
+
+`attachmentIndex` is **1-based**, matching the `index` field in `attachment.list`: the first
+attachment is `1`, not `0`. `attachmentIndex: 0` is a hard error, not a shortcut for "all" — to save
+every attachment set `allAttachments: true` instead. Pass exactly one of `attachmentName`,
+`attachmentIndex` or `allAttachments`.
 
 Ask where to save if the user did not say. That is a genuine preference, so Rule 2 does not apply.
 

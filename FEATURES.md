@@ -220,10 +220,15 @@ not even partially.
 
 | Action | Description |
 |---|---|
-| `list` | List the attachments on an item |
-| `save` | Save an attachment to disk |
+| `list` | List the attachments on an item; each carries a 1-based `index` and a `fileName` |
+| `save` | Save an attachment to disk by `attachmentName` or 1-based `attachmentIndex`, or set `allAttachments` to save every one |
 | `add` | Add an attachment to a draft |
 | `remove` | Remove an attachment from a draft. Requires confirmation: an attachment has no Deleted Items to be recovered from |
+
+Attachment indices are **1-based**, matching Outlook's collection: the first attachment is `1`. On
+`save`, `attachmentIndex=0` means "no index supplied" and is rejected — it is not a shortcut for
+"all"; use `allAttachments=true` for that. Prefer `attachmentName` over `attachmentIndex`: names are
+what `list` returned and stay stable as attachments are added or removed.
 
 ---
 

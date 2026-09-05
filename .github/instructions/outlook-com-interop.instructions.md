@@ -90,9 +90,74 @@ Marshal.FinalReleaseComObject(application);
 OutlookInteropRunner.ReleaseSharedComObject(ref application);
 ```
 
-`ReleaseComObject` (final-release) is correct for objects **your call created or navigated
-to**: folders, items, `Items` collections, `Recipients`, `Attachments`, `Selection`,
-`Explorer`, `Inspector`. Those are per-call and nobody else holds them. See #19.
+See #19. That is the best-known instance of a more general rule, which is the next section.
+
+---
+
+## Rule: which release call - `ReleaseComObject` or `ReleaseSharedComObject`
+
+`OutlookInteropRunner.ReleaseComObject` is `Marshal.FinalReleaseComObject`, and the CLR's RCW
+cache is keyed by the object's `IUnknown` pointer. So "final-release" does not mean "release my
+reference" - it means **release everyone's reference to that COM identity, in this process**.
+
+That gives one rule of thumb:
+
+> Final-release is only ever safe for an object **your call navigated to and nobody else holds**.
+> Anything Outlook hands back **from a cache** - the same pointer on every access - must use
+> `ReleaseSharedComObject`, which is a plain decrement.
+
+| Use `ReleaseComObject` (final) | Use `ReleaseSharedComObject` (decrement) |
+|---|---|
+| `MAPIFolder` you resolved by path or default-folder role | The shared `Application` (#19) |
+| `Items`, `Recipients`, `Attachments`, `Selection` | A parent handed back by a navigation property, e.g. `item.Parent`, `folder.Store` (#122) |
+| `MailItem`/`AppointmentItem` fetched by entry id | Everything *under* a `Rules` collection: `Rule`, `RuleConditions`/`RuleActions`, clause slots (#15) |
+| The `Rules` collection itself, from `Store.GetRules()`, and the `Store` it came from | Any object you fetch twice in one operation, whatever its type |
+
+`Application.ActiveExplorer()` and `ActiveInspector()` are final-released by existing code and
+that has not caused trouble, but they are singletons and sit close to the line. Do not fetch
+either twice in one operation.
+
+**The failure mode is not an exception.** A disconnected RCW throws
+`InvalidComObjectException`, which is at least catchable. The worse case is that the refcount
+reached zero, Outlook freed the object, and the next access goes through a dangling pointer -
+an access violation that takes the **whole process** down, with no stack and nothing in the
+event log. It is also non-deterministic, so it looks like flakiness.
+
+Five distinct instances have been found in this migration, which is why this is a rule rather
+than a footnote:
+
+1. **The shared `Application`** (#19).
+2. **The test suite** (#116) - thirteen sites across ten integration test files final-released the
+   shared `Application`, so a later test got a wrapper separated from its RCW and the host died
+   with `STATUS_STACK_BUFFER_OVERRUN`. It never surfaced as a test failure, only as apparent
+   infrastructure flakiness. The convention was documented but not followed.
+3. **A parent `MAPIFolder`** obtained from `item.Parent` inside a listing loop (#122). Outlook
+   returns the same folder object for every item in it, so final-releasing the parent
+   disconnected the very folder the loop was still enumerating, and the test host crashed. Fixed
+   by removing the per-item round-trip entirely - the store id is read once from the folder being
+   listed - which is the second defence below rather than a different release call.
+4. **The shared `NameSpace`** (#9). The Deleted Items walk added for the confirmation gates stops
+   at a store root, whose `Parent` is the `NameSpace` rather than a folder - and the CLR caches one
+   `NameSpace` RCW per process, the same instance `Execute` holds as `session`. Verified live:
+   `inbox.Parent.Parent` is reference-identical to `GetNamespace("MAPI")`.
+5. **The whole `Rules` object graph** (#15). `Rules.Item(3)` twice is one object; so are
+   `Conditions.Subject` and the `Conditions[n]` that reports the subject slot, and
+   `rule.Conditions` fetched before and after a write. Reading a rule's clauses and then
+   writing them in the same operation crashed the test host until every `Rule`,
+   `RuleConditions`/`RuleActions` and clause slot moved to `ReleaseSharedComObject`.
+
+This applies to **test code exactly as much as to production code** - #116 was entirely in the
+test suite, and a crashed test host looks like flakiness rather than like a bug.
+
+**When in doubt, decrement.** An over-retained RCW is collected when the process exits; an
+over-released one corrupts an object the user's Outlook is still using.
+
+**A second, cheaper defence, and often the better one:** fetch a child object **once per
+operation** and pass it down, rather than re-reading the property. That removes the hazard
+instead of handling it, and usually removes a COM round-trip too. #122 took this route - reading
+the store id once from the folder being listed rather than per item - and `RuleCommands.Update`
+reads a rule's clauses before applying the patch specifically so it never asks Outlook for
+`rule.Conditions` a second time. Reach for it before reaching for a different release call.
 
 ---
 
@@ -246,14 +311,27 @@ Before committing a change under `src/OutlookMcp.Core/`:
 - [ ] Goes through `OutlookInteropRunner.Execute` with a unique `operationName`
 - [ ] Every COM object released in a `finally`, children before parents
 - [ ] Shared `Application` never final-released
+- [ ] Every `ReleaseComObject` is on an object this call navigated to and nobody else holds -
+      anything Outlook hands back from a cache uses `ReleaseSharedComObject`
+- [ ] No COM property fetched twice in one operation where the result could be passed down instead
 - [ ] No `catch` returning a failure result inside `action`
 - [ ] `Success = true` only where `ErrorMessage` is empty
 - [ ] `check-success-flag.ps1` passes
 - [ ] Any `dynamic` has a comment explaining why
 
-`check-com-leaks.ps1` is deliberately **not** on this list. It examines only files declaring an
-explicitly-typed `Outlook.X y =` local — 10 of 72 source files at the time of writing, so a file
-acquiring COM through `var` is invisible to it — and for the files it does read the verdict is two
-file-wide booleans with no pairing of acquisition to release, so a file that releases one object of
-ten still prints `Proper COM cleanup`. Run it, but do not treat a green result as evidence that your
-release discipline is correct. See #136.
+`check-com-leaks.ps1` is deliberately **not** on that list, even though the pre-commit hook runs
+it. A green result from it is not evidence:
+
+- It only classifies a file that declares an explicitly typed COM local (`Outlook.MailItem mail =`).
+  Anything acquiring COM through `var` is invisible to it. On the current tree it reads 11 of 74
+  source files.
+- For the files it does read, the verdict is two file-wide booleans with no pairing between
+  acquisition and release, so a file that acquires ten objects and releases one still prints
+  `Proper COM cleanup`. One release call anywhere in a long file marks every acquisition in it
+  clean, which means a leak on an early-return or exception path cannot be caught by construction.
+- Its release pattern matches `ReleaseComObject` and `ReleaseSharedComObject` identically, so it
+  cannot distinguish the correct call from the one that crashes the process - it is structurally
+  incapable of enforcing the two release rules above.
+
+It catches exactly one thing: a file that touches COM and contains no release call anywhere. Treat
+it as that narrow smoke test and rely on the checklist for the rest. See #136.

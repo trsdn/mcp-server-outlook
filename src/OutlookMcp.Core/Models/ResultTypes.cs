@@ -241,6 +241,14 @@ public class MailReminderInfo
 public class MailRuleListResult : ResultBase
 {
     public List<MailRuleInfo> Rules { get; set; } = [];
+
+    /// <summary>
+    /// The mailbox these rules belong to. Rules are per-store: a listing that did not say which
+    /// store it read would be indistinguishable between "this mailbox has no rules" and "you asked
+    /// the wrong mailbox".
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreDisplayName { get; set; }
 }
 
 public class MailRuleInfo
@@ -306,6 +314,77 @@ public class MailRuleInfo
     /// </para>
     /// </summary>
     public List<string> FromAddresses { get; set; } = [];
+
+    /// <summary>
+    /// The terms a subject rule matches, any one of which is enough. Only populated when
+    /// <c>includeDetail</c> is set.
+    ///
+    /// <para>
+    /// Without these, a caller can see that a rule matches on subject and still not know what it
+    /// matches on, which answers none of the questions a rule listing exists to answer. They are
+    /// also the only way to tell an <c>update</c> that replaced a term from one that appended to it.
+    /// </para>
+    /// </summary>
+    public List<string> SubjectTerms { get; set; } = [];
+
+    /// <summary>
+    /// The address fragments a sender-address rule matches. Distinct from
+    /// <see cref="FromAddresses"/>: that is Outlook's <c>From</c> condition, which holds resolved
+    /// address-book entries, while this is the <c>SenderAddress</c> condition, which is a plain
+    /// substring match on the sender's SMTP address and needs no address-book lookup.
+    /// </summary>
+    public List<string> SenderAddresses { get; set; } = [];
+
+    /// <summary>
+    /// The categories an assign-to-category rule stamps on matching mail.
+    /// </summary>
+    public List<string> AssignCategories { get; set; } = [];
+}
+
+/// <summary>
+/// The outcome of creating, changing or removing a rule.
+///
+/// <para>
+/// <see cref="RuleCount"/> is here because rule writes are not per-rule: Outlook's
+/// <c>Rules.Save</c> commits the store's entire rule collection at once, so a caller that changed
+/// one rule has in fact rewritten all of them and should be able to see that the count is what they
+/// expected.
+/// </para>
+/// </summary>
+public class MailRuleMutationResult : ResultBase
+{
+    /// <summary>
+    /// What happened, as a word rather than a flag: <c>created</c>, <c>updated</c>, <c>enabled</c>,
+    /// <c>disabled</c> or <c>deleted</c>. Null on failure.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Action { get; set; }
+
+    /// <summary>The rule's name after the operation. Rules are addressed by name in this surface.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Whether the rule is switched on after the operation. Null for a delete, and never guessed:
+    /// it is read back from the rule Outlook actually saved.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Enabled { get; set; }
+
+    /// <summary>
+    /// Where the rule sits in the evaluation order. Outlook inserts a new rule <em>first</em>, not
+    /// last, so a freshly created rule reports 1 and runs before every rule the mailbox already
+    /// had - and if it also stops processing, none of them run at all.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ExecutionOrder { get; set; }
+
+    /// <summary>The mailbox whose rules were rewritten. Rules are per-store, never global.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StoreDisplayName { get; set; }
+
+    /// <summary>How many rules the store holds after the save.</summary>
+    public int RuleCount { get; set; }
 }
 
 /// <summary>

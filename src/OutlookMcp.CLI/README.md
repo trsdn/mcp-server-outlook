@@ -8,7 +8,7 @@ parameters, defaults, and validation.
 
 ## Surface
 
-10 tools, 62 actions:
+11 tools, 67 actions:
 
 | Tool | Actions |
 |---|---|

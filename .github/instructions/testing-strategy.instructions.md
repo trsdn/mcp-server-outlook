@@ -35,7 +35,7 @@ dotnet test tests\OutlookMcp.CLI.Tests\OutlookMcp.CLI.Tests.csproj --filter "Fea
 
 Valid `Feature` values today: `ActionEnums`, `ActionValidation`, `Batch`, `CliExitCode`,
 `Configuration`, `DestructiveAnnotations`, `Diag`, `FileLocking`, `McpProtocol`,
-`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`,
+`OutlookDispatcher`, `OutlookMcpService`, `OutlookSeed`, `ParameterTransforms`, `RuleCrud`,
 `ServiceDaemon`, `ServiceRegistry`, `SkillGeneration`,
 `StreamJsonRpc`, `VersionCheck`.
 

@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**10 tools with 62 operations for Outlook automation**
+**11 tools with 67 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -34,7 +34,7 @@ bug (see Rule 24, post-change sync).
 | `set-flag` | Set or clear a follow-up flag on a message |
 | `set-categories` | Set the categories on a message |
 | `list-categories` | List the categories defined in the master category list |
-| `list-rules` | List the Outlook rules defined on the store |
+| `list-rules` | List the Outlook rules defined on the store. An alias for `rule list`, kept here because "why is nothing arriving from this sender?" is a mail question whose answer is a rule |
 | `list-reminders` | List pending reminders |
 | `set-subject` | Set the subject of a draft |
 | `set-body` | Set the body of a draft |
@@ -151,6 +151,68 @@ confused with "this listing dropped rows".
 Set `status` to `complete` to mark a task done; Outlook then sets `percentComplete` to 100 and
 stamps `dateCompleted` itself. `status` is one of `not-started`, `in-progress`, `complete`,
 `waiting` or `deferred`.
+
+---
+
+## Rule Operations (5 operations)
+
+| Action | Description |
+|---|---|
+| `list` | List a store's rules. `includeDetail` adds each rule's conditions, actions, subject terms, sender addresses and move-to destination |
+| `create` | Create a rule. Requires at least one condition and at least one action |
+| `update` | Change an existing rule's clauses. A clause that is not passed is left alone; an empty string clears one |
+| `set-enabled` | Switch a rule on or off |
+| `delete` | Remove a rule |
+
+**Rule writes are the highest-risk operation in this surface, above `mail delete`.** A message
+deleted in error sits in Deleted Items; a rule created in error silently moves or destroys mail that
+has not arrived yet, keeps doing it, and is typically noticed days later.
+
+**Rules are per-store.** Every action defaults to the profile's default delivery store and takes a
+`storeId` from `folder list-stores` to reach another mailbox. An unknown `storeId` is refused rather
+than falling back to the default store, because rewriting the wrong mailbox's rules under
+`success: true` is the worst outcome available here.
+
+**Rules are addressed by name, and Outlook permits duplicates.** `create` therefore refuses a name
+already in use, and `update`, `set-enabled` and `delete` refuse a name matching no rule or more than
+one, rather than picking the first.
+
+**A rule with no conditions matches every message that arrives, and one with no actions does
+nothing.** Outlook accepts both; this refuses both, on create and on update.
+
+**Outlook inserts a new rule at the top of the evaluation order, not the bottom** - verified against
+a live mailbox, where a newly created rule came back with `executionOrder` 1. A new rule therefore
+runs before every rule the mailbox already had.
+
+**There is no mark-as-read action, and this is not an omission.** Outlook's rule object model has no
+such action - `RuleActions` exposes `AssignToCategory`, `CC`, `ClearCategories`, `CopyToFolder`,
+`Delete`, `DeletePermanently`, `DesktopAlert`, `Forward`, `ForwardAsAttachment`, `MarkAsTask`,
+`MoveToFolder`, `NewItemAlert`, `NotifyDelivery`, `NotifyRead`, `PlaySound`, `Redirect` and `Stop`,
+and nothing else. Only the Rules and Alerts wizard inside Outlook can create one.
+
+**`deleteMessage` does not read back as a delete.** Outlook has no delete action either: it rewrites
+"delete it" into a move to Deleted Items plus stop-processing, so `list` afterwards reports
+`moveToFolder` with a Deleted Items destination. For the same reason `deleteMessage` and
+`moveToFolder` cannot both be set - a rule has one move destination.
+
+**Deliberately out of scope**, and each for a reason rather than for want of time:
+
+| Not exposed | Why |
+|---|---|
+| `Forward`, `Redirect`, `CC` | They send mail on the user's behalf, unattended, indefinitely. Configuring that in a single tool call is not a capability an agent should have. They also need `Recipients.ResolveAll`, which is Object Model Guard-protected |
+| `DeletePermanently` | Unrecoverable, with no Deleted Items to retrieve from |
+| The `From` condition | Holds address-book entries and needs `Recipients.ResolveAll`, which raises the Object Model Guard prompt that cannot be answered programmatically. `SenderAddress` matches the SMTP address directly and is what "mail from this person" almost always means. Existing `From` rules are still read back correctly by `list` |
+| Multi-term conditions | A rule matching several subject terms is read back correctly but written with one term, to keep the argument shape unambiguous |
+| Exceptions, `Account`, `Importance`, `MessageHeader`, `FormName`, RSS conditions, `PlaySound`, `DesktopAlert`, `MarkAsTask` | Enumerable through `list`, but writing them is a long tail with no agent use case that justifies the surface |
+| Send rules (`olRuleSend`) | A different mental model - they fire on messages the user sends. Enumerated by `list` as `ruleType: send`, not creatable |
+| Reordering (`ExecutionOrder`) | Changing evaluation order rewrites the meaning of every rule that stops processing, with no way to preview the effect |
+
+**Writes are collection-wide, and only the save persists anything.** Outlook commits a store's whole
+rule collection at once, so every write here rewrites all of the mailbox's rules; the response
+reports `ruleCount` so a caller can check the total is what they expected. That save is the step
+that fails - on the Exchange rules quota, on the user having the Rules and Alerts wizard open, or on
+some unrelated rule in the mailbox being malformed - and when it fails nothing was written at all,
+not even partially.
 
 ---
 

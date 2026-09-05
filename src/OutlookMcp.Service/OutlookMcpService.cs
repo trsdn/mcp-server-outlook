@@ -9,6 +9,7 @@ using OutlookMcp.Core.Commands.Mail;
 using OutlookMcp.Core.Commands.Oof;
 using OutlookMcp.Core.Commands.Signature;
 using OutlookMcp.Core.Commands.Sync;
+using OutlookMcp.Core.Commands.Rules;
 using OutlookMcp.Core.Commands.Tasks;
 using OutlookMcp.Service.Rpc;
 using StreamJsonRpc;
@@ -38,6 +39,7 @@ public sealed class OutlookMcpService : IDisposable
     private readonly MailCommands _mailCommands = new();
     private readonly CalendarCommands _calendarCommands = new();
     private readonly ContactCommands _contactCommands = new();
+    private readonly RuleCommands _ruleCommands = new();
     private readonly TaskCommands _taskCommands = new();
     private readonly SyncCommands _syncCommands = new();
     private readonly SignatureCommands _signatureCommands = new();
@@ -191,6 +193,7 @@ public sealed class OutlookMcpService : IDisposable
                 "contact" => DispatchContactSessionless(action, request),
                 "folder" => DispatchFolderSessionless(action, request),
                 "mail" => DispatchMailSessionless(action, request),
+                "rule" => DispatchRuleSessionless(action, request),
                 "task" => DispatchTaskSessionless(action, request),
                 "sync" => DispatchSyncSessionless(action, request),
                 "signature" => DispatchSignatureSessionless(action, request),
@@ -426,6 +429,14 @@ public sealed class OutlookMcpService : IDisposable
             return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
 
         return WrapResult(ServiceRegistry.Oof.DispatchToCore(_oofCommands, action, request.Args));
+    }
+
+    private ServiceResponse DispatchRuleSessionless(string actionString, ServiceRequest request)
+    {
+        if (!ServiceRegistry.Rule.TryParseAction(actionString, out var action))
+            return new ServiceResponse { Success = false, ErrorMessage = $"Unknown action: {actionString}" };
+
+        return WrapResult(ServiceRegistry.Rule.DispatchToCore(_ruleCommands, action, request.Args));
     }
 
     public void Dispose()

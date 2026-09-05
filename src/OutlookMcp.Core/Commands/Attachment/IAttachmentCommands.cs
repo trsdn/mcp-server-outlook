@@ -7,9 +7,11 @@ namespace OutlookMcp.Core.Commands.Attachment;
 [McpTool("attachment", Title = "Outlook Attachment Operations", Destructive = true, Category = "mail",
     Description = "Inspect and save attachments from a selected Outlook mail item without opening a persistent session. "
     + "Use list to inspect attachments on the active mail item or a specific mail entry id; each attachment reports a 1-based index and a fileName. "
-    + "Use save to export attachments to disk: pick one by attachmentName (preferred — names are what list returned and are stable), or by attachmentIndex (1-based, matching list), or set allAttachments to export every one. "
-    + "Attachment indices are 1-based, matching Outlook's collection: the first attachment is 1, not 0. attachmentIndex=0 means 'no index supplied' and is rejected — it is NOT a shortcut for 'all'; use allAttachments=true for that. "
-    + "Use add and remove to mutate attachments on Outlook draft items by entry id or active draft context — these actions modify the mail item and cannot be undone.")]
+    + "Use save to export attachments to disk: pick one by attachmentName (preferred - names are what list returned and are stable), or by attachmentIndex (1-based, matching list), or set allAttachments to export every one. "
+    + "Attachment indices are 1-based, matching Outlook's collection: the first attachment is 1, not 0. attachmentIndex=0 means 'no index supplied' and is rejected - it is NOT a shortcut for 'all'; use allAttachments=true for that. "
+    + "Use add and remove to mutate attachments on Outlook draft items by entry id or active draft context - these actions modify the mail item and cannot be undone. "
+    + "remove requires confirm=true and is refused without it: an attachment has no Deleted Items to be recovered from, "
+    + "so removing it destroys the only copy the message holds.")]
 public interface IAttachmentCommands
 {
     [ServiceAction("list", Destructive = false)]
@@ -44,10 +46,21 @@ public interface IAttachmentCommands
         string? storeId = null,
         bool useActiveMail = true);
 
+    /// <summary>
+    /// Removes an attachment from a draft.
+    ///
+    /// <para>
+    /// <b>Requires <paramref name="confirm"/>.</b> An attachment has no Deleted Items of its own, so
+    /// this destroys the only copy the message holds. Call <c>list</c> first and confirm the index
+    /// is the one the user meant.
+    /// </para>
+    /// </summary>
+    /// <param name="confirm">Must be true. Without it the call is refused and nothing is touched.</param>
     [ServiceAction("remove", Destructive = true)]
     AttachmentMutationResult Remove(
         int attachmentIndex,
         string? mailEntryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = true,
+        bool confirm = false);
 }

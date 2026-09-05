@@ -74,6 +74,9 @@ namespace OutlookMcp.Core.Commands.Mail;
     + "Use send to send a saved draft by entry id or the current active draft explicitly. Send requires confirm=true "
     + "(it is refused otherwise) and accepts an optional operationId so a retried call with the same operationId after "
     + "a timeout or crash is answered from a cached result instead of risking a duplicate send. "
+    + "delete and move are deliberately not gated the same way, because both are recoverable: delete moves the message "
+    + "to Deleted Items, where the user can restore it, and move can be undone by moving it back. The one exception is "
+    + "deleting a message that is already in Deleted Items - that is permanent, so it requires confirm=true. "
     + "Set display=true on draft-producing actions to show the draft inspector after saving. "
     + "Use respond-to-meeting to accept, decline or tentatively accept a meeting invitation - a listing's itemType "
     + "says which items are invitations. Responding updates your own calendar; the organiser is told only when "
@@ -212,11 +215,23 @@ public interface IMailCommands
         bool useActiveMail = true,
         bool overwrite = false);
 
+    /// <summary>
+    /// Deletes a mail item.
+    ///
+    /// <para>
+    /// Ordinarily this is a soft delete - Outlook moves the message to the store's Deleted Items
+    /// folder and the user can restore it from the Outlook UI - so it is deliberately <b>not</b>
+    /// gated. The exception is a message that is already in Deleted Items: there is no second
+    /// recycle bin, so that delete destroys it and is refused without <paramref name="confirm"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="confirm">Required only when the message is already in Deleted Items. An ordinary delete ignores it.</param>
     [ServiceAction("delete")]
     MailMutationResult Delete(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveMail = true);
+        bool useActiveMail = true,
+        bool confirm = false);
 
     [ServiceAction("set-read-state")]
     MailMutationResult SetReadState(

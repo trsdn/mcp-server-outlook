@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**7 tools with 57 operations for Outlook automation**
+**8 tools with 62 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -28,21 +28,37 @@ bug (see Rule 24, post-change sync).
 | `reply-all` | Reply to all recipients of a message |
 | `forward` | Forward a message |
 | `send` | Send a draft. Requires explicit confirmation and is idempotent per operation ID |
-| `move` | Move a message to another folder |
-| `delete` | Delete a message |
+| `move` | Move a message to another folder. Recoverable, so ungated |
+| `delete` | Delete a message. Soft delete to Deleted Items, so ungated - unless the message is already there, which is permanent and requires confirmation |
 | `set-read-state` | Mark a message read or unread |
 | `set-flag` | Set or clear a follow-up flag on a message |
 | `set-categories` | Set the categories on a message |
 | `list-categories` | List the categories defined in the master category list |
-| `list-rules` | List the Outlook rules defined on the store |
+| `list-rules` | List the Outlook rules defined on the store. An alias for `rule list`, kept here because "why is nothing arriving from this sender?" is a mail question whose answer is a rule |
 | `list-reminders` | List pending reminders |
 | `set-subject` | Set the subject of a draft |
 | `set-body` | Set the body of a draft |
 | `set-recipients` | Set the recipients of a draft |
 | `export` | Save a message to disk as `.msg`, `.txt`, `.html`, `.mht` or `.rtf` |
 
-**`send` is the one irreversible operation in this surface.** It refuses to run without explicit
-confirmation, and repeated calls carrying the same operation ID will not send twice. See #29.
+**`send` is the one operation here whose effect leaves the mailbox entirely.** It refuses to run
+without explicit confirmation, and repeated calls carrying the same operation ID will not send
+twice. See #29.
+
+**Confirmation gates are drawn at recoverability, not at how alarming the verb is** (#9). An action
+takes `confirm` only where Outlook offers no way back:
+
+| Gated - refused without `confirm=true` | Not gated - recoverable |
+|---|---|
+| `mail.send` | `mail.delete` (moves to Deleted Items) |
+| `folder.delete` (takes every message and subfolder; not a recycle-bin operation in every store) | `mail.move` (move it back) |
+| `attachment.remove` (an attachment has no Deleted Items of its own) | `contact.delete`, `task.delete` (move to Deleted Items) |
+| `calendar.delete-appointment` **with `occurrenceDate`** (writes a deletion exception into the recurrence pattern) | `calendar.delete-appointment` for the whole appointment or series |
+| any item delete whose target **is already in Deleted Items** - there is no second recycle bin | |
+
+Gating a recoverable action would train a caller to pass `confirm=true` reflexively, which is how
+the gate on the irreversible one stops being read. The ungated actions are a decision, not an
+oversight, and they still require the caller to report what was deleted and where it went.
 
 **`export` writes Unicode `.msg`, never the ANSI variant.** Outlook's `olMSG` silently replaces any
 character outside the machine's code page with `?` and reports success, so `msg` always means
@@ -61,7 +77,7 @@ producing, say, a binary `.msg` under a `.txt` name.
 | `read` | Read an appointment by entry ID |
 | `create-appointment` | Create an appointment, or a meeting with attendees and room resources |
 | `update-appointment` | Update an existing appointment |
-| `delete-appointment` | Delete an appointment |
+| `delete-appointment` | Delete an appointment or cancel one occurrence. Deleting the appointment or series is ungated (it goes to Deleted Items); cancelling a single `occurrenceDate` requires confirmation |
 | `get-free-busy` | Read the free/busy availability of a recipient |
 | `export` | Save an appointment to disk, including as iCalendar (`.ics`) |
 
@@ -87,7 +103,7 @@ whether or not the mailbox exists, so a successful create is not proof that the 
 | `create` | Create a folder |
 | `rename` | Rename a folder |
 | `move` | Move a folder under a different parent |
-| `delete` | Delete a folder |
+| `delete` | Delete a folder together with everything filed in it. Requires confirmation |
 | `list-children` | List the child folders of a folder |
 | `resolve-path` | Resolve a folder path to a folder |
 | `list-items` | List the items in a folder |
@@ -102,7 +118,7 @@ whether or not the mailbox exists, so a successful create is not proof that the 
 | `read` | Read a contact by entry ID, or the contact currently open or selected in Outlook |
 | `create` | Create a contact |
 | `update` | Update named fields on an existing contact. Fields that are not passed are left alone |
-| `delete` | Delete a contact |
+| `delete` | Delete a contact. Ungated soft delete, unless the contact is already in Deleted Items |
 
 A Contacts folder holds distribution lists as well as people. `contacts`, `distributionLists` and
 `skippedItemCount` together always account for every item scanned, so nothing can be silently
@@ -119,7 +135,7 @@ reliable handle.
 | `read` | Read a task by entry ID, or the task currently open or selected in Outlook |
 | `create` | Create a task |
 | `update` | Update named fields on an existing task. Fields that are not passed are left alone |
-| `delete` | Delete a task |
+| `delete` | Delete a task. Ungated soft delete, unless the task is already in Deleted Items |
 
 Two things about real task folders shape this surface, and both were measured rather than assumed.
 
@@ -138,6 +154,68 @@ stamps `dateCompleted` itself. `status` is one of `not-started`, `in-progress`, 
 
 ---
 
+## Rule Operations (5 operations)
+
+| Action | Description |
+|---|---|
+| `list` | List a store's rules. `includeDetail` adds each rule's conditions, actions, subject terms, sender addresses and move-to destination |
+| `create` | Create a rule. Requires at least one condition and at least one action |
+| `update` | Change an existing rule's clauses. A clause that is not passed is left alone; an empty string clears one |
+| `set-enabled` | Switch a rule on or off |
+| `delete` | Remove a rule |
+
+**Rule writes are the highest-risk operation in this surface, above `mail delete`.** A message
+deleted in error sits in Deleted Items; a rule created in error silently moves or destroys mail that
+has not arrived yet, keeps doing it, and is typically noticed days later.
+
+**Rules are per-store.** Every action defaults to the profile's default delivery store and takes a
+`storeId` from `folder list-stores` to reach another mailbox. An unknown `storeId` is refused rather
+than falling back to the default store, because rewriting the wrong mailbox's rules under
+`success: true` is the worst outcome available here.
+
+**Rules are addressed by name, and Outlook permits duplicates.** `create` therefore refuses a name
+already in use, and `update`, `set-enabled` and `delete` refuse a name matching no rule or more than
+one, rather than picking the first.
+
+**A rule with no conditions matches every message that arrives, and one with no actions does
+nothing.** Outlook accepts both; this refuses both, on create and on update.
+
+**Outlook inserts a new rule at the top of the evaluation order, not the bottom** - verified against
+a live mailbox, where a newly created rule came back with `executionOrder` 1. A new rule therefore
+runs before every rule the mailbox already had.
+
+**There is no mark-as-read action, and this is not an omission.** Outlook's rule object model has no
+such action - `RuleActions` exposes `AssignToCategory`, `CC`, `ClearCategories`, `CopyToFolder`,
+`Delete`, `DeletePermanently`, `DesktopAlert`, `Forward`, `ForwardAsAttachment`, `MarkAsTask`,
+`MoveToFolder`, `NewItemAlert`, `NotifyDelivery`, `NotifyRead`, `PlaySound`, `Redirect` and `Stop`,
+and nothing else. Only the Rules and Alerts wizard inside Outlook can create one.
+
+**`deleteMessage` does not read back as a delete.** Outlook has no delete action either: it rewrites
+"delete it" into a move to Deleted Items plus stop-processing, so `list` afterwards reports
+`moveToFolder` with a Deleted Items destination. For the same reason `deleteMessage` and
+`moveToFolder` cannot both be set - a rule has one move destination.
+
+**Deliberately out of scope**, and each for a reason rather than for want of time:
+
+| Not exposed | Why |
+|---|---|
+| `Forward`, `Redirect`, `CC` | They send mail on the user's behalf, unattended, indefinitely. Configuring that in a single tool call is not a capability an agent should have. They also need `Recipients.ResolveAll`, which is Object Model Guard-protected |
+| `DeletePermanently` | Unrecoverable, with no Deleted Items to retrieve from |
+| The `From` condition | Holds address-book entries and needs `Recipients.ResolveAll`, which raises the Object Model Guard prompt that cannot be answered programmatically. `SenderAddress` matches the SMTP address directly and is what "mail from this person" almost always means. Existing `From` rules are still read back correctly by `list` |
+| Multi-term conditions | A rule matching several subject terms is read back correctly but written with one term, to keep the argument shape unambiguous |
+| Exceptions, `Account`, `Importance`, `MessageHeader`, `FormName`, RSS conditions, `PlaySound`, `DesktopAlert`, `MarkAsTask` | Enumerable through `list`, but writing them is a long tail with no agent use case that justifies the surface |
+| Send rules (`olRuleSend`) | A different mental model - they fire on messages the user sends. Enumerated by `list` as `ruleType: send`, not creatable |
+| Reordering (`ExecutionOrder`) | Changing evaluation order rewrites the meaning of every rule that stops processing, with no way to preview the effect |
+
+**Writes are collection-wide, and only the save persists anything.** Outlook commits a store's whole
+rule collection at once, so every write here rewrites all of the mailbox's rules; the response
+reports `ruleCount` so a caller can check the total is what they expected. That save is the step
+that fails - on the Exchange rules quota, on the user having the Rules and Alerts wizard open, or on
+some unrelated rule in the mailbox being malformed - and when it fails nothing was written at all,
+not even partially.
+
+---
+
 ## Attachment Operations (4 operations)
 
 | Action | Description |
@@ -145,7 +223,7 @@ stamps `dateCompleted` itself. `status` is one of `not-started`, `in-progress`, 
 | `list` | List the attachments on an item; each carries a 1-based `index` and a `fileName` |
 | `save` | Save an attachment to disk by `attachmentName` or 1-based `attachmentIndex`, or set `allAttachments` to save every one |
 | `add` | Add an attachment to a draft |
-| `remove` | Remove an attachment from a draft |
+| `remove` | Remove an attachment from a draft. Requires confirmation: an attachment has no Deleted Items to be recovered from |
 
 Attachment indices are **1-based**, matching Outlook's collection: the first attachment is `1`. On
 `save`, `attachmentIndex=0` means "no index supplied" and is rejected — it is not a shortcut for

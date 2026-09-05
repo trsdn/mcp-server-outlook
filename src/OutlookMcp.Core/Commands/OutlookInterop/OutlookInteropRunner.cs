@@ -596,6 +596,150 @@ internal static class OutlookInteropRunner
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="folder"/> is the Deleted Items folder of its own store, or anything
+    /// filed underneath it.
+    ///
+    /// <para>
+    /// This is what separates a recoverable delete from a permanent one. <c>Item.Delete</c> normally
+    /// moves the item to Deleted Items, which the user can undo from the Outlook UI - so gating it
+    /// behind a confirmation would be ceremony without safety. Delete an item that is <i>already</i>
+    /// in Deleted Items and there is no second recycle bin: it is destroyed. The two cases look
+    /// identical from the caller's arguments, so the distinction can only be made here. See #9.
+    /// </para>
+    ///
+    /// <para>
+    /// The comparison is against the item's own store rather than the default one, because #38 made
+    /// archives and shared mailboxes reachable and each has a Deleted Items of its own. It walks the
+    /// parent chain rather than checking the immediate parent, since a subfolder of Deleted Items is
+    /// just as final.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>This fails open</b>: a store that reports no Deleted Items role, or a folder whose parent
+    /// chain cannot be read, answers <see langword="false"/>. That is deliberate. A caller can only
+    /// have used up the soft-delete promise if the store makes one, and failing closed would refuse
+    /// ordinary deletes on any store this cannot inspect - turning a safety feature into an outage.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    internal static bool IsInDeletedItems(Outlook.MAPIFolder? folder)
+    {
+        if (folder == null)
+        {
+            return false;
+        }
+
+        string? deletedItemsEntryId = TryGetDeletedItemsEntryId(folder);
+        if (string.IsNullOrEmpty(deletedItemsEntryId))
+        {
+            return false;
+        }
+
+        if (EntryIdMatches(folder, deletedItemsEntryId))
+        {
+            return true;
+        }
+
+        // From here up, every folder is one this method obtained and must release itself. The depth
+        // is bounded rather than looping until the root: a corrupt or self-referential parent chain
+        // must not wedge the dispatcher's STA thread for the whole operation timeout.
+        Outlook.MAPIFolder? current = TryGetParentFolder(folder);
+        try
+        {
+            for (int depth = 0; depth < 64 && current != null; depth++)
+            {
+                if (EntryIdMatches(current, deletedItemsEntryId))
+                {
+                    return true;
+                }
+
+                Outlook.MAPIFolder? parent = TryGetParentFolder(current);
+                ReleaseComObject(ref current);
+                current = parent;
+            }
+        }
+        finally
+        {
+            ReleaseComObject(ref current);
+        }
+
+        return false;
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static string? TryGetDeletedItemsEntryId(Outlook.MAPIFolder folder)
+    {
+        Outlook.Store? store = null;
+        Outlook.MAPIFolder? deletedItems = null;
+        try
+        {
+            store = folder.Store;
+            deletedItems = store.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderDeletedItems);
+            return deletedItems.EntryID;
+        }
+        catch (COMException)
+        {
+            // A store need not expose every default role. Absence is meaningful and handled by the
+            // caller's documented fail-open posture, not swallowed.
+            return null;
+        }
+        finally
+        {
+            ReleaseComObject(ref deletedItems);
+            ReleaseComObject(ref store);
+        }
+    }
+
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static bool EntryIdMatches(Outlook.MAPIFolder folder, string deletedItemsEntryId)
+    {
+        try
+        {
+            return string.Equals(folder.EntryID, deletedItemsEntryId, StringComparison.Ordinal);
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The parent of <paramref name="folder"/> when it is another folder, otherwise
+    /// <see langword="null"/> - which is how the walk recognises a store root, since a root's parent
+    /// is the <c>NameSpace</c> rather than a <c>MAPIFolder</c>.
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static Outlook.MAPIFolder? TryGetParentFolder(Outlook.MAPIFolder folder)
+    {
+        object? parent = null;
+        try
+        {
+            parent = folder.Parent;
+            if (parent is Outlook.MAPIFolder parentFolder)
+            {
+                parent = null;
+                return parentFolder;
+            }
+
+            return null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            // ReleaseSharedComObject, not ReleaseComObject. A store root's parent is the NameSpace,
+            // and the CLR caches exactly one RCW for it per process - the same instance Execute is
+            // holding as `session` and will release itself. Final-releasing it here would detach it
+            // for every holder in the process, so the rest of this very operation would get a
+            // disconnected RCW. That is #19's rule applied to the NameSpace rather than the
+            // Application; a plain decrement leaves other holders intact.
+            ReleaseSharedComObject(ref parent);
+        }
+    }
+
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     internal static Outlook.MailItem? ResolveMailItem(
         Outlook.Application application,

@@ -722,8 +722,22 @@ public partial class CalendarCommands : ICalendarCommands
         string? entryId = null,
         string? storeId = null,
         bool useActiveAppointment = false,
-        string? occurrenceDate = null)
+        string? occurrenceDate = null,
+        bool confirm = false)
     {
+        // Refused before Outlook is reached: cancelling one occurrence is irreversible whatever the
+        // series turns out to be, so nothing about the target can change the answer. See #9.
+        if (!confirm && !string.IsNullOrWhiteSpace(occurrenceDate))
+        {
+            return new CalendarMutationResult
+            {
+                Success = false,
+                Updated = false,
+                Deleted = false,
+                ErrorMessage = ConfirmationGate.DeleteOccurrence()
+            };
+        }
+
         return OutlookInteropRunner.Execute(
             "OutlookCalendarDeleteAppointment",
             (application, session) =>
@@ -736,6 +750,7 @@ public partial class CalendarCommands : ICalendarCommands
                 object? selectedItem = null;
                 object? resolvedItem = null;
                 Outlook.AppointmentItem? occurrence = null;
+                Outlook.MAPIFolder? parentFolder = null;
 
                 try
                 {
@@ -760,6 +775,21 @@ public partial class CalendarCommands : ICalendarCommands
                             Updated = false,
                             Deleted = false,
                             ErrorMessage = "Unable to resolve the Outlook appointment to delete."
+                        };
+                    }
+
+                    // Whether this delete is recoverable depends on where the item currently lives,
+                    // which the caller cannot know from an entry id. See ConfirmationGate.
+                    parentFolder = appointment.Parent as Outlook.MAPIFolder;
+                    if (ConfirmationGate.RequiresConfirmationToDelete(confirm, parentFolder))
+                    {
+                        return new CalendarMutationResult
+                        {
+                            Success = false,
+                            Updated = false,
+                            Deleted = false,
+                            ErrorMessage = ConfirmationGate.AlreadyInDeletedItems(
+                                "Outlook appointment", "calendar delete-appointment")
                         };
                     }
 
@@ -798,6 +828,7 @@ public partial class CalendarCommands : ICalendarCommands
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref parentFolder);
                     OutlookInteropRunner.ReleaseComObject(ref occurrence);
                     OutlookInteropRunner.ReleaseComObject(ref resolvedItem);
                     OutlookInteropRunner.ReleaseComObject(ref selectedItem);

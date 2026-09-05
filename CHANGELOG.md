@@ -6,7 +6,115 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`folder.list-items` reported `__ComObject` and dropped the entry id** (#120): any item whose
+  PIA type had no branch in `CreateFolderItemInfo` fell through to a late-bound path that reported
+  `rawItem.GetType().Name`. For a late-bound RCW that name is the literal string `__ComObject`,
+  which identifies nothing. The same fallback never set `EntryId` or `StoreId`, so the item could
+  not be addressed afterwards either.
+
+  - ROOT CAUSE: only `MailItem`, `AppointmentItem` and `ContactItem` had typed branches. Everything
+    else - including `TaskItem` and `NoteItem` - took the fallback. Tasks are a fully shipped CRUD
+    surface, so listing the Tasks folder returned rows that an agent could see and then do nothing
+    with.
+  - FIX: typed branches for `TaskItem` and `NoteItem`, and the fallback now describes an item by its
+    Outlook message class (`IPM.Post` -> `post`, an unknown add-in class by its own name) and reads
+    `EntryID` late-bound. `__ComObject` can no longer be returned.
+  - Also fixed while in that code: the store id was read per item via `item.Parent`, which cost a
+    COM round-trip per row and produced a second reference to the folder the listing loop was
+    already enumerating. It is now read once from that folder. Releasing the per-item parent was
+    briefly attempted instead and crashed the test host - `ReleaseComObject` is
+    `FinalReleaseComObject`, and the RCW cache is keyed on the underlying `IUnknown`, so it
+    separated the very folder being listed. Same failure class as #19, on `MAPIFolder` rather than
+    `Application`.
+
 ### Added
+
+- **Rule CRUD** (#15): a new `rule` tool and `outlookcli rule` command with `list`, `create`,
+  `update`, `set-enabled` and `delete`. Rules were previously read-only through
+  `mail list-rules`, which could explain where mail had gone but could not do anything about it.
+  `mail list-rules` is kept unchanged and now delegates to the new category, so there is one
+  implementation.
+
+  **Why a separate category rather than more `mail` actions.** Every `mail` action addresses a
+  message by `entryId`/`storeId`; every rule action addresses a rule by name within a store's rule
+  collection, and mixing two identity models in one tool invites passing one where the other
+  belongs. The blast radius also differs in kind - a message deleted in error is in Deleted Items,
+  while a rule created in error silently misfiles mail that has not arrived yet - which deserves a
+  tool description leading with that rather than a clause appended to an already very long one.
+
+  Three things were measured against a live mailbox rather than assumed, and all three would
+  otherwise look like bugs:
+
+  - **Outlook inserts a new rule at the top of the evaluation order, not the bottom.** A newly
+    created rule came back with `executionOrder` 1 on a mailbox with 84 existing rules, so it runs
+    before all of them.
+  - **There is no delete rule action.** Outlook rewrites "delete it" into a move to Deleted Items
+    plus stop-processing, so a rule created with `deleteMessage` reads back as `moveToFolder`. This
+    was found by an assertion on `"delete"` failing against a correct implementation. `deleteMessage`
+    and `moveToFolder` are consequently refused together, because a rule has one move destination.
+  - **There is no mark-as-read action at any level.** `RuleActions` does not expose one, so no
+    programmatic caller can create such a rule; only the Rules and Alerts wizard can. Documented as
+    impossible rather than omitted.
+
+  **Guards, because Outlook has none.** A rule with no conditions matches every message that
+  arrives, and one with no actions does nothing; Outlook accepts both, and both are refused here on
+  create and on update. Rules are addressed by name and Outlook permits duplicates, so `create`
+  refuses a name already in use and `update`/`set-enabled`/`delete` refuse a name matching no rule
+  or more than one rather than picking the first. An unknown `storeId` is refused rather than
+  falling back to the default store.
+
+  **Deliberately out of scope**: forward, redirect and CC actions (they send mail on the user's
+  behalf unattended and indefinitely, and need Object Model Guard-protected recipient resolution),
+  `DeletePermanently`, the `From` condition (needs `Recipients.ResolveAll`, which raises the Object
+  Model Guard prompt - `SenderAddress` is used instead and matches the SMTP address directly),
+  multi-term conditions, rule exceptions, send-rule creation, and reordering. All of these are still
+  enumerated correctly by `list`. See FEATURES.md for the full rationale table.
+
+  `list` now also reports `subjectTerms`, `senderAddresses`, `assignCategories` and
+  `storeDisplayName`, so a rule's clauses can be read rather than only counted - which is also what
+  makes an `update` verifiable as replacing a term rather than appending to it.
+
+- **Confirmation gates on the irreversible destructive actions** (#9): `folder delete`,
+  `attachment remove` and `calendar delete-appointment` with an `occurrenceDate` now take a
+  `confirm` parameter and are refused without `confirm=true`. So is any item delete whose target is
+  **already in Deleted Items** - `mail delete`, `contact delete`, `task delete` and
+  `calendar delete-appointment` - because there is no second recycle bin and that delete destroys
+  the item.
+
+  Until now `mail send` was the only gated action, which the #9 audit called out: the remaining
+  destructive actions had no gate and no stated reason for not having one.
+
+  **The line is drawn at recoverability, and the decision is now explicit rather than implicit.**
+  `mail delete`, `contact delete`, `task delete`, `calendar delete-appointment` (whole appointment or
+  series) and `mail move` remain **ungated on purpose**, because Outlook moves the item to Deleted
+  Items or the move can simply be undone. Gating those would train a caller to pass `confirm=true`
+  reflexively, which is exactly how the gate on the irreversible action stops being read. That
+  rationale is documented in `ConfirmationGate`, in each action's tool description, in `FEATURES.md`
+  and in `skills/shared/behavioral-rules.md` instead of being left to inference.
+
+  Two things worth stating plainly:
+
+  - **`attachment remove` was the worst case in the surface and was not on the original list.** An
+    attachment has no Deleted Items of its own, so removing one destroys the only copy the message
+    holds - a harder delete than `mail delete`, which was the action everyone worried about. It is
+    gated.
+
+  - **"Soft delete is recoverable" was only true until it wasn't.** Deleting an item that already
+    sits in Deleted Items is a permanent delete, and nothing in the entry id tells a caller which
+    case they are in. `OutlookInteropRunner.IsInDeletedItems` walks the item's parent chain against
+    its *own* store's Deleted Items folder (archives and shared mailboxes each have one, per #38).
+    It deliberately **fails open**: a store that cannot be inspected answers "not in Deleted Items",
+    because failing closed would refuse ordinary deletes on any store this cannot read and turn a
+    safety feature into an outage.
+
+### Changed
+
+- **BREAKING (Core API only): `folder delete`, `attachment remove` and  `calendar delete-appointment` with `occurrenceDate` now fail without `confirm=true`** (#9). Callers
+  that relied on an unconfirmed call succeeding must add `confirm: true` (CLI: `--confirm`; MCP:
+  `"confirm": true`). No action was removed and no parameter was renamed, so the operation count is
+  unchanged at 7 tools / 57 operations.
 
 - **Room and equipment booking** (#32): `calendar create-appointment` takes `resourceAttendees`
   alongside `requiredAttendees` and `optionalAttendees`. Previously a room could not be booked at
@@ -98,6 +206,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sent - not the Drafts folder.
 
 ### Fixed
+
+- **Use-after-free crash in rule mutation**: everything below a `Rules` collection - the `Rule`
+  objects, their `Conditions`/`Actions` collections and the clause slots inside them - is a cached
+  child that Outlook hands back by the same pointer on every access, so `Rules.Item(3)` twice is one
+  object, as are `Conditions.Subject` and the `Conditions[n]` reporting the subject slot.
+  Final-releasing them dropped the refcount on an object Outlook was still handing out, and the next
+  access took the test host process down rather than throwing. They are now released with
+  `ReleaseSharedComObject`, for the same reason #19 requires it for the shared `Application`.
+
+  That is the fifth instance of this hazard in the migration - the shared `Application` (#19),
+  thirteen sites in the test suite (#116), a parent `MAPIFolder` read from `item.Parent` in a
+  listing loop (#122), the shared `NameSpace` reached from a store root's `Parent` (#9, below), and
+  now the rule object graph - so the general rule is recorded in
+  `.github/instructions/outlook-com-interop.instructions.md`: final-release is only safe for an
+  object your call navigated to and nobody else holds, and anything Outlook hands back from a
+  cache needs the decrementing release.
+
+- **The Deleted Items walk no longer final-releases the shared `NameSpace`** (#9, #19). The walk
+  added above stops at a store root, whose `Parent` is the `NameSpace` rather than a folder - and
+  the CLR caches exactly one `NameSpace` RCW per process, the same instance
+  `OutlookInteropRunner.Execute` holds as `session`. Final-releasing it detached it for every holder
+  in the process, so the remainder of that operation would have been left with a disconnected RCW.
+  It reached the store root on every *ungated* delete, which is the common path.
+
+  Verified live rather than inferred: `inbox.Parent.Parent` is reference-identical to
+  `GetNamespace("MAPI")`, and final-releasing it makes the next `session.GetDefaultFolder` throw
+  `InvalidComObjectException`. Nothing misbehaved yet only because no call site reads `session`
+  after the gate - a latent fault that the first one to do so would have turned into "COM object
+  that has been separated from its underlying RCW cannot be used" on every ordinary delete.
+  `TryGetParentFolder` now uses `ReleaseSharedComObject`: #19's rule applied to the `NameSpace`
+  rather than the `Application`, and the same defect as #116 in a new place.
 
 - **The test suite intermittently crashed the test host** (#116). Thirteen sites across ten
   integration test files released the shared `Outlook.Application` with

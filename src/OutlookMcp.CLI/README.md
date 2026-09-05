@@ -8,18 +8,20 @@ parameters, defaults, and validation.
 
 ## Surface
 
-8 tools, 62 actions:
+11 tools, 67 actions:
 
 | Tool | Actions |
 |---|---|
-| `mail` | `read-active`, `read`, `list`, `search`, `get-conversation`, `respond-to-meeting`, `create-draft`, `reply`, `reply-all`, `forward`, `send`, `move`, `export`, `delete`, `set-read-state`, `set-flag`, `set-categories`, `list-categories`, `list-rules`, `list-reminders`, `set-subject`, `set-body`, `set-recipients` |
+| `mail` | `read-active`, `read`, `list`, `search`, `get-conversation`, `respond-to-meeting`, `create-draft`, `reply`, `reply-all`, `forward`, `send`, `move`, `delete`, `set-read-state`, `set-flag`, `set-categories`, `list-categories`, `list-rules`, `list-reminders`, `set-subject`, `set-body`, `set-recipients`, `export` |
 | `calendar` | `list`, `read`, `create-appointment`, `update-appointment`, `delete-appointment`, `get-free-busy`, `export` |
+| `folder` | `list-default`, `list-children`, `resolve-path`, `list-items`, `list-stores`, `create`, `rename`, `move`, `delete`, `open-shared` |
 | `contact` | `list`, `read`, `create`, `update`, `delete` |
 | `task` | `list`, `read`, `create`, `update`, `delete` |
-| `rule` | `list`, `create`, `update`, `set-enabled`, `delete` |
-| `folder` | `list-default`, `list-stores`, `open-shared`, `create`, `rename`, `move`, `delete`, `list-children`, `resolve-path`, `list-items` |
 | `attachment` | `list`, `save`, `add`, `remove` |
 | `application` | `get-status`, `get-active-explorer`, `get-active-inspector` |
+| `sync` | `list-groups`, `send-receive` |
+| `signature` | `list`, `read` |
+| `oof` | `get-status` |
 
 See [FEATURES.md](../../FEATURES.md) for descriptions.
 

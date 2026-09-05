@@ -714,3 +714,48 @@ to get wrong:
   and do not fall back to matching on the subject.
 - The parent folder of an unsaved outgoing item reads as the **Outbox**, not Drafts. That is where it
   would go, not where it is. Do not report it to the user as already being in a folder.
+
+## Send/Receive is asynchronous — "started" is not "done"
+
+`sync send-receive` starts a synchronisation and returns immediately. Outlook finishes the work on a
+background thread, so a successful result means the sync *began*, not that the mailbox is now current.
+The `note` field says this in every response. Do not read a folder straight after `send-receive` and
+present it as guaranteed up to date; if freshness matters, tell the user the refresh was triggered
+and may take a moment.
+
+`sync list-groups` reports the profile's Send/Receive groups and the Exchange connection mode. In
+pure Online (non-cached) mode there are usually no groups and nothing to synchronise — `send-receive`
+then returns success with `started=false` and a `note` explaining why, rather than pretending a sync
+happened. Report that distinction instead of claiming a refresh you did not get.
+
+`send-receive` is destructive-annotated because it can flush queued outgoing mail from the Outbox.
+Treat it accordingly: do not chain it after composing without the user's go-ahead.
+
+## Signatures are files, and read-only here
+
+`signature list` and `signature read` are the one filesystem-backed corner of this surface. Outlook
+exposes no signature COM object, so these read `%APPDATA%\Microsoft\Signatures` directly. They can
+only *read*: they never create, edit, delete, or apply a signature, and they cannot set which
+signature Outlook uses for new mail. Use them to fetch a signature's text so you can append it to a
+draft you are composing — not to change the user's Outlook signature settings, which is not possible
+through this server.
+
+`list` reports which formats (`html`, `text`, `rtf`) each signature has; `read` returns one format
+and fails, listing the available formats, if you ask for one that signature does not have. If the
+user has no signatures the folder may not exist, and `list` returns an empty list with
+`folderExists=false` rather than an error.
+
+## Out-of-office status is read-only and partial
+
+`oof get-status` reports whether the mailbox's automatic replies are currently **on or off**, and
+nothing more. It reads the `PR_OOF_STATE` store property through `Store.PropertyAccessor`, which is
+the only out-of-office facet classic Outlook exposes through COM. On a non-Exchange (POP/IMAP) store
+it returns `isSupported=false` rather than failing; in Cached Exchange mode the flag can lag the
+server until the next `sync send-receive`.
+
+What it deliberately does **not** do: it cannot turn OOF on or off, and it cannot read or set the
+reply message text, the separate internal and external replies, or a scheduled start/end window.
+Those require EWS or Microsoft Graph, which are separate protocols outside this server's "automate
+the running Outlook via COM" remit. If a user asks to change their out-of-office, or to see the
+reply message or its schedule, tell them plainly that only the on/off status is available here and
+why, rather than attempting a workaround.

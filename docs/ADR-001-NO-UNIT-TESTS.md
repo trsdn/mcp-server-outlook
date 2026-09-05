@@ -331,7 +331,7 @@ public void Mail_CreateDraft_SetSubject_Read_VerifiesMailboxState()
 ### Test Statistics
 
 - **Outlook command domains**: 8 (`Application`, `Attachment`, `Calendar`, `Contact`, `Folder`, `Mail`, `Rule`, `Task`)
-- **Current product surface**: 62 operations across those domains
+- **Current product surface**: 67 operations across those domains
 - **Hosted CI Outlook coverage**: 0 operations
 - **Manual Outlook smoke coverage**: `Feature=OutlookSeed`
 - **False Positives**: Lower when tests use real Outlook state instead of mocked COM
@@ -440,6 +440,8 @@ to make it run, the test is prohibited. Write an integration test instead, or wr
 | `StreamJsonRpcTests` | Real in-process duplex streams; no COM in the RPC layer |
 | `OutlookMcpServiceErrorTests` | Error-message formatting regression guard |
 | `ConfigurationReloadTests` | `reloadOnChange` configuration regression guard |
+| `SignatureFileScannerTests` | Pure filesystem grouping/format resolution over a temp folder; no COM (#15) |
+| `SignatureCommandsTests` | Signature listing/reading over a temp folder via the internal test constructor; no COM (#15) |
 
 Two entries deserve their caveats stated rather than buried:
 

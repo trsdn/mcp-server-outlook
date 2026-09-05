@@ -1,6 +1,6 @@
 # OutlookMcp - Complete Feature Reference
 
-**8 tools with 62 operations for Outlook automation**
+**11 tools with 67 operations for Outlook automation**
 
 This document is derived from the generated `ServiceRegistry` action lists, which are the single
 source of truth for the tool surface. Both entry points expose exactly these operations:
@@ -243,6 +243,80 @@ error. An item the user is still composing has not been saved and therefore has 
 cannot be addressed by any other action until it is; `isSaved` says which case you are in.
 
 ---
+
+## Sync Operations (2 operations)
+
+| Action | Description |
+|---|---|
+| `list-groups` | List the profile's Send/Receive groups and report the Exchange connection mode (cached vs online) |
+| `send-receive` | Start a Send/Receive to refresh the mailbox or flush the Outbox |
+
+`send-receive` is **asynchronous**. Outlook's `SyncObject.Start()` returns immediately and the
+synchronisation finishes later on a background thread, so this action reports that a sync was
+*started*, never that the mailbox is now current. It cannot honestly block for completion: the only
+thread it could wait on is the single process-wide STA dispatcher, and blocking that would wedge
+every other Outlook operation in the process.
+
+In pure Online (non-cached) Exchange mode there are usually no Send/Receive groups and nothing to
+synchronise. That is reported through `count`/`started`/`note` rather than silently doing nothing.
+
+---
+
+## Signature Operations (2 operations)
+
+| Action | Description |
+|---|---|
+| `list` | List the user's signatures and which formats (html/text/rtf) each has |
+| `read` | Read the content of one signature in a chosen format |
+
+Outlook does **not** expose signatures through its COM object model. They are files under
+`%APPDATA%\Microsoft\Signatures` (`Name.htm`, `Name.txt`, `Name.rtf`). These two actions read that
+folder directly, so they are the one filesystem-backed, non-COM corner of this surface. They are
+**strictly read-only**: they never create, edit, delete or apply a signature, and they cannot set
+the signature Outlook uses for new mail (that is a per-account setting the object model does not
+expose). Their intended use is to fetch a signature's text so a caller can append it to a draft it
+is composing. If the folder does not exist, `list` succeeds with an empty list and
+`folderExists=false` rather than failing.
+
+---
+
+## Out-of-office / automatic replies Operations (1 operation)
+
+| Action | Description |
+|--------|-------------|
+| `get-status` | Report whether the mailbox's automatic replies (out-of-office) are currently on or off |
+
+Classic Outlook's COM object model does not expose out-of-office as a first-class property, but the
+on/off **state** is reachable as a store property. `oof get-status` reads `PR_OOF_STATE`
+(`PidTagOutOfOfficeState`, DASL tag `http://schemas.microsoft.com/mapi/proptag/0x661D000B`, a
+boolean) from `Session.DefaultStore.PropertyAccessor`. This was verified against a live
+`olPrimaryExchangeMailbox`, where the tag returns a real `System.Boolean`. On a non-Exchange
+(POP/IMAP) store the feature does not apply and the action returns `isSupported=false` rather than
+failing. In Cached Exchange mode the flag can lag the server until the next Send/Receive.
+
+The action is **strictly read-only and partial**. `PR_OOF_STATE` carries only the on/off bit. It
+does **not** carry, and Outlook COM does not otherwise expose:
+
+- the automatic-reply message bodies;
+- the separate internal-audience and external-audience replies;
+- the scheduled start/end window for a time-bounded OOF.
+
+Those facets require a route that leaves pure Outlook COM:
+
+- **EWS** — `GetUserOofSettings`/`SetUserOofSettings` return the full OOF settings including the
+  message bodies and the scheduled window, but EWS is a separate protocol and credential surface,
+  not COM automation of the running client. `Account.AutoDiscoverXml` yields only the autodiscover
+  XML (the EWS endpoint), not the OOF state.
+- **Microsoft Graph** — `mailboxSettings/automaticRepliesSetting` exposes OOF cleanly including the
+  bodies and schedule, but Graph is an HTTP API with its own auth, again outside this server's
+  "drive the running Outlook via COM" remit.
+
+Turning OOF on or off, and reading or setting the message bodies or the scheduled window, are
+therefore **declined** — they genuinely require EWS or Graph. Adding them later should be a
+conscious decision to take on that dependency, tracked separately.
+
+---
+
 
 ## Requirements
 

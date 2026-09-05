@@ -7,18 +7,20 @@ The VS Code packaging surface for the Outlook MCP server.
 The extension bundles the Outlook MCP server and registers it with VS Code, so Copilot Chat and
 other MCP clients can drive the classic Outlook desktop app.
 
-The server exposes **8 tools with 62 operations**:
+The server exposes **11 tools with 67 operations**:
 
 | Tool | Operations |
 |---|---|
-| `mail` | `read-active`, `read`, `list`, `search`, `get-conversation`, `respond-to-meeting`, `create-draft`, `reply`, `reply-all`, `forward`, `send`, `move`, `export`, `delete`, `set-read-state`, `set-flag`, `set-categories`, `list-categories`, `list-rules`, `list-reminders`, `set-subject`, `set-body`, `set-recipients` |
+| `mail` | `read-active`, `read`, `list`, `search`, `get-conversation`, `respond-to-meeting`, `create-draft`, `reply`, `reply-all`, `forward`, `send`, `move`, `delete`, `set-read-state`, `set-flag`, `set-categories`, `list-categories`, `list-rules`, `list-reminders`, `set-subject`, `set-body`, `set-recipients`, `export` |
 | `calendar` | `list`, `read`, `create-appointment`, `update-appointment`, `delete-appointment`, `get-free-busy`, `export` |
+| `folder` | `list-default`, `list-children`, `resolve-path`, `list-items`, `list-stores`, `create`, `rename`, `move`, `delete`, `open-shared` |
 | `contact` | `list`, `read`, `create`, `update`, `delete` |
 | `task` | `list`, `read`, `create`, `update`, `delete` |
-| `rule` | `list`, `create`, `update`, `set-enabled`, `delete` |
-| `folder` | `list-default`, `list-stores`, `open-shared`, `create`, `rename`, `move`, `delete`, `list-children`, `resolve-path`, `list-items` |
 | `attachment` | `list`, `save`, `add`, `remove` |
 | `application` | `get-status`, `get-active-explorer`, `get-active-inspector` |
+| `sync` | `list-groups`, `send-receive` |
+| `signature` | `list`, `read` |
+| `oof` | `get-status` |
 
 The CLI (`outlookcli`) exposes exactly the same actions with the same parameters. See
 [FEATURES.md](../FEATURES.md).

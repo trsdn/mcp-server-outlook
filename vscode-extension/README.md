@@ -7,7 +7,7 @@ The VS Code packaging surface for the Outlook MCP server.
 The extension bundles the Outlook MCP server and registers it with VS Code, so Copilot Chat and
 other MCP clients can drive the classic Outlook desktop app.
 
-The server exposes **9 tools with 64 operations**:
+The server exposes **10 tools with 69 operations**:
 
 | Tool | Operations |
 |---|---|

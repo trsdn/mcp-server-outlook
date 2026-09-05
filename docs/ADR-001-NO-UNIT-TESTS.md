@@ -330,8 +330,8 @@ public void Mail_CreateDraft_SetSubject_Read_VerifiesMailboxState()
 
 ### Test Statistics
 
-- **Outlook command domains**: 5 (`Application`, `Attachment`, `Calendar`, `Folder`, `Mail`)
-- **Current product surface**: 30 operations across those domains
+- **Outlook command domains**: 8 (`Application`, `Attachment`, `Calendar`, `Contact`, `Folder`, `Mail`, `Rule`, `Task`)
+- **Current product surface**: 69 operations across those domains
 - **Hosted CI Outlook coverage**: 0 operations
 - **Manual Outlook smoke coverage**: `Feature=OutlookSeed`
 - **False Positives**: Lower when tests use real Outlook state instead of mocked COM

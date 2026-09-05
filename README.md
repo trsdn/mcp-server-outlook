@@ -10,7 +10,7 @@ This repository was bootstrapped from a mature Office-automation MCP architectur
 been rebuilt around Outlook. The inherited presentation surface - 33 command domains and the
 document-session layer that backed them - has been removed; what remains is Outlook-only.
 
-- the tool surface is 9 tools and 64 operations, identical through the MCP server and the CLI
+- the tool surface is 10 tools and 69 operations, identical through the MCP server and the CLI
 - there is no session or batch concept: every COM call is marshalled onto a single STA thread
 - the long-term goal is full Outlook COM coverage with MCP, CLI, and VS Code extension parity
 
@@ -19,14 +19,14 @@ document-session layer that backed them - has been removed; what remains is Outl
 What is true right now:
 
 - the copied architecture is mature and reusable: `Core`, `Service`, `ComInterop`, generators, CLI, MCP server, VS Code extension, skills, and tests
-- the semantic surface is Outlook-only: 9 tools, 64 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
+- the semantic surface is Outlook-only: 10 tools, 69 operations, identical through the MCP server and the CLI (see [FEATURES.md](FEATURES.md))
 - there is no session or batch concept: every COM call is marshalled onto a single STA thread owned by `OutlookDispatcher` (see [ADR-002](docs/ADR-002-OUTLOOK-COM-EXECUTION-MODEL.md))
 - **no Outlook behaviour is verified by CI, and none ever will be.** There is no self-hosted Windows runner with classic Outlook and there is no plan to provide one (#31, closed as not planned), so every correctness claim about Outlook rests on a local run against a real profile
 - this repo should be treated as an Outlook rebuild on top of reusable plumbing, not as a large search-and-replace exercise
 
 ## Implemented Outlook surface
 
-The repository exposes **9 tools with 64 operations**, generated into both the MCP server and the
+The repository exposes **10 tools with 69 operations**, generated into both the MCP server and the
 CLI from the same `[ServiceCategory]` interfaces:
 
 | Tool | Operations |
@@ -36,6 +36,7 @@ CLI from the same `[ServiceCategory]` interfaces:
 | `calendar` | 7 |
 | `contact` | 5 |
 | `task` | 5 |
+| `rule` | 5 |
 | `attachment` | 4 |
 | `application` | 3 |
 

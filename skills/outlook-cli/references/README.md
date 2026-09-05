@@ -10,6 +10,6 @@ necessary reference files.
 
 ## Contents
 
-- `cli-commands.md` - generated command reference for all 5 tools
+- `cli-commands.md` - generated command reference for all 8 tools
 - `behavioral-rules.md` - core execution rules (copied from `skills/shared/`)
 - `outlook-workflows.md` - common worked workflows (copied from `skills/shared/`)

@@ -361,7 +361,8 @@ public class ContactCommands : IContactCommands
     public ContactMutationResult Delete(
         string? entryId = null,
         string? storeId = null,
-        bool useActiveContact = false)
+        bool useActiveContact = false,
+        bool confirm = false)
     {
         if (string.IsNullOrWhiteSpace(entryId) && !useActiveContact)
         {
@@ -378,6 +379,7 @@ public class ContactCommands : IContactCommands
             (application, session) =>
             {
                 var resolved = ResolveContactItem(application, session, entryId, storeId, useActiveContact);
+                Outlook.MAPIFolder? parentFolder = null;
 
                 try
                 {
@@ -387,6 +389,19 @@ public class ContactCommands : IContactCommands
                         {
                             Success = false,
                             ErrorMessage = BuildUnresolvedMessage(entryId, "delete")
+                        };
+                    }
+
+                    // Whether this delete is recoverable depends on where the contact currently
+                    // lives, which the caller cannot know from an entry id. See ConfirmationGate.
+                    parentFolder = resolved.Contact.Parent as Outlook.MAPIFolder;
+                    if (ConfirmationGate.RequiresConfirmationToDelete(confirm, parentFolder))
+                    {
+                        return new ContactMutationResult
+                        {
+                            Success = false,
+                            ErrorMessage = ConfirmationGate.AlreadyInDeletedItems(
+                                "Outlook contact", "contact delete")
                         };
                     }
 
@@ -400,6 +415,7 @@ public class ContactCommands : IContactCommands
                 }
                 finally
                 {
+                    OutlookInteropRunner.ReleaseComObject(ref parentFolder);
                     resolved.Release();
                 }
             },

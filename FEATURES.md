@@ -28,8 +28,8 @@ bug (see Rule 24, post-change sync).
 | `reply-all` | Reply to all recipients of a message |
 | `forward` | Forward a message |
 | `send` | Send a draft. Requires explicit confirmation and is idempotent per operation ID |
-| `move` | Move a message to another folder |
-| `delete` | Delete a message |
+| `move` | Move a message to another folder. Recoverable, so ungated |
+| `delete` | Delete a message. Soft delete to Deleted Items, so ungated - unless the message is already there, which is permanent and requires confirmation |
 | `set-read-state` | Mark a message read or unread |
 | `set-flag` | Set or clear a follow-up flag on a message |
 | `set-categories` | Set the categories on a message |
@@ -41,8 +41,24 @@ bug (see Rule 24, post-change sync).
 | `set-recipients` | Set the recipients of a draft |
 | `export` | Save a message to disk as `.msg`, `.txt`, `.html`, `.mht` or `.rtf` |
 
-**`send` is the one irreversible operation in this surface.** It refuses to run without explicit
-confirmation, and repeated calls carrying the same operation ID will not send twice. See #29.
+**`send` is the one operation here whose effect leaves the mailbox entirely.** It refuses to run
+without explicit confirmation, and repeated calls carrying the same operation ID will not send
+twice. See #29.
+
+**Confirmation gates are drawn at recoverability, not at how alarming the verb is** (#9). An action
+takes `confirm` only where Outlook offers no way back:
+
+| Gated - refused without `confirm=true` | Not gated - recoverable |
+|---|---|
+| `mail.send` | `mail.delete` (moves to Deleted Items) |
+| `folder.delete` (takes every message and subfolder; not a recycle-bin operation in every store) | `mail.move` (move it back) |
+| `attachment.remove` (an attachment has no Deleted Items of its own) | `contact.delete`, `task.delete` (move to Deleted Items) |
+| `calendar.delete-appointment` **with `occurrenceDate`** (writes a deletion exception into the recurrence pattern) | `calendar.delete-appointment` for the whole appointment or series |
+| any item delete whose target **is already in Deleted Items** - there is no second recycle bin | |
+
+Gating a recoverable action would train a caller to pass `confirm=true` reflexively, which is how
+the gate on the irreversible one stops being read. The ungated actions are a decision, not an
+oversight, and they still require the caller to report what was deleted and where it went.
 
 **`export` writes Unicode `.msg`, never the ANSI variant.** Outlook's `olMSG` silently replaces any
 character outside the machine's code page with `?` and reports success, so `msg` always means
@@ -61,7 +77,7 @@ producing, say, a binary `.msg` under a `.txt` name.
 | `read` | Read an appointment by entry ID |
 | `create-appointment` | Create an appointment, or a meeting with attendees and room resources |
 | `update-appointment` | Update an existing appointment |
-| `delete-appointment` | Delete an appointment |
+| `delete-appointment` | Delete an appointment or cancel one occurrence. Deleting the appointment or series is ungated (it goes to Deleted Items); cancelling a single `occurrenceDate` requires confirmation |
 | `get-free-busy` | Read the free/busy availability of a recipient |
 | `export` | Save an appointment to disk, including as iCalendar (`.ics`) |
 
@@ -87,7 +103,7 @@ whether or not the mailbox exists, so a successful create is not proof that the 
 | `create` | Create a folder |
 | `rename` | Rename a folder |
 | `move` | Move a folder under a different parent |
-| `delete` | Delete a folder |
+| `delete` | Delete a folder together with everything filed in it. Requires confirmation |
 | `list-children` | List the child folders of a folder |
 | `resolve-path` | Resolve a folder path to a folder |
 | `list-items` | List the items in a folder |
@@ -102,7 +118,7 @@ whether or not the mailbox exists, so a successful create is not proof that the 
 | `read` | Read a contact by entry ID, or the contact currently open or selected in Outlook |
 | `create` | Create a contact |
 | `update` | Update named fields on an existing contact. Fields that are not passed are left alone |
-| `delete` | Delete a contact |
+| `delete` | Delete a contact. Ungated soft delete, unless the contact is already in Deleted Items |
 
 A Contacts folder holds distribution lists as well as people. `contacts`, `distributionLists` and
 `skippedItemCount` together always account for every item scanned, so nothing can be silently
@@ -119,7 +135,7 @@ reliable handle.
 | `read` | Read a task by entry ID, or the task currently open or selected in Outlook |
 | `create` | Create a task |
 | `update` | Update named fields on an existing task. Fields that are not passed are left alone |
-| `delete` | Delete a task |
+| `delete` | Delete a task. Ungated soft delete, unless the task is already in Deleted Items |
 
 Two things about real task folders shape this surface, and both were measured rather than assumed.
 
@@ -145,7 +161,7 @@ stamps `dateCompleted` itself. `status` is one of `not-started`, `in-progress`, 
 | `list` | List the attachments on an item |
 | `save` | Save an attachment to disk |
 | `add` | Add an attachment to a draft |
-| `remove` | Remove an attachment from a draft |
+| `remove` | Remove an attachment from a draft. Requires confirmation: an attachment has no Deleted Items to be recovered from |
 
 ---
 

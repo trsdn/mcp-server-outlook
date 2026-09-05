@@ -9,7 +9,7 @@ description: >
 
 # Outlook MCP Server Skill
 
-Provides 62 Outlook operations via Model Context Protocol. The MCP server forwards
+Provides 67 Outlook operations via Model Context Protocol. The MCP server forwards
 requests to the shared service layer while the repository continues its migration from inherited
 `OutlookMcp.*` internals.
 

@@ -83,6 +83,30 @@ Do not try to build your own paging out of `receivedBefore`. Results are ordered
 descending (`sortedBy` and `sortDirection` say so explicitly), and the cursor already handles
 messages that share a received time; a hand-rolled date window silently drops them.
 
+## A listing does not open the messages, and says so
+
+Every `mail.list` / `mail.search` response reports `projection`:
+
+- `table` - the rows were read straight out of an Outlook rowset. Nothing was opened, which is why
+  an ordinary listing is roughly twenty times faster than it used to be.
+- `item` - each message was opened and read. This happens when the request needs a message body:
+  `includeBodyPreview: true`, or a `query` in the default `clientScan` mode.
+
+The two carry the same fields with two exceptions, and the exceptions are reported rather than
+guessed at:
+
+- **`hasAttachment` is always present.** Use it.
+- **`attachmentCount` is only present on the `item` projection.** A rowset knows *whether* a message
+  has attachments, never how many, so on a `table` projection the field is **absent** rather than
+  reported as `0`. Never read a missing `attachmentCount` as "no attachments" - that is what
+  `hasAttachment` is for. When you genuinely need the number, use `attachment.list`, `mail.read`, or
+  pass `includeBodyPreview: true`.
+- **`bodyPreview` likewise only comes back when you asked for it**, which is what forces the `item`
+  projection in the first place.
+
+If a store cannot serve a listing from a rowset, the call still succeeds on the `item` projection and
+`message` explains that it was slower. The results are the same either way.
+
 ## Not everything in a folder is a message
 
 Every entry in a **mail** listing carries `itemType`:
@@ -641,6 +665,9 @@ task with no `dueDate` simply has no `dueDate` field - it does not have a due da
 century. If you ever see a 4501 date reach a user, that is a bug worth reporting, not a real date.
 Do not invent a due date for a task that has none: "no due date" is a normal and common state. On the
 mailbox this was built against, 260 of 274 tasks had no due date at all.
+
+The same sentinel is stripped from message dates: an unsent draft has no `sentOn` field at all rather
+than one claiming it was sent in 4501.
 
 **Most tasks in a real folder are already finished**, so `list` omits completed ones by default. That
 is a filter, and it is reported: `completedItemCount` says how many were hidden and

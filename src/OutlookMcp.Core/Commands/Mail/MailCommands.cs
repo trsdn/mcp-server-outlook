@@ -2301,8 +2301,8 @@ public partial class MailCommands : IMailCommands
                 Unread = SafeGetBool(() => mail.UnRead),
                 Importance = SafeGetInt(() => (int)mail.Importance),
                 AttachmentCount = SafeGetInt(() => mail.Attachments.Count),
-                ReceivedTime = SafeGetDateTimeOffset(() => mail.ReceivedTime),
-                SentOn = SafeGetDateTimeOffset(() => mail.SentOn)
+                ReceivedTime = SafeGetMessageDate(() => mail.ReceivedTime),
+                SentOn = SafeGetMessageDate(() => mail.SentOn)
             };
         }
         finally
@@ -2310,6 +2310,20 @@ public partial class MailCommands : IMailCommands
             OutlookInteropRunner.ReleaseComObject(ref parentFolder);
         }
     }
+
+    /// <summary>
+    /// Reads a message timestamp, treating Outlook's "no date" sentinel as absent.
+    ///
+    /// <para>
+    /// An unsent draft has no <c>SentOn</c>, and Outlook expresses that as 1 January 4501 rather than
+    /// as null. Passing it through reports every draft in a listing as having been sent in the 46th
+    /// century - a value that looks like an ordinary date, so a caller sorting or filtering by it is
+    /// not merely missing information but acting on a fabricated one. The same sentinel is already
+    /// stripped from flag due dates; this applies the identical rule to the message dates.
+    /// </para>
+    /// </summary>
+    private static DateTimeOffset? SafeGetMessageDate(Func<DateTime> getter)
+        => NormalizeTaskDate(SafeGetDateTimeOffset(getter));
 
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
     private static MailListResult ExecuteMailList(
@@ -2436,6 +2450,47 @@ public partial class MailCommands : IMailCommands
 
                     items = resolvedFolder.Items;
                     int totalItemCount = SafeGetInt(() => items.Count);
+
+                    // A table rowset can answer everything a listing reports except a message body,
+                    // so it is used whenever nothing in this request needs one: includeBodyPreview
+                    // returns a body, and a free-text query the content index did not take is
+                    // matched against bodies client-side. Falling back for those two is what keeps
+                    // the fast path from quietly narrowing what a search can find. See #27.
+                    bool bodyRequired = includeBodyPreview
+                        || (!string.IsNullOrWhiteSpace(query) && !useContentIndex);
+
+                    string? tableFallbackReason = null;
+
+                    if (!bodyRequired)
+                    {
+                        var tableQuery = new MailListQuery(
+                            query,
+                            boundedMaxCount,
+                            unreadOnly,
+                            fromAddress,
+                            subjectContains,
+                            parsedAfter,
+                            parsedBefore,
+                            hasAttachment,
+                            flaggedOnly,
+                            restrictFilter,
+                            fingerprint,
+                            page,
+                            useContentIndex);
+
+                        MailListResult? projected = TryListFromTable(
+                            resolvedFolder,
+                            tableQuery,
+                            totalItemCount,
+                            ScanSafetyLimit,
+                            out tableFallbackReason);
+
+                        if (projected != null)
+                        {
+                            return projected;
+                        }
+                    }
+
                     TrySortItemsByReceivedTime(items);
 
                     // Push the structured predicates down to Outlook via Items.Restrict (DASL)
@@ -2491,19 +2546,28 @@ public partial class MailCommands : IMailCommands
                         SortedBy = "receivedTime",
                         SortDirection = "descending",
                         SearchEngine = contentIndexAnswered ? "contentIndex" : "clientScan",
-                        Message = engineMessage
+                        Projection = MailTableProjection.ItemProjectionName,
+                        // Two different things can need saying here - the content index could not
+                        // answer, and the table rowset could not be used - and a caller needs both,
+                        // so neither overwrites the other.
+                        Message = engineMessage == null
+                            ? (tableFallbackReason == null
+                                ? null
+                                : MailTableProjection.DescribeFallback(tableFallbackReason))
+                            : (tableFallbackReason == null
+                                ? engineMessage
+                                : engineMessage + " " + MailTableProjection.DescribeFallback(tableFallbackReason))
                     };
 
                     int scanned = 0;
                     int skipped = 0;
 
-                    // Rolling record of the tied band at the frontier of the scan: the received time
-                    // of the last item examined, and every entry id examined at that exact instant.
-                    // Received times are not unique, so a cursor pointing only at a timestamp would
-                    // either repeat that band or skip the rest of it. Carrying the ids makes the
-                    // boundary exact without assuming Outlook orders ties identically twice.
-                    DateTimeOffset? boundaryTime = null;
-                    var boundaryIds = new List<string>();
+                    // Rolling record of the tied band at the frontier of the scan. Received times are
+                    // not unique, so a cursor pointing only at a timestamp would either repeat that
+                    // band or skip the rest of it; carrying the ids makes the boundary exact without
+                    // assuming Outlook orders ties identically twice. Shared with the rowset path
+                    // rather than duplicated - keeping two copies of this is what produced #135.
+                    var boundary = new MailPageBoundary(page);
 
                     for (int index = 1;
                          index <= scanCount && scanned < ScanSafetyLimit && result.Messages.Count < boundedMaxCount;
@@ -2547,15 +2611,9 @@ public partial class MailCommands : IMailCommands
                                     continue;
                                 }
 
-                                if (boundaryTime != receivedUtc)
-                                {
-                                    boundaryTime = receivedUtc;
-                                    boundaryIds.Clear();
-                                }
-
                                 if (entryId != null)
                                 {
-                                    boundaryIds.Add(entryId);
+                                    boundary.Observe(receivedUtc, entryId);
                                 }
                             }
 
@@ -2609,9 +2667,9 @@ public partial class MailCommands : IMailCommands
                     // A continuation is only offered when this call actually advanced the frontier.
                     // Handing back a cursor that re-scans the same band would let a caller loop
                     // forever believing it was making progress.
-                    if (result.Truncated && boundaryTime.HasValue)
+                    if (result.Truncated && boundary.Instant.HasValue)
                     {
-                        result.NextCursor = MailPageCursor.Encode(fingerprint, boundaryTime.Value, boundaryIds);
+                        result.NextCursor = MailPageCursor.Encode(fingerprint, boundary.Instant.Value, boundary.Ids);
                         result.HasMore = true;
                     }
 
@@ -2630,6 +2688,194 @@ public partial class MailCommands : IMailCommands
                 Success = false,
                 ErrorMessage = $"Failed to enumerate Outlook mail items: {ex.Message}"
             });
+    }
+
+    /// <summary>
+    /// Everything about a listing request that both projections need, gathered so the table path can
+    /// be a method rather than a seventeen-argument call.
+    /// </summary>
+    private sealed record MailListQuery(
+        string? Query,
+        int MaxCount,
+        bool UnreadOnly,
+        string? FromAddress,
+        string? SubjectContains,
+        DateTimeOffset? ReceivedAfter,
+        DateTimeOffset? ReceivedBefore,
+        bool? HasAttachment,
+        bool FlaggedOnly,
+        string? RestrictFilter,
+        string Fingerprint,
+        MailPageCursor? Page,
+        bool UseContentIndex);
+
+    /// <summary>
+    /// Lists a folder from an Outlook <c>Table</c> rowset, without opening a single message (#27).
+    ///
+    /// <para>
+    /// Returns <see langword="null"/> when this store cannot serve the request from a rowset, which
+    /// the caller answers by falling back to opening items and saying so in the response. The two
+    /// paths return the same messages in the same order; only <c>bodyPreview</c> and the exact
+    /// <c>attachmentCount</c> differ, and both are reported as absent rather than invented.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Truncation is exact here rather than inferred.</b> A <c>Table</c> has no count, so this
+    /// cannot compare "scanned" against "available" the way the item path does - it asks the table
+    /// directly whether rows remain. That is strictly better: the item path's comparison is against
+    /// a count taken before the walk, which a concurrent delivery can invalidate.
+    /// </para>
+    /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility")]
+    private static MailListResult? TryListFromTable(
+        Outlook.MAPIFolder folder,
+        MailListQuery query,
+        int totalItemCount,
+        int scanSafetyLimit,
+        out string? fallbackReason)
+    {
+        fallbackReason = null;
+
+        Outlook.Table? table = null;
+
+        try
+        {
+            try
+            {
+                table = query.RestrictFilter == null
+                    ? folder.GetTable()
+                    : folder.GetTable(query.RestrictFilter);
+
+                MailTableProjection.Configure(table);
+            }
+            catch (COMException ex)
+            {
+                // The store would not give us a rowset, would not accept the projected columns, or
+                // would not sort it. Any of those means this path cannot answer correctly, so the
+                // caller opens items instead. Deliberately not a failure result: the request is
+                // perfectly answerable, just not cheaply. This is the same narrowly-scoped
+                // alternative-code-path catch the Restrict fallback already uses.
+                fallbackReason = ex.Message;
+                return null;
+            }
+
+            string? storeId = SafeGet(() => folder.StoreID);
+
+            var result = new MailListResult
+            {
+                Success = true,
+                FolderName = SafeGet(() => folder.Name),
+                FolderPath = OutlookInteropRunner.GetFolderPath(folder),
+                Query = query.Query,
+                TotalItemCount = totalItemCount,
+                SortedBy = "receivedTime",
+                SortDirection = "descending",
+                SearchEngine = query.UseContentIndex ? "contentIndex" : "clientScan",
+                Projection = MailTableProjection.ProjectionName
+            };
+
+            int scanned = 0;
+            int skipped = 0;
+
+            // The same tied-band boundary the item path keeps, and deliberately the same object:
+            // received times are not unique, the cursor excludes by identity rather than by
+            // timestamp, and keeping a second copy of that accumulation here is exactly what
+            // produced #135.
+            var boundary = new MailPageBoundary(query.Page);
+
+            while (!table.EndOfTable
+                   && scanned < scanSafetyLimit
+                   && result.Messages.Count < query.MaxCount)
+            {
+                Outlook.Row? row = null;
+
+                try
+                {
+                    row = table.GetNextRow();
+                    scanned++;
+
+                    // Classified before anything else, so a folder entry this surface does not model
+                    // - an appointment or a delivery report filed in a mail folder - is counted as
+                    // skipped without disturbing the paging boundary, exactly as the item path does.
+                    string? itemType = MailTableProjection.ClassifyRow(row);
+                    if (itemType == null)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    string? entryId = MailTableProjection.ReadEntryId(row);
+
+                    if (entryId == null)
+                    {
+                        // This store does not publish the long-term entry id through a table. The
+                        // short-term one it does publish resolves perfectly well but never compares
+                        // equal to what mail.read reports for the same message, so a listing built
+                        // on it would look correct and silently break every cross-reference. Give up
+                        // on the fast path rather than hand back ids that do not match the rest of
+                        // the surface.
+                        fallbackReason =
+                            "this store does not expose long-term entry ids through a table rowset, and the "
+                            + "short-term ids it does expose would not match the ids other actions report";
+                        return null;
+                    }
+
+                    DateTimeOffset? received = MailTableProjection.ReadReceived(row);
+
+                    if (received.HasValue)
+                    {
+                        DateTimeOffset receivedUtc = received.Value.ToUniversalTime();
+
+                        if (query.Page != null && !query.Page.Includes(receivedUtc, entryId))
+                        {
+                            continue;
+                        }
+
+                        boundary.Observe(receivedUtc, entryId);
+                    }
+
+                    if (!MailTableProjection.MatchesStructuredFilters(
+                            row,
+                            query.UnreadOnly,
+                            query.FromAddress,
+                            query.SubjectContains,
+                            query.ReceivedAfter,
+                            query.ReceivedBefore,
+                            query.HasAttachment,
+                            query.FlaggedOnly))
+                    {
+                        continue;
+                    }
+
+                    // The free-text query is never re-checked here. Either the content index
+                    // answered it - and re-checking as a substring would throw away legitimate
+                    // whole-word matches - or the request needed a body, in which case this path
+                    // was not taken at all.
+                    result.Messages.Add(MailTableProjection.CreateSummary(row, storeId, itemType, entryId));
+                }
+                finally
+                {
+                    OutlookInteropRunner.ReleaseComObject(ref row);
+                }
+            }
+
+            result.ReturnedCount = result.Messages.Count;
+            result.ScannedCount = scanned;
+            result.SkippedItemCount = skipped;
+            result.Truncated = !table.EndOfTable;
+
+            if (result.Truncated && boundary.Instant.HasValue)
+            {
+                result.NextCursor = MailPageCursor.Encode(query.Fingerprint, boundary.Instant.Value, boundary.Ids);
+                result.HasMore = true;
+            }
+
+            return result;
+        }
+        finally
+        {
+            OutlookInteropRunner.ReleaseComObject(ref table);
+        }
     }
 
     /// <summary>
@@ -3169,8 +3415,9 @@ public partial class MailCommands : IMailCommands
             IsDraft = SafeGetBool(() => !mail.Sent && SafeGet(() => mail.MessageClass)?.Contains("IPM.Note", StringComparison.OrdinalIgnoreCase) == true),
             Importance = SafeGetInt(() => (int)mail.Importance),
             AttachmentCount = SafeGetInt(() => mail.Attachments.Count),
-            ReceivedTime = SafeGetDateTimeOffset(() => mail.ReceivedTime),
-            SentOn = SafeGetDateTimeOffset(() => mail.SentOn),
+            HasAttachment = SafeGetInt(() => mail.Attachments.Count) > 0,
+            ReceivedTime = SafeGetMessageDate(() => mail.ReceivedTime),
+            SentOn = SafeGetMessageDate(() => mail.SentOn),
             FlagStatus = MapFlagStatus(SafeGetInt(() => (int)mail.FlagStatus)),
             FlagRequest = NullIfBlank(SafeGet(() => mail.FlagRequest)),
             FlagDueDate = NormalizeTaskDate(SafeGetDateTimeOffset(() => mail.TaskDueDate))
@@ -3306,8 +3553,9 @@ public partial class MailCommands : IMailCommands
             IsDraft = false,
             Importance = SafeGetInt(() => (int)meeting.Importance),
             AttachmentCount = SafeGetInt(() => meeting.Attachments.Count),
-            ReceivedTime = SafeGetDateTimeOffset(() => meeting.ReceivedTime),
-            SentOn = SafeGetDateTimeOffset(() => meeting.SentOn),
+            HasAttachment = SafeGetInt(() => meeting.Attachments.Count) > 0,
+            ReceivedTime = SafeGetMessageDate(() => meeting.ReceivedTime),
+            SentOn = SafeGetMessageDate(() => meeting.SentOn),
             ItemType = ClassifyMeetingItem(SafeGet(() => meeting.MessageClass))
         };
 

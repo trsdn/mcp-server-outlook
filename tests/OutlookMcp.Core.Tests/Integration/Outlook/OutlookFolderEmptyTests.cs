@@ -291,7 +291,11 @@ public class OutlookFolderEmptyTests(ITestOutputHelper output)
 
             foreach (var folder in leftovers)
             {
-                var deleted = commands.Delete(folder.FolderPath);
+                // confirm: true is required, not optional. folder.delete is gated (#9), and the
+                // gate parameter is optional at the call site - so omitting it compiles, returns a
+                // failed result, and leaves the folder in the user's real mailbox. Nothing here
+                // would have noticed: the result was only written to output.
+                var deleted = commands.Delete(folder.FolderPath, confirm: true);
                 output.WriteLine($"Sweep pass {pass}: {folder.Name} -> success={deleted.Success} {deleted.ErrorMessage}");
             }
         }
@@ -301,12 +305,13 @@ public class OutlookFolderEmptyTests(ITestOutputHelper output)
             .Select(f => f.Name)
             .ToList();
 
-        if (remaining.Count > 0)
-        {
-            output.WriteLine(
-                $"SWEEP FAILED - {remaining.Count} scratch folder(s) remain in '{parent}': "
-                + string.Join(", ", remaining));
-        }
+        // Asserted, not merely logged. A sweep that fails silently leaves scratch folders
+        // accumulating in a real mailbox on every run, and a message in test output is not a
+        // signal anyone reads on a green run.
+        Assert.True(
+            remaining.Count == 0,
+            $"Sweep failed - {remaining.Count} scratch folder(s) remain in '{parent}': "
+            + string.Join(", ", remaining));
     }
 
     private static void EnsureOutlookAvailable(FolderCommands commands)

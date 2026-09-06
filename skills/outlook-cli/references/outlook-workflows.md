@@ -343,7 +343,7 @@ Two limits Outlook imposes, not this server:
 
 An unrecognised `flagStatus` is refused rather than guessed at, and nothing is applied.
 
-## Categories: discover before you write
+## Categories: discover before you write, and create what is missing
 
 Outlook does **not** validate what `mail.set-categories` writes. Assigning a name that is not in the
 mailbox's list succeeds, returns `success: true`, and produces a category the user cannot filter or
@@ -359,8 +359,19 @@ Read the list first and use a name from it:
 Colours come back as names (`yellow`, `darkTeal`, or `none` for a category created without one),
 never as raw enum numbers, so you can repeat them back to the user as they appear in Outlook.
 
-If the user names a category that is not in the list, say so and offer the closest matches rather
-than writing it anyway. Creating categories is not exposed here - that is a mailbox-wide setting.
+If the user wants a category that is not in the list, create it first so it shows in colour, then
+assign it - do not write an unknown name straight onto the message:
+
+```
+1. mail.create-category(name: "compliance", color: "darkPeach")
+2. mail.set-categories(entryId: ..., categories: "compliance")
+```
+
+`create-category` takes a friendly colour name (the same names `list-categories` reports); omit it or
+pass an unrecognised one and the category is created with `none` (no colour), which is reported back
+so nothing is silent. Creating a name that already exists is refused rather than duplicated. Use
+`update-category` to rename or recolour an existing one and `delete-category` to remove it - both
+change the mailbox-wide master list, so they affect every message already carrying the category.
 
 `set-categories` replaces the whole set on the message, so include the existing categories from
 `mail.read` if the intent is to add one rather than to replace them all.
@@ -612,16 +623,27 @@ too. There is no undo beyond whatever Deleted Items happens to retain. It theref
 `confirm: true` and is refused without it. List the folder's children and say what will be deleted
 before you pass it.
 
-**Default folders and store roots are refused** for `rename`, `move` and `delete` - Inbox, Sent
-Items, Drafts, Deleted Items, Calendar, Contacts, Tasks, Notes, Junk, Outbox, in *every* store, not
-just the default one. Outlook itself permits deleting the Inbox: no prompt, no error, and the mail
-goes with it. If a user asks for that, tell them it is refused and why rather than looking for a way
-round it.
+**Default folders and store roots are refused** for `rename`, `move`, `delete` and `empty` - Inbox,
+Sent Items, Drafts, Deleted Items, Calendar, Contacts, Tasks, Notes, Junk, Outbox, in *every* store,
+not just the default one. Outlook itself permits deleting the Inbox: no prompt, no error, and the
+mail goes with it. If a user asks for that, tell them it is refused and why rather than looking for a
+way round it.
 
 A folder merely *named* "Inbox" that is not the default Inbox is an ordinary folder and can be
 deleted normally - the check compares identity, not names.
 
-Not covered: emptying a folder in place. Delete the items with `mail.delete`, or delete the folder.
+**`empty` clears a folder's own items but keeps the folder.** It is the safer counterpart to
+`delete` when the folder itself should stay: each item is moved to Deleted Items (recoverable), and
+subfolders and their contents are left untouched - "empty the archive" does not recurse. Because it
+is irreversible in bulk, it refuses without `confirm=true`, and it reports `itemsRemoved` so an
+emptied folder (success with a count) is distinguishable from a refusal.
+
+```
+1. folder.empty(folder: "inbox/Archive 2024", confirm: true)   → itemsRemoved: 42
+```
+
+To clear a folder including its subfolders, empty or delete each subfolder yourself; there is no
+recursive empty.
 
 Note that `mail.delete` on an item **already in Deleted Items** is a permanent delete and requires
 `confirm: true`. That is the one case where deleting mail is not recoverable, so emptying Deleted

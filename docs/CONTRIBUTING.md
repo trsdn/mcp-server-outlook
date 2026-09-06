@@ -15,7 +15,7 @@ OutlookMcp aims to provide a small, reliable Outlook automation surface for AI a
 - Attachment inspection and mutation.
 - Outlook application status checks.
 
-The active product surface is 8 tools with 62 operations. Deleted presentation command domains are not part of the current product.
+The active product surface is 8 tools with 66 operations. Deleted presentation command domains are not part of the current product.
 
 ## Getting Started
 

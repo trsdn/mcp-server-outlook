@@ -133,6 +133,13 @@ public class OutlookFolderResolveResult : ResultBase
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ItemCount { get; set; }
+
+    /// <summary>
+    /// How many items <c>empty</c> removed. Present only on an empty result, so a caller can tell an
+    /// empty folder (0 removed, success) from a refusal (no value, <c>Success = false</c>).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ItemsRemoved { get; set; }
 }
 
 public class OutlookFolderInfo
@@ -427,6 +434,27 @@ public class MailCategoryInfo
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ShortcutKey { get; set; }
+}
+
+/// <summary>
+/// The outcome of creating, updating or deleting an entry in the mailbox's master category list.
+/// </summary>
+public class MailCategoryResult : ResultBase
+{
+    /// <summary>
+    /// The category as it stands after the operation, so a caller can confirm the colour and
+    /// shortcut Outlook actually recorded rather than the ones it asked for. Null on a delete, where
+    /// there is no longer a category to describe.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MailCategoryInfo? Category { get; set; }
+
+    /// <summary>
+    /// A short, human-readable account of what happened, including the colour that was applied when
+    /// the caller left it unset or named one Outlook did not recognise.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
 }
 
 public class OutlookStoreInfo

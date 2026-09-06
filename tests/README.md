@@ -1,6 +1,6 @@
 # OutlookMcp Tests
 
-OutlookMcp is now an Outlook COM automation server. The current product surface is 8 Outlook tools with 62 operations: mail, calendar, contact, task, rule, folder, attachment, and application.
+OutlookMcp is now an Outlook COM automation server. The current product surface is 8 Outlook tools with 66 operations: mail, calendar, contact, task, rule, folder, attachment, and application.
 
 No Outlook behavior is verified by hosted CI today. Real Outlook integration tests require a self-hosted Windows runner with classic Outlook installed, running, and signed in. That runner does not exist yet.
 

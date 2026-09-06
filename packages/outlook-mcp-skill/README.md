@@ -6,7 +6,7 @@ An [Agent Skill](https://agentskills.io) for automating classic Outlook for Wind
 ## What this skill does
 
 When loaded by an AI agent (Claude, Codex, Cursor, Gemini CLI, etc.), this skill teaches the agent
-how to drive Outlook through 8 MCP tools and 62 operations:
+how to drive Outlook through 8 MCP tools and 66 operations:
 
 - **Mail** (23) - read the active item, read, list, search, read a whole conversation, respond to a
   meeting invitation, create drafts, reply, reply-all, forward, send, move, export, delete, set read

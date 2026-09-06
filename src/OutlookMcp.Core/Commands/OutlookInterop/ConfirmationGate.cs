@@ -94,4 +94,17 @@ internal static class ConfirmationGate
     /// </summary>
     internal static bool RequiresConfirmationToDelete(bool confirm, Outlook.MAPIFolder? parentFolder) =>
         !confirm && OutlookInteropRunner.IsInDeletedItems(parentFolder);
+
+    /// <summary>
+    /// The refusal for emptying a folder without confirmation. Emptying clears every item in the
+    /// folder in one call, so unlike deleting a single message it is gated even though the items go
+    /// to Deleted Items (#15).
+    /// </summary>
+    /// <param name="folder">The folder as the caller named it.</param>
+    internal static string FolderEmpty(string folder) =>
+        $"Emptying the folder '{folder}' requires confirm=true. This is a deliberate confirmation "
+        + "gate for a bulk destructive action (#15): every item in the folder is moved to Deleted "
+        + "Items in one step, which is not the same as deleting a single message. Subfolders are left "
+        + "untouched. Call folder empty again with confirm=true once you have listed the folder's "
+        + "items and told the user how many will be cleared.";
 }

@@ -440,6 +440,7 @@ to make it run, the test is prohibited. Write an integration test instead, or wr
 | `StreamJsonRpcTests` | Real in-process duplex streams; no COM in the RPC layer |
 | `OutlookMcpServiceErrorTests` | Error-message formatting regression guard |
 | `ConfigurationReloadTests` | `reloadOnChange` configuration regression guard |
+| `FeaturesDocumentCoverageTests` | Parses `FEATURES.md` and compares it to the reflected `[ServiceCategory]` / `[ServiceAction]` surface |
 
 Two entries deserve their caveats stated rather than buried:
 

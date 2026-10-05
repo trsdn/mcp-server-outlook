@@ -31,6 +31,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`FEATURES.md` is now pinned to the generated tool surface** (#41): `FeaturesDocumentCoverageTests`
+  parses the document's operation sections and headline and compares them to the reflected
+  `[ServiceCategory]` / `[ServiceAction]` surface, so a stale or truncated count fails the build.
+
+  - ROOT CAUSE: nothing read `FEATURES.md`. No test parsed it and the build does not consume it, so
+    it could disagree with the code indefinitely. That mattered because the headline count is
+    repeated across more than ten files, making it the most conflict-prone artefact in the
+    repository: every branch adding an action rewrites the same lines, so any two concurrent
+    branches collide there. Resolving such a conflict by taking one side is last-writer-wins, and
+    the losing side's sections are deleted silently. Reproduced by merging two open branches that
+    each pass review alone: the section count went from 10 to 11 where it should have reached 13,
+    losing two whole tool sections with nothing reporting it.
+  - FIX: three independent assertions - one section per generated tool, subtotals summing to the
+    generated operation count, and a headline matching both. Each was verified to fail on its own
+    by perturbing the document; the suite also fails on the real two-branch reproduction, naming
+    the missing sections.
+
 - **Rule CRUD** (#15): a new `rule` tool and `outlookcli rule` command with `list`, `create`,
   `update`, `set-enabled` and `delete`. Rules were previously read-only through
   `mail list-rules`, which could explain where mail had gone but could not do anything about it.
